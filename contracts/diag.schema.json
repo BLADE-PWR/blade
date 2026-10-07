@@ -1,0 +1,85 @@
+{
+  "$defs": {
+    "StreamDiag": {
+      "properties": {
+        "clock_ms": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "min(arrival - capture) over 1 s: network delay + clock offset",
+          "title": "Clock Ms"
+        },
+        "dropped": {
+          "default": 0,
+          "title": "Dropped",
+          "type": "integer"
+        },
+        "fps_in": {
+          "default": 0.0,
+          "title": "Fps In",
+          "type": "number"
+        },
+        "fps_out": {
+          "default": 0.0,
+          "title": "Fps Out",
+          "type": "number"
+        },
+        "latency_ms": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latency Ms"
+        },
+        "queue": {
+          "default": 0,
+          "title": "Queue",
+          "type": "integer"
+        }
+      },
+      "title": "StreamDiag",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "instance": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Instance"
+    },
+    "service": {
+      "title": "Service",
+      "type": "string"
+    },
+    "streams": {
+      "additionalProperties": {
+        "$ref": "#/$defs/StreamDiag"
+      },
+      "title": "Streams",
+      "type": "object"
+    }
+  },
+  "required": [
+    "service"
+  ],
+  "title": "DiagData",
+  "type": "object"
+}

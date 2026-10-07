@@ -1,0 +1,179 @@
+{
+  "$defs": {
+    "WorldObject": {
+      "properties": {
+        "first": {
+          "title": "First",
+          "type": "number"
+        },
+        "grp": {
+          "title": "Grp",
+          "type": "string"
+        },
+        "last": {
+          "title": "Last",
+          "type": "number"
+        },
+        "n_obs": {
+          "title": "N Obs",
+          "type": "integer"
+        },
+        "oid": {
+          "title": "Oid",
+          "type": "string"
+        },
+        "pose": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pose"
+        },
+        "seen_by": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Seen By",
+          "type": "array"
+        },
+        "sigma_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sigma M"
+        },
+        "state": {
+          "description": "active | stale (not seen for a few seconds; remembered until expired)",
+          "title": "State",
+          "type": "string"
+        },
+        "tracks": {
+          "description": "(sid, tid) pairs behind this object",
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Tracks",
+          "type": "array"
+        },
+        "vel": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "m/s, map east / north",
+          "title": "Vel"
+        },
+        "xy": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Xy",
+          "type": "array"
+        },
+        "z": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Z"
+        }
+      },
+      "required": [
+        "oid",
+        "grp",
+        "xy",
+        "n_obs",
+        "seen_by",
+        "first",
+        "last",
+        "state"
+      ],
+      "title": "WorldObject",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "counts": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "active objects per group, median over ~0.5 s",
+      "title": "Counts"
+    },
+    "expired": {
+      "description": "oids removed from the world",
+      "items": {
+        "type": "string"
+      },
+      "title": "Expired",
+      "type": "array"
+    },
+    "objects": {
+      "description": "upserts",
+      "items": {
+        "$ref": "#/$defs/WorldObject"
+      },
+      "title": "Objects",
+      "type": "array"
+    }
+  },
+  "title": "WorldObjectsData",
+  "type": "object"
+}

@@ -1,0 +1,186 @@
+{
+  "$defs": {
+    "GeoPoint": {
+      "properties": {
+        "cls": {
+          "title": "Cls",
+          "type": "string"
+        },
+        "conf": {
+          "title": "Conf",
+          "type": "number"
+        },
+        "grp": {
+          "title": "Grp",
+          "type": "string"
+        },
+        "sigma_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sigma M"
+        },
+        "tid": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tid"
+        },
+        "xyz": {
+          "anyOf": [
+            {
+              "maxItems": 3,
+              "minItems": 3,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ground point in Arma map metres (ASL); None if the ray missed",
+          "title": "Xyz"
+        }
+      },
+      "required": [
+        "cls",
+        "grp",
+        "conf"
+      ],
+      "title": "GeoPoint",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "camera": {
+      "maxItems": 3,
+      "minItems": 3,
+      "prefixItems": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "title": "Camera",
+      "type": "array"
+    },
+    "centre": {
+      "anyOf": [
+        {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Centre"
+    },
+    "footprint": {
+      "description": "ground under the 4 image corners: TL, TR, BR, BL",
+      "items": {
+        "anyOf": [
+          {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "title": "Footprint",
+      "type": "array"
+    },
+    "gsd_m": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "ground metres per pixel at the image centre",
+      "title": "Gsd M"
+    },
+    "pts": {
+      "items": {
+        "$ref": "#/$defs/GeoPoint"
+      },
+      "title": "Pts",
+      "type": "array"
+    },
+    "range_check_m": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "|axis hit distance - laser range|",
+      "title": "Range Check M"
+    }
+  },
+  "required": [
+    "camera",
+    "footprint",
+    "pts"
+  ],
+  "title": "GeoData",
+  "type": "object"
+}

@@ -1,0 +1,144 @@
+{
+  "$defs": {
+    "GroupEval": {
+      "properties": {
+        "cep50_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cep50 M"
+        },
+        "cep90_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cep90 M"
+        },
+        "detected": {
+          "default": 0,
+          "title": "Detected",
+          "type": "integer"
+        },
+        "in_view": {
+          "default": 0,
+          "title": "In View",
+          "type": "integer"
+        },
+        "n": {
+          "title": "N",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "n"
+      ],
+      "title": "GroupEval",
+      "type": "object"
+    },
+    "TruthMatch": {
+      "properties": {
+        "err_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Err M"
+        },
+        "grp": {
+          "title": "Grp",
+          "type": "string"
+        },
+        "oid": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Oid"
+        },
+        "truth_id": {
+          "title": "Truth Id",
+          "type": "integer"
+        },
+        "xy": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Xy",
+          "type": "array"
+        }
+      },
+      "required": [
+        "truth_id",
+        "grp",
+        "xy"
+      ],
+      "title": "TruthMatch",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "false_objects": {
+      "description": "active world objects with no truth nearby",
+      "items": {
+        "type": "string"
+      },
+      "title": "False Objects",
+      "type": "array"
+    },
+    "groups": {
+      "additionalProperties": {
+        "$ref": "#/$defs/GroupEval"
+      },
+      "title": "Groups",
+      "type": "object"
+    },
+    "truth": {
+      "description": "true positions of objects in view, with their world match",
+      "items": {
+        "$ref": "#/$defs/TruthMatch"
+      },
+      "title": "Truth",
+      "type": "array"
+    },
+    "window_s": {
+      "title": "Window S",
+      "type": "number"
+    }
+  },
+  "required": [
+    "window_s",
+    "groups",
+    "truth"
+  ],
+  "title": "EvalData",
+  "type": "object"
+}

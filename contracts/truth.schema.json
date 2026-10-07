@@ -1,0 +1,35 @@
+{
+  "properties": {
+    "frame": {
+      "title": "Frame",
+      "type": "integer"
+    },
+    "objs": {
+      "description": "[id, pos_asl, dir_deg, velocity, stance] per object",
+      "items": {
+        "items": {},
+        "type": "array"
+      },
+      "title": "Objs",
+      "type": "array"
+    },
+    "t_game": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "T Game"
+    }
+  },
+  "required": [
+    "frame",
+    "objs"
+  ],
+  "title": "TruthData",
+  "type": "object"
+}

@@ -1,0 +1,78 @@
+{
+  "$defs": {
+    "WorldEvent": {
+      "properties": {
+        "eid": {
+          "title": "Eid",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "sid": {
+          "title": "Sid",
+          "type": "string"
+        },
+        "t": {
+          "title": "T",
+          "type": "number"
+        },
+        "ttl_s": {
+          "title": "Ttl S",
+          "type": "number"
+        },
+        "xy": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Xy",
+          "type": "array"
+        },
+        "z": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Z"
+        }
+      },
+      "required": [
+        "eid",
+        "kind",
+        "xy",
+        "t",
+        "ttl_s",
+        "sid"
+      ],
+      "title": "WorldEvent",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "events": {
+      "items": {
+        "$ref": "#/$defs/WorldEvent"
+      },
+      "title": "Events",
+      "type": "array"
+    }
+  },
+  "required": [
+    "events"
+  ],
+  "title": "WorldEventsData",
+  "type": "object"
+}

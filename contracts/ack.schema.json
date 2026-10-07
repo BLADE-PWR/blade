@@ -1,0 +1,13 @@
+{
+  "properties": {
+    "frame": {
+      "title": "Frame",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "frame"
+  ],
+  "title": "AckData",
+  "type": "object"
+}

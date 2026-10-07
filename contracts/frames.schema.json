@@ -1,0 +1,270 @@
+{
+  "$defs": {
+    "Camera": {
+      "additionalProperties": true,
+      "properties": {
+        "hfov_deg": {
+          "title": "Hfov Deg",
+          "type": "number"
+        },
+        "pos_asl": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Pos Asl",
+          "type": "array"
+        },
+        "vfov_deg": {
+          "title": "Vfov Deg",
+          "type": "number"
+        },
+        "x_axis": {
+          "description": "right, unit vector",
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "X Axis",
+          "type": "array"
+        },
+        "y_axis": {
+          "description": "up, unit vector",
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Y Axis",
+          "type": "array"
+        },
+        "z_axis": {
+          "description": "forward (optical axis), unit vector",
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Z Axis",
+          "type": "array"
+        }
+      },
+      "required": [
+        "pos_asl",
+        "x_axis",
+        "y_axis",
+        "z_axis",
+        "hfov_deg",
+        "vfov_deg"
+      ],
+      "title": "Camera",
+      "type": "object"
+    },
+    "ImageSize": {
+      "additionalProperties": true,
+      "properties": {
+        "h": {
+          "title": "H",
+          "type": "integer"
+        },
+        "w": {
+          "title": "W",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "w",
+        "h"
+      ],
+      "title": "ImageSize",
+      "type": "object"
+    },
+    "JpegInfo": {
+      "properties": {
+        "h": {
+          "title": "H",
+          "type": "integer"
+        },
+        "w": {
+          "title": "W",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "w",
+        "h"
+      ],
+      "title": "JpegInfo",
+      "type": "object"
+    },
+    "Tel": {
+      "additionalProperties": true,
+      "description": "Arma's tel record, as the mission emits it, plus what the uplink adds (sid, t_capture).",
+      "properties": {
+        "camera": {
+          "$ref": "#/$defs/Camera"
+        },
+        "frame": {
+          "description": "full diag_frameNo",
+          "title": "Frame",
+          "type": "integer"
+        },
+        "image": {
+          "$ref": "#/$defs/ImageSize"
+        },
+        "range_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Range M"
+        },
+        "region": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Region"
+        },
+        "scene": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scene"
+        },
+        "seed": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seed"
+        },
+        "sid": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sid"
+        },
+        "t_capture": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "epoch s when the uplink grabbed the frame",
+          "title": "T Capture"
+        },
+        "t_game": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "T Game"
+        },
+        "t_tick": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "T Tick"
+        }
+      },
+      "required": [
+        "frame",
+        "camera",
+        "image"
+      ],
+      "title": "Tel",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "jpeg": {
+      "$ref": "#/$defs/JpegInfo"
+    },
+    "tel": {
+      "$ref": "#/$defs/Tel"
+    }
+  },
+  "required": [
+    "tel",
+    "jpeg"
+  ],
+  "title": "FrameData",
+  "type": "object"
+}

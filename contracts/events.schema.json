@@ -1,0 +1,42 @@
+{
+  "additionalProperties": true,
+  "properties": {
+    "data": {
+      "default": null,
+      "title": "Data"
+    },
+    "frame": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Frame"
+    },
+    "kind": {
+      "title": "Kind",
+      "type": "string"
+    },
+    "t_game": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "T Game"
+    }
+  },
+  "required": [
+    "kind"
+  ],
+  "title": "EventRecord",
+  "type": "object"
+}

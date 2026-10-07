@@ -1,0 +1,83 @@
+{
+  "properties": {
+    "data": {
+      "additionalProperties": true,
+      "title": "Data",
+      "type": "object"
+    },
+    "delivery": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "'all': a replay that waits for every frame (ack.<sid>)",
+      "title": "Delivery"
+    },
+    "frame": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Frame"
+    },
+    "sid": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sid"
+    },
+    "ts": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          }
+        ]
+      },
+      "description": "capture: epoch s; every stage appends [t_in, t_out] under its own name, on its own clock",
+      "title": "Ts",
+      "type": "object"
+    },
+    "v": {
+      "default": 1,
+      "title": "V",
+      "type": "integer"
+    },
+    "wid": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Wid"
+    }
+  },
+  "title": "Envelope",
+  "type": "object"
+}

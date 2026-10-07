@@ -1,0 +1,105 @@
+{
+  "$defs": {
+    "Alert": {
+      "description": "An attention cue for the operator. It never recommends an action or a target.",
+      "properties": {
+        "aid": {
+          "title": "Aid",
+          "type": "string"
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confidence"
+        },
+        "explanation": {
+          "title": "Explanation",
+          "type": "string"
+        },
+        "objects": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Objects",
+          "type": "array"
+        },
+        "rule": {
+          "title": "Rule",
+          "type": "string"
+        },
+        "severity": {
+          "description": "info | notice | warning",
+          "title": "Severity",
+          "type": "string"
+        },
+        "state": {
+          "default": "active",
+          "description": "active | cleared",
+          "title": "State",
+          "type": "string"
+        },
+        "t": {
+          "title": "T",
+          "type": "number"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "xy": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Xy"
+        }
+      },
+      "required": [
+        "aid",
+        "rule",
+        "severity",
+        "title",
+        "explanation",
+        "t"
+      ],
+      "title": "Alert",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "alerts": {
+      "items": {
+        "$ref": "#/$defs/Alert"
+      },
+      "title": "Alerts",
+      "type": "array"
+    }
+  },
+  "required": [
+    "alerts"
+  ],
+  "title": "AlertsData",
+  "type": "object"
+}
