@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Generated data: map packages, recordings, local service state
+maps/
+recordings/
+state/
+*.ts
+
+# Model weights stay out of git (copy best.onnx into the package, or use Git LFS)
+*.onnx
+*.pt
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
