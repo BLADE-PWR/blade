@@ -1,0 +1,14 @@
+[project]
+name = "blade-geometry"
+version = "0.1.0"
+description = "Pinhole camera, Arma terrain, ray-DEM intersection, sigma model"
+requires-python = ">=3.12,<3.13"
+dependencies = ["numpy>=1.26", "tifffile>=2024.1"]
+
+[build-system]
+requires = ["uv_build>=0.8,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "blade_geometry"
+module-root = ""
