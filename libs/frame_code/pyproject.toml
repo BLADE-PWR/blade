@@ -1,0 +1,14 @@
+[project]
+name = "frame-code"
+version = "0.1.0"
+description = "Frame-number bar: decode, strip"
+requires-python = ">=3.12,<3.13"
+dependencies = ["numpy>=1.26"]
+
+[build-system]
+requires = ["uv_build>=0.8,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "frame_code"
+module-root = ""

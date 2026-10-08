@@ -5,6 +5,7 @@ description = "ZPI drone ISR: uplink, ingest, sessions, detector, georef, world 
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "blade-common",
+    "frame-code",
 ]
 
 [dependency-groups]
@@ -18,6 +19,7 @@ members = ["libs/*"]
 
 [tool.uv.sources]
 blade-common = { workspace = true }
+frame-code = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -33,4 +35,4 @@ select = ["E", "F", "W", "I", "UP", "B"]
 ignore = ["B008", "B905"]  # FastAPI defaults; zip(strict=) everywhere is noise
 
 [tool.ruff.lint.isort]
-known-first-party = ["blade_common"]
+known-first-party = ["blade_common", "frame_code"]
