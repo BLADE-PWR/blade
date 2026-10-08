@@ -7,6 +7,7 @@ dependencies = [
     "blade-common",
     "blade-geometry",
     "frame-code",
+    "blade-enhance",
 ]
 
 [dependency-groups]
@@ -22,6 +23,7 @@ members = ["libs/*"]
 blade-common = { workspace = true }
 blade-geometry = { workspace = true }
 frame-code = { workspace = true }
+blade-enhance = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -37,4 +39,4 @@ select = ["E", "F", "W", "I", "UP", "B"]
 ignore = ["B008", "B905"]  # FastAPI defaults; zip(strict=) everywhere is noise
 
 [tool.ruff.lint.isort]
-known-first-party = ["blade_common", "blade_geometry", "frame_code"]
+known-first-party = ["blade_common", "blade_geometry", "frame_code", "blade_enhance"]
