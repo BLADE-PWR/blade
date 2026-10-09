@@ -8,6 +8,7 @@ dependencies = [
     "blade-geometry",
     "frame-code",
     "blade-enhance",
+    "blade-uplink",
 ]
 
 [dependency-groups]
@@ -17,13 +18,14 @@ dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.6"]
 package = false
 
 [tool.uv.workspace]
-members = ["libs/*"]
+members = ["libs/*", "services/*"]
 
 [tool.uv.sources]
 blade-common = { workspace = true }
 blade-geometry = { workspace = true }
 frame-code = { workspace = true }
 blade-enhance = { workspace = true }
+blade-uplink = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -39,4 +41,4 @@ select = ["E", "F", "W", "I", "UP", "B"]
 ignore = ["B008", "B905"]  # FastAPI defaults; zip(strict=) everywhere is noise
 
 [tool.ruff.lint.isort]
-known-first-party = ["blade_common", "blade_geometry", "frame_code", "blade_enhance"]
+known-first-party = ["blade_common", "blade_geometry", "frame_code", "blade_enhance", "blade_uplink"]

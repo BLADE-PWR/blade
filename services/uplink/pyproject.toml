@@ -1,0 +1,17 @@
+[project]
+name = "blade-uplink"
+version = "0.1.0"
+description = "Runs on the Arma PC: capture, pair, encode H.264 + telemetry into MPEG-TS"
+requires-python = ">=3.12,<3.13"
+dependencies = ["blade-common", "blade-geometry", "frame-code", "av>=14", "numpy>=1.26", "dxcam>=0.0.5; sys_platform == 'win32'"]
+
+[project.scripts]
+blade-uplink = "blade_uplink.main:main"
+
+[build-system]
+requires = ["uv_build>=0.8,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "blade_uplink"
+module-root = ""
