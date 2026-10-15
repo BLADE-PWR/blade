@@ -135,6 +135,10 @@ class Recorder:
                                                              "started": a.started, "ended": a.last,
                                                              "recording": False})
         except Exception as e:
+            if a.bytes < 1 << 20:  # a scrap, e.g. the tail of a stream that just ended
+                log.info("%s: %d bytes and no playable video, removed", a.id, a.bytes)
+                shutil.rmtree(a.dir, ignore_errors=True)
+                return None
             log.warning("%s: could not finalize (%s), kept and marked broken", a.dir, e)
             m = a.dir / "manifest.json"
             meta = json.loads(m.read_text()) if m.exists() else {"id": a.id}
