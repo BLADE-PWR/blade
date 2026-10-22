@@ -1,0 +1,17 @@
+[project]
+name = "blade-detector"
+version = "0.1.0"
+description = "YOLO (ONNX Runtime) + BoT-SORT per stream"
+requires-python = ">=3.12,<3.13"
+dependencies = ["blade-common", "blade-geometry", "blade-enhance", "numpy>=1.26", "onnxruntime>=1.17; (sys_platform != 'linux' or platform_machine != 'x86_64') and (sys_platform != 'win32' or platform_machine != 'AMD64')", "onnxruntime-gpu>=1.20; sys_platform == 'linux' and platform_machine == 'x86_64'", "onnxruntime-gpu[cuda,cudnn]>=1.31; sys_platform == 'win32' and platform_machine == 'AMD64'", "opencv-python>=4.8", "ultralytics==8.4.183", "lap>=0.5.12", "pyyaml>=6", "python-multipart>=0.0.9"]
+
+[project.scripts]
+blade-detector = "blade_detector.main:main"
+
+[build-system]
+requires = ["uv_build>=0.8,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "blade_detector"
+module-root = ""
