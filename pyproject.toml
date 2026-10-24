@@ -12,6 +12,7 @@ dependencies = [
     "blade-ingest",
     "blade-sessions",
     "blade-detector",
+    "blade-georef",
     "blade-terrain",
 ]
 
@@ -33,6 +34,7 @@ blade-uplink = { workspace = true }
 blade-ingest = { workspace = true }
 blade-sessions = { workspace = true }
 blade-detector = { workspace = true }
+blade-georef = { workspace = true }
 blade-terrain = { workspace = true }
 
 [tool.pytest.ini_options]
@@ -49,4 +51,4 @@ select = ["E", "F", "W", "I", "UP", "B"]
 ignore = ["B008", "B905"]  # FastAPI defaults; zip(strict=) everywhere is noise
 
 [tool.ruff.lint.isort]
-known-first-party = ["blade_common", "blade_geometry", "frame_code", "blade_enhance", "blade_uplink", "blade_ingest", "blade_sessions", "blade_detector", "blade_terrain"]
+known-first-party = ["blade_common", "blade_geometry", "frame_code", "blade_enhance", "blade_uplink", "blade_ingest", "blade_sessions", "blade_detector", "blade_georef", "blade_terrain"]

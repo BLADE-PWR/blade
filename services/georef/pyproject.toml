@@ -1,0 +1,17 @@
+[project]
+name = "blade-georef"
+version = "0.1.0"
+description = "Pixel to terrain for every box"
+requires-python = ">=3.12,<3.13"
+dependencies = ["blade-common", "blade-geometry", "numpy>=1.26"]
+
+[project.scripts]
+blade-georef = "blade_georef.main:main"
+
+[build-system]
+requires = ["uv_build>=0.8,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "blade_georef"
+module-root = ""
