@@ -42,6 +42,7 @@ class Recorder:
         self.wanted: dict[str, bool] = {}  # per-sid override of record_all
         self.kv = None
         self.js = None
+        self.closing = False
 
     def recover(self) -> list[str]:
         """Finalize recordings a crash left open; remove the ones too small to keep."""
@@ -73,6 +74,8 @@ class Recorder:
         return done
 
     async def close(self) -> None:
+        """Stop for good: bytes ingest flushes at shutdown must not open new recordings."""
+        self.closing = True
         for sid in list(self.active):
             await self.stop(sid)
 
@@ -105,7 +108,7 @@ class Recorder:
 
     async def on_raw(self, msg) -> None:
         sid = msg.subject.split(".", 1)[1]
-        if not self.should_record(sid):
+        if self.closing or not self.should_record(sid):
             return
         t = float(msg.headers.get("t", time.time())) if msg.headers else time.time()
         a = self.active.get(sid) or await self._open(sid, t)
