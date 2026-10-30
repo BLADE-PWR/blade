@@ -1,0 +1,17 @@
+[project]
+name = "blade-decision"
+version = "0.1.0"
+description = "Decision support: rules over the world state that point the operator's attention"
+requires-python = ">=3.12,<3.13"
+dependencies = ["blade-common", "numpy>=1.26"]
+
+[project.scripts]
+blade-decision = "blade_decision.main:main"
+
+[build-system]
+requires = ["uv_build>=0.8,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "blade_decision"
+module-root = ""
