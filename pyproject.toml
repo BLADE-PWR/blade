@@ -15,6 +15,7 @@ dependencies = [
     "blade-georef",
     "blade-world",
     "blade-terrain",
+    "blade-gateway",
     "blade-evaluator",
     "blade-decision",
 ]
@@ -40,6 +41,7 @@ blade-detector = { workspace = true }
 blade-georef = { workspace = true }
 blade-world = { workspace = true }
 blade-terrain = { workspace = true }
+blade-gateway = { workspace = true }
 blade-evaluator = { workspace = true }
 blade-decision = { workspace = true }
 
@@ -57,4 +59,4 @@ select = ["E", "F", "W", "I", "UP", "B"]
 ignore = ["B008", "B905"]  # FastAPI defaults; zip(strict=) everywhere is noise
 
 [tool.ruff.lint.isort]
-known-first-party = ["blade_common", "blade_geometry", "frame_code", "blade_enhance", "blade_uplink", "blade_ingest", "blade_sessions", "blade_detector", "blade_georef", "blade_world", "blade_terrain", "blade_evaluator", "blade_decision"]
+known-first-party = ["blade_common", "blade_geometry", "frame_code", "blade_enhance", "blade_uplink", "blade_ingest", "blade_sessions", "blade_detector", "blade_georef", "blade_world", "blade_terrain", "blade_gateway", "blade_evaluator", "blade_decision"]
