@@ -1,0 +1,93 @@
+# The server: NATS + every service (the uplink runs natively on the Arma PCs).
+# Data lives next to the repository: ../maps, ../models, ../recordings. MAP selects the map package.
+
+x-service: &service
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile
+  restart: unless-stopped
+  depends_on: [nats]
+  environment: &env
+    NATS_URL: nats://nats:4222
+    MAP: ${MAP:-altis}
+    MAPS_DIR: /data/maps
+    MODELS_DIR: /data/models
+    RECORDINGS_DIR: /data/recordings
+    INGEST_URL: http://ingest:8001
+    INGEST_TRUTH_HOST: ingest
+    SESSIONS_URL: http://sessions:8002
+    DETECTOR_URL: http://detector:8003
+    WORLD_URL: http://world:8005
+    TERRAIN_URL: http://terrain:8006
+    EVALUATOR_URL: http://evaluator:8007
+    DECISION_URL: http://decision:8008
+    LOG_LEVEL: INFO
+
+services:
+  nats:
+    image: nats:2.10-alpine
+    command: ["-c", "/etc/nats/nats.conf"]
+    volumes:
+      - ./nats.conf:/etc/nats/nats.conf:ro
+      - nats-data:/data
+    ports: ["4222:4222", "8222:8222"]
+    restart: unless-stopped
+
+  ingest:
+    <<: *service
+    build: {context: .., dockerfile: deploy/Dockerfile, args: {SERVICE: ingest}}
+    environment: {<<: *env, PORT: "8001"}
+    ports: ["9000:9000/udp", "9000:9000/tcp", "9100:9100/udp", "8001:8001"]
+
+  sessions:
+    <<: *service
+    build: {context: .., dockerfile: deploy/Dockerfile, args: {SERVICE: sessions}}
+    environment: {<<: *env, PORT: "8002", RECORD_ALL: "${RECORD_ALL:-1}"}
+    volumes: ["../recordings:/data/recordings"]
+    ports: ["8002:8002"]
+
+  detector:
+    <<: *service
+    build: {context: .., dockerfile: deploy/Dockerfile, args: {SERVICE: detector}}
+    environment: {<<: *env, PORT: "8003", MODEL: "${MODEL:-arma_detector_v1@1}"}
+    volumes: ["../models:/data/models"]
+    # no host port: replicas scale (--scale detector=N); reach them through the gateway (/api/models, /detectors)
+
+  georef:
+    <<: *service
+    build: {context: .., dockerfile: deploy/Dockerfile, args: {SERVICE: georef}}
+    environment: {<<: *env, PORT: "8004"}
+    volumes: ["../maps:/data/maps:ro"]
+
+  world:
+    <<: *service
+    build: {context: .., dockerfile: deploy/Dockerfile, args: {SERVICE: world}}
+    environment: {<<: *env, PORT: "8005"}
+
+  evaluator:
+    <<: *service
+    build: {context: .., dockerfile: deploy/Dockerfile, args: {SERVICE: evaluator}}
+    environment: {<<: *env, PORT: "8007", EVAL_DIR: /data/eval}
+    volumes: ["../state/eval:/data/eval"]
+
+  decision:
+    <<: *service
+    build: {context: .., dockerfile: deploy/Dockerfile, args: {SERVICE: decision}}
+    environment: {<<: *env, PORT: "8008"}
+
+  terrain:
+    <<: *service
+    build: {context: .., dockerfile: deploy/Dockerfile, args: {SERVICE: terrain}}
+    environment: {<<: *env, PORT: "8006"}
+    volumes: ["../maps:/data/maps:ro"]
+
+  gateway:
+    <<: *service
+    build: {context: .., dockerfile: deploy/Dockerfile, args: {SERVICE: gateway}}
+    environment: {<<: *env, PORT: "8000", SESSIONS_STORE: /data/state/gateway_sessions.json}
+    volumes: ["gateway-state:/data/state"]
+    ports: ["8000:8000"]
+
+volumes:
+  nats-data:
+  gateway-state:

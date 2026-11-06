@@ -1,0 +1,10 @@
+# Detector on an NVIDIA GPU (Linux, or Windows through WSL2 + the NVIDIA container toolkit).
+services:
+  detector:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
