@@ -1,0 +1,35 @@
+# decision
+
+Runs rules over the world state and raises alerts that tell the operator where to look and why. No
+rule ranks targets or suggests an action. An alert clears after its condition has been false for 5 s.
+
+## Rules
+
+| Rule | Fires when | Parameters |
+|---|---|---|
+| `vehicle_group` | Vehicles are close together | `min_count` 3, `radius_m` 200 |
+| `lost_contact` | A well-observed object has not been seen | `after_s` 60, `min_obs` 30, `groups` |
+| `uncertain_position` | An object's position is uncertain | `sigma_m` 15 |
+| `infantry_resolution` | Infantry is likely missed at this zoom | `gsd_m` 0.06, `hold_s` 10 |
+| `explosion_near` | An explosion is near known objects | `radius_m` 100 |
+| `zone` | Objects are in or heading into a marked zone | `zones`, `eta_s` 60, `groups` |
+
+Every rule also has `enabled`.
+
+## Bus
+
+| | Subject |
+|---|---|
+| subscribes | `world.<wid>.objects`, `world.<wid>.events`, `geo.<sid>` |
+| publishes | `alerts.<wid>`: active alerts with rule, objects, confidence and explanation |
+
+## REST
+
+| Method | Path | Meaning |
+|---|---|---|
+| GET | `/health` | Active alert count per world |
+| GET | `/worlds/{wid}/rules` | Rule parameters of a world |
+| PUT | `/worlds/{wid}/rules` | Body `{"<rule>": {<parameters>}}`: change parameters; others stay |
+| GET | `/worlds/{wid}/alerts?all=` | Active alerts; `all=true` gives the history |
+
+Config: `PERIOD_S` (1), `CLEAR_AFTER_S` (5), `GONE_KEEP_S` (600).
