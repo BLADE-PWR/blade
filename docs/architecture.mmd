@@ -1,0 +1,24 @@
+flowchart LR
+    subgraph pc["Arma PC (one per drone)"]
+        game["Arma 3"] -->|screen, telemetry| uplink
+    end
+
+    subgraph server["Server"]
+        ingest -->|frames| detector
+        detector -->|detections| georef
+        georef -->|geo| world
+        ingest -->|raw, truth| sessions
+        sessions -.->|replay| ingest
+        world -->|objects, events| decision
+        world -->|objects| evaluator
+        ingest -.->|truth| evaluator
+        terrain
+        gateway
+    end
+
+    uplink -->|MPEG-TS, sim truth| ingest
+    world -->|objects| gateway
+    decision -->|alerts| gateway
+    evaluator -->|eval| gateway
+    terrain -->|map crops| gateway
+    gateway -->|REST, WebSocket| frontend["frontend (React, planned)"]
