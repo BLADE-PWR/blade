@@ -42,10 +42,16 @@ DUP_FRAMES = 3  # ... after this many frames if both are seen
 CONFIRM_N = 5  # observations before an object is published
 HORIZONS_S = (30.0, 60.0)
 MANEUVER = 0.1  # 1-sigma spread of a prediction, share of the distance travelled
+PRED_VMAX = {"soldier": 7.0, "vehicle": 30.0}  # m/s: faster is the filter catching up with a jump (seek, ID switch)
 
 
 def assoc(grp: str) -> str:
     return "vehicle" if grp in VEHICLES else grp
+
+
+def sd(P: np.ndarray, i: int) -> float:
+    """-> the larger 1-sigma of the pair i, i+1 of a covariance: position (0) or velocity (2)"""
+    return math.sqrt(max(P[i, i], P[i + 1, i + 1]))
 
 
 class Obj:
@@ -88,16 +94,15 @@ class Obj:
 
     @property
     def vel_sigma(self) -> float:
-        return math.sqrt(np.linalg.eigvalsh(self.P[2:, 2:])[-1])
+        return sd(self.P, 2)
 
     def forecast(self) -> list[Prediction] | None:
-        if self.speed < max(STILL_V, 2 * self.vel_sigma):
+        if not max(STILL_V, 2 * self.vel_sigma) <= self.speed <= PRED_VMAX.get(self.key, 30.0):
             return None
         out = []
         for dt in HORIZONS_S:
             x, P = self.predicted(self.t + dt, accel=0.0)
-            s = math.hypot(max(math.sqrt(np.linalg.eigvalsh(P[:2, :2])[-1]), FLOOR * self.r_last),
-                           MANEUVER * self.speed * dt)
+            s = math.hypot(max(sd(P, 0), FLOOR * self.r_last), MANEUVER * self.speed * dt)
             out.append(Prediction(dt_s=dt, xy=(round(float(x[0]), 2), round(float(x[1]), 2)), sigma_m=round(s, 2)))
         return out
 
@@ -159,7 +164,7 @@ class Obj:
 
     @property
     def sigma(self) -> float:
-        return max(float(math.sqrt(max(self.P[0, 0], self.P[1, 1]))), FLOOR * self.r_last)
+        return max(sd(self.P, 0), FLOOR * self.r_last)
 
     def model(self) -> WorldObject:
         pose = Counter(self.poses).most_common(1)[0][0] if self.poses else None

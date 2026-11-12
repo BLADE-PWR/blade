@@ -183,3 +183,14 @@ def test_standing_soldier_has_no_prediction():
         w.observe("s1", [pt(1, 100 + rng.normal(0, 2), 200 + rng.normal(0, 2))], k / 30)
     (o,) = w.objects.values()
     assert o.model().pred is None
+
+
+def test_velocity_spike_after_a_jump_is_not_predicted():
+    w = World("w")
+    for k in range(90):  # walking east at 1.5 m/s
+        w.observe("s1", [pt(1, 100 + 1.5 * k / 30, 200)], k / 30)
+    for k in range(30):  # a replay seek: the same track 30 m further on
+        t = 3.0 + k / 30
+        w.observe("s1", [pt(1, 130 + 1.5 * t, 200)], t)
+    (o,) = w.objects.values()
+    assert o.speed > 7.0 and o.model().pred is None  # the filter is still catching up
