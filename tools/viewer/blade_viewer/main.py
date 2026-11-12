@@ -172,6 +172,12 @@ class MapBackground:
             canvas[cv0:cv1, cu0:cu1] = img[cv0 - v0:cv1 - v0, cu0 - u0:cu1 - u0]
 
 
+def color(o: dict) -> tuple[int, int, int]:
+    """-> the class colour, dimmed for a stale (remembered) object"""
+    c = COLORS.get(o["grp"], (200, 200, 200))
+    return c if o.get("state") == "active" else tuple(int(k * 0.55) for k in c)
+
+
 def ahead(o: dict, now: float) -> list[dict]:
     """-> the predictions still in the future: pred is anchored at `last` and not republished while stale"""
     return [p for p in o.get("pred") or [] if o["last"] + p["dt_s"] > now]
@@ -274,15 +280,14 @@ def draw_map(st: State, bg: MapBackground, sid: str | None, view: dict) -> np.nd
         overlay = canvas.copy()
         for o in (o for o in objs if o["oid"] in preds):
             hull = np.array([to_px(*p) for p in cone(o, preds[o["oid"]])], np.int32)
-            cv2.fillPoly(overlay, [hull], COLORS.get(o["grp"], (200, 200, 200)), cv2.LINE_AA)
+            cv2.fillPoly(overlay, [hull], color(o), cv2.LINE_AA)
         cv2.addWeighted(overlay, 0.2, canvas, 0.8, 0, canvas)
     for o in sorted(objs, key=lambda o: o.get("state") == "active"):  # remembered (stale) ones underneath
         u, v = to_px(*o["xy"])
         if not (0 <= u < MAP_W and 0 <= v < VIDEO_H):
             continue
         active = o.get("state") == "active"
-        c = COLORS.get(o["grp"], (200, 200, 200))
-        c = c if active else tuple(int(k * 0.55) for k in c)
+        c = color(o)
         cv2.circle(canvas, (int(u), int(v)), 5, c, -1 if active else 1, cv2.LINE_AA)
         text(canvas, o["oid"][-4:], (u + 6, v - 4), 0.35, c)
         if o["oid"] in preds:
