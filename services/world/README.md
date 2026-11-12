@@ -6,7 +6,7 @@ after `CONFIRM_N` observations, becomes `stale` when unseen and expires after `E
 
 A moving object (speed at least 1 m/s and over twice its velocity sigma) also carries `pred`: straight-line
 positions 30 s and 60 s after `last`, each with a 1-sigma radius that grows with the velocity uncertainty and
-with a quarter of the distance travelled (`HORIZONS_S`, `MANEUVER` in `fusion.py`). `vel_sigma` is the
+with a tenth of the distance travelled (`HORIZONS_S`, `MANEUVER` in `fusion.py`). `vel_sigma` is the
 1-sigma of `vel`.
 
 ## Bus

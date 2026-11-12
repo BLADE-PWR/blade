@@ -41,7 +41,7 @@ DUP_M = 2.5  # vehicle centres this close are one vehicle
 DUP_FRAMES = 3  # ... after this many frames if both are seen
 CONFIRM_N = 5  # observations before an object is published
 HORIZONS_S = (30.0, 60.0)
-MANEUVER = 0.25  # 1-sigma spread of a prediction, share of the distance travelled
+MANEUVER = 0.1  # 1-sigma spread of a prediction, share of the distance travelled
 
 
 def assoc(grp: str) -> str:

@@ -1,6 +1,6 @@
 import numpy as np
 
-from blade_world.fusion import GAP_S, World
+from blade_world.fusion import GAP_S, MANEUVER, World
 
 
 def pt(tid, x, y, cls="soldier_standing", grp="soldier", sigma=2.0):
@@ -173,7 +173,7 @@ def test_moving_vehicle_is_predicted_ahead_with_a_widening_cone():
     assert (p30.dt_s, p60.dt_s) == (30.0, 60.0)
     assert abs(p30.xy[0] - (523.4 + 180)) < 5 and abs(p60.xy[0] - (523.4 + 360)) < 10
     assert abs(p30.xy[1] - 500) < 1
-    assert 0.25 * 6 * 30 <= p30.sigma_m < p60.sigma_m
+    assert MANEUVER * 6 * 30 <= p30.sigma_m < p60.sigma_m
 
 
 def test_standing_soldier_has_no_prediction():
