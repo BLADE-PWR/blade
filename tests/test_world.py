@@ -162,3 +162,24 @@ def test_one_frame_false_positive_never_reaches_the_map():
     w.sweep(1.0 + GAP_S)
     assert list(w.objects) == ["w-0001"] and w.stats["dropped"] == 1
     assert [o.oid for o in w.published()] == ["w-0001"] and w.smoothed_counts(3.1) == {"tank": 1.0}
+
+
+def test_moving_vehicle_is_predicted_ahead_with_a_widening_cone():
+    w = World("w")
+    for k in range(40):  # driving east at 6 m/s
+        w.observe("s1", [tank(1, 500 + 0.6 * k, 500)], k / 10)
+    (o,) = w.objects.values()
+    p30, p60 = o.model().pred
+    assert (p30.dt_s, p60.dt_s) == (30.0, 60.0)
+    assert abs(p30.xy[0] - (523.4 + 180)) < 5 and abs(p60.xy[0] - (523.4 + 360)) < 10
+    assert abs(p30.xy[1] - 500) < 1
+    assert 0.25 * 6 * 30 <= p30.sigma_m < p60.sigma_m
+
+
+def test_standing_soldier_has_no_prediction():
+    w = World("w")
+    rng = np.random.default_rng(1)
+    for k in range(120):
+        w.observe("s1", [pt(1, 100 + rng.normal(0, 2), 200 + rng.normal(0, 2))], k / 30)
+    (o,) = w.objects.values()
+    assert o.model().pred is None

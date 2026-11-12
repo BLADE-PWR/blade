@@ -8,7 +8,9 @@ A new track (sid, tid) is matched, nearest pair first, to:
   4. otherwise a new object.
 An object this stream still watches is never a candidate. Vehicle objects closer than DUP_M merge.
 An object is tentative until CONFIRM_N observations (not published; dropped if unseen for GAP_S).
-The reported sigma is floored at FLOOR x the measurement sigma: one camera's errors are correlated."""
+The reported sigma is floored at FLOOR x the measurement sigma: one camera's errors are correlated.
+A moving object gets straight-line predictions after HORIZONS_S: the filter's covariance without ACCEL (tuned
+for 30 fps, it would give kilometres at 60 s) plus MANEUVER x the distance travelled."""
 from __future__ import annotations
 
 import itertools
@@ -17,7 +19,7 @@ from collections import Counter, deque
 
 import numpy as np
 
-from blade_common.contracts import WorldObject
+from blade_common.contracts import Prediction, WorldObject
 
 GAP_S = 2.0  # stitching window
 LIVE_S = 1.0  # "watching now" for cross-stream merges
@@ -38,6 +40,8 @@ STILL_V = 1.0  # m/s: slower counts as standing still
 DUP_M = 2.5  # vehicle centres this close are one vehicle
 DUP_FRAMES = 3  # ... after this many frames if both are seen
 CONFIRM_N = 5  # observations before an object is published
+HORIZONS_S = (30.0, 60.0)
+MANEUVER = 0.25  # 1-sigma spread of a prediction, share of the distance travelled
 
 
 def assoc(grp: str) -> str:
@@ -60,11 +64,11 @@ class Obj:
         self.state = "active"
         self.confirmed = False
 
-    def predicted(self, t: float) -> tuple[np.ndarray, np.ndarray]:
+    def predicted(self, t: float, accel: float | None = None) -> tuple[np.ndarray, np.ndarray]:
         dt = max(t - self.t, 0.0)
         F = np.eye(4)
         F[0, 2] = F[1, 3] = dt
-        q = ACCEL.get(self.grp, 2.0) ** 2
+        q = (ACCEL.get(self.grp, 2.0) if accel is None else accel) ** 2
         G = np.array([[dt * dt / 2, 0], [0, dt * dt / 2], [dt, 0], [0, dt]])
         return F @ self.x, F @ self.P @ F.T + q * (G @ G.T)
 
@@ -81,6 +85,21 @@ class Obj:
     @property
     def speed(self) -> float:
         return math.hypot(self.x[2], self.x[3])
+
+    @property
+    def vel_sigma(self) -> float:
+        return math.sqrt(np.linalg.eigvalsh(self.P[2:, 2:])[-1])
+
+    def forecast(self) -> list[Prediction] | None:
+        if self.speed < max(STILL_V, 2 * self.vel_sigma):
+            return None
+        out = []
+        for dt in HORIZONS_S:
+            x, P = self.predicted(self.t + dt, accel=0.0)
+            s = math.hypot(max(math.sqrt(np.linalg.eigvalsh(P[:2, :2])[-1]), FLOOR * self.r_last),
+                           MANEUVER * self.speed * dt)
+            out.append(Prediction(dt_s=dt, xy=(round(float(x[0]), 2), round(float(x[1]), 2)), sigma_m=round(s, 2)))
+        return out
 
     def reacq_radius(self, t: float) -> float:
         base = REACQ_M.get(self.key, 5.0)
@@ -148,6 +167,7 @@ class Obj:
         return WorldObject(oid=self.oid, grp=self.grp, pose=pose, xy=xy,
                            z=None if self.z is None else round(self.z, 2),
                            vel=(round(float(self.x[2]), 2), round(float(self.x[3]), 2)),
+                           vel_sigma=round(self.vel_sigma, 2), pred=self.forecast(),
                            sigma_m=round(self.sigma, 2), n_obs=self.n, seen_by=sorted(self.seen_by),
                            tracks=sorted(self.tracks), first=self.first, last=self.last, state=self.state)
 

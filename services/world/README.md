@@ -4,6 +4,11 @@ Builds the map picture: it fuses the per-stream points into objects with stable 
 per object, and merges the same object seen by several drones of one world. An object is published
 after `CONFIRM_N` observations, becomes `stale` when unseen and expires after `EXPIRE_S`.
 
+A moving object (speed at least 1 m/s and over twice its velocity sigma) also carries `pred`: straight-line
+positions 30 s and 60 s after `last`, each with a 1-sigma radius that grows with the velocity uncertainty and
+with a quarter of the distance travelled (`HORIZONS_S`, `MANEUVER` in `fusion.py`). `vel_sigma` is the
+1-sigma of `vel`.
+
 ## Bus
 
 | | Subject |
