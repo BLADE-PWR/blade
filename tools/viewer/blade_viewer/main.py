@@ -172,11 +172,16 @@ class MapBackground:
             canvas[cv0:cv1, cu0:cu1] = img[cv0 - v0:cv1 - v0, cu0 - u0:cu1 - u0]
 
 
-def cone(o: dict) -> np.ndarray:
+def ahead(o: dict, now: float) -> list[dict]:
+    """-> the predictions still in the future: pred is anchored at `last` and not republished while stale"""
+    return [p for p in o.get("pred") or [] if o["last"] + p["dt_s"] > now]
+
+
+def cone(o: dict, preds: list[dict]) -> np.ndarray:
     """-> hull of the CONE_K-sigma circles now and at each prediction, map metres"""
     a = np.linspace(0, 2 * np.pi, 24, endpoint=False)
     ring = np.stack([np.cos(a), np.sin(a)], 1)
-    circles = [(o["xy"], o.get("sigma_m") or 0.0)] + [(p["xy"], p["sigma_m"]) for p in o["pred"]]
+    circles = [(o["xy"], o.get("sigma_m") or 0.0)] + [(p["xy"], p["sigma_m"]) for p in preds]
     pts = np.concatenate([np.asarray(xy) + CONE_K * r * ring for xy, r in circles]).astype(np.float32)
     return cv2.convexHull(pts)[:, 0]
 
@@ -264,11 +269,11 @@ def draw_map(st: State, bg: MapBackground, sid: str | None, view: dict) -> np.nd
             u, v = to_px(cam[0], cam[1])
             if 0 <= u < MAP_W and 0 <= v < VIDEO_H:
                 cv2.drawMarker(canvas, (int(u), int(v)), (255, 255, 0), cv2.MARKER_TRIANGLE_UP, 14, 2)
-    moving = [o for o in objs if o.get("pred")] if view["motion"] else []
-    if moving:
+    preds = {o["oid"]: p for o in objs if (p := ahead(o, time.time()))} if view["motion"] else {}
+    if preds:
         overlay = canvas.copy()
-        for o in moving:
-            hull = np.array([to_px(*p) for p in cone(o)], np.int32)
+        for o in (o for o in objs if o["oid"] in preds):
+            hull = np.array([to_px(*p) for p in cone(o, preds[o["oid"]])], np.int32)
             cv2.fillPoly(overlay, [hull], COLORS.get(o["grp"], (200, 200, 200)), cv2.LINE_AA)
         cv2.addWeighted(overlay, 0.2, canvas, 0.8, 0, canvas)
     for o in sorted(objs, key=lambda o: o.get("state") == "active"):  # remembered (stale) ones underneath
@@ -280,12 +285,12 @@ def draw_map(st: State, bg: MapBackground, sid: str | None, view: dict) -> np.nd
         c = c if active else tuple(int(k * 0.55) for k in c)
         cv2.circle(canvas, (int(u), int(v)), 5, c, -1 if active else 1, cv2.LINE_AA)
         text(canvas, o["oid"][-4:], (u + 6, v - 4), 0.35, c)
-        if view["motion"] and o.get("pred"):
+        if o["oid"] in preds:
             vx, vy = o["vel"]
             tip = to_px(o["xy"][0] + vx * ARROW_S, o["xy"][1] + vy * ARROW_S)
             cv2.arrowedLine(canvas, (int(u), int(v)), (int(tip[0]), int(tip[1])), c, 2, cv2.LINE_AA, tipLength=0.25)
             text(canvas, f"{math.hypot(vx, vy) * 3.6:.0f} km/h", (u + 6, v + 10), 0.35, c)
-            for p in o["pred"]:
+            for p in preds[o["oid"]]:
                 pu, pv = to_px(*p["xy"])
                 cv2.drawMarker(canvas, (int(pu), int(pv)), c, cv2.MARKER_DIAMOND, 7, 1)
                 text(canvas, f"{p['dt_s']:.0f}s", (pu + 5, pv - 3), 0.33, c)
