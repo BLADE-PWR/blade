@@ -1,5 +1,40 @@
 {
   "$defs": {
+    "Prediction": {
+      "properties": {
+        "dt_s": {
+          "description": "horizon after `last`, s",
+          "title": "Dt S",
+          "type": "number"
+        },
+        "sigma_m": {
+          "description": "1-sigma radius of the predicted position, m",
+          "title": "Sigma M",
+          "type": "number"
+        },
+        "xy": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Xy",
+          "type": "array"
+        }
+      },
+      "required": [
+        "dt_s",
+        "xy",
+        "sigma_m"
+      ],
+      "title": "Prediction",
+      "type": "object"
+    },
     "WorldObject": {
       "properties": {
         "first": {
@@ -33,6 +68,22 @@
           ],
           "default": null,
           "title": "Pose"
+        },
+        "pred": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Prediction"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "straight-line prediction; only for moving objects",
+          "title": "Pred"
         },
         "seen_by": {
           "items": {
@@ -98,6 +149,19 @@
           "default": null,
           "description": "m/s, map east / north",
           "title": "Vel"
+        },
+        "vel_sigma": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "1-sigma of the velocity, m/s",
+          "title": "Vel Sigma"
         },
         "xy": {
           "maxItems": 2,

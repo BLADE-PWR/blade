@@ -130,6 +130,12 @@ class GeoData(BaseModel):
     pts: list[GeoPoint]
 
 
+class Prediction(BaseModel):
+    dt_s: float = Field(description="horizon after `last`, s")
+    xy: Vec2
+    sigma_m: float = Field(description="1-sigma radius of the predicted position, m")
+
+
 class WorldObject(BaseModel):
     oid: str
     grp: str
@@ -137,6 +143,8 @@ class WorldObject(BaseModel):
     xy: Vec2
     z: float | None = None
     vel: Vec2 | None = Field(None, description="m/s, map east / north")
+    vel_sigma: float | None = Field(None, description="1-sigma of the velocity, m/s")
+    pred: list[Prediction] | None = Field(None, description="straight-line prediction; only for moving objects")
     sigma_m: float | None = None
     n_obs: int
     seen_by: list[str]
