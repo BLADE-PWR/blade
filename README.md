@@ -47,8 +47,10 @@ Every message is one envelope (`v`, `sid`, `frame`, `wid`, `ts`, `data`). Payloa
 
 ## Frontend
 
-*Placeholder: not implemented yet.* It will be a React app that talks only to the gateway
-(REST for control, the WebSocket for live data). Until then, `tools/viewer` is a simple OpenCV window
+[frontend](frontend/README.md) is a React + TypeScript app (Vite) that talks only to the gateway: REST for control, the
+WebSocket for live data. In dev, Vite forwards `/api`, `/sessions`, `/detectors`, `/streams` and `/ws` to
+the gateway on `127.0.0.1:8000` (`GATEWAY_URL` for another machine). For now it is a walking skeleton:
+session picker, video previews and message counts; the map comes next. Until then, `tools/viewer` is a simple OpenCV window
 with the video, boxes and the map. How to draw object motion (arrows, prediction cones): `services/world/README.md`.
 
 ## Run
@@ -75,6 +77,11 @@ curl -XPOST localhost:8000/api/replays -H 'content-type: application/json' -d '{
 ```
 ```bash
 uv run blade-viewer --sids rp-1 --wids rp-1 --map altis
+```
+
+Or in the browser (Node.js 22+), then open http://localhost:5173:
+```bash
+cd frontend && npm install && npm run dev
 ```
 
 On the Arma PC (Windows), see [uplink](services/uplink/README.md):
@@ -108,6 +115,7 @@ uv run python terrain/build_ortho.py "<Arma 3>/grad_meh/altis" --out maps/altis
 contracts/   JSON Schema per bus subject (generated)
 libs/        common (envelope, NATS helpers, KLV), geometry (camera, terrain, sigma), frame_code, enhance
 services/    one folder per service, each with a README
+frontend/    operator web app (React + TypeScript, Vite); not part of the uv workspace
 tools/       dev.py, viewer, busmon.py, eval_report.py, pixel_error.py, world_score.py
 models/      model packages (model.yaml, tracker.yaml; model.onnx is not in git)
 terrain/     map package builders
