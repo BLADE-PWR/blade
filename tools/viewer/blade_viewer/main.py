@@ -1,7 +1,8 @@
 """A small operator window that talks only to the gateway: a stream's video with its boxes, and the map
-with world objects, the camera footprint, true positions and alerts.
+with world objects, their motion (arrow: 10 s ahead; cone: 2-sigma of the 30 / 60 s prediction), the camera
+footprint, true positions and alerts.
 
-Keys: Tab next stream · + / - zoom · f follow · w a s d pan · t truth layer · q quit
+Keys: Tab next stream · + / - zoom · f follow · w a s d pan · t truth layer · m motion layer · q quit
       replays: space pause · . one frame · [ ] slower / faster · j / l -/+10 s"""
 from __future__ import annotations
 
@@ -9,6 +10,7 @@ import argparse
 import asyncio
 import contextlib
 import json
+import math
 import struct
 import threading
 import time
@@ -23,6 +25,8 @@ COLORS = {"soldier": (255, 120, 40), "tank": (60, 220, 160), "military_vehicle":
           "explosion": (0, 0, 255), "tank_fire": (255, 0, 255)}  # BGR
 VIDEO_W, VIDEO_H, MAP_W = 960, 540, 600
 WHITE = (255, 255, 255)
+ARROW_S = 10.0  # s of travel the motion arrow shows
+CONE_K = 2.0  # cone radius in sigmas
 
 
 def text(img, s: str, xy, scale: float, color=WHITE, thick: int = 1) -> None:
@@ -168,6 +172,15 @@ class MapBackground:
             canvas[cv0:cv1, cu0:cu1] = img[cv0 - v0:cv1 - v0, cu0 - u0:cu1 - u0]
 
 
+def cone(o: dict) -> np.ndarray:
+    """-> hull of the CONE_K-sigma circles now and at each prediction, map metres"""
+    a = np.linspace(0, 2 * np.pi, 24, endpoint=False)
+    ring = np.stack([np.cos(a), np.sin(a)], 1)
+    circles = [(o["xy"], o.get("sigma_m") or 0.0)] + [(p["xy"], p["sigma_m"]) for p in o["pred"]]
+    pts = np.concatenate([np.asarray(xy) + CONE_K * r * ring for xy, r in circles]).astype(np.float32)
+    return cv2.convexHull(pts)[:, 0]
+
+
 def draw_video(st: State, sid: str | None) -> np.ndarray:
     canvas = np.full((VIDEO_H, VIDEO_W, 3), 25, np.uint8)
     if sid is None:
@@ -251,6 +264,13 @@ def draw_map(st: State, bg: MapBackground, sid: str | None, view: dict) -> np.nd
             u, v = to_px(cam[0], cam[1])
             if 0 <= u < MAP_W and 0 <= v < VIDEO_H:
                 cv2.drawMarker(canvas, (int(u), int(v)), (255, 255, 0), cv2.MARKER_TRIANGLE_UP, 14, 2)
+    moving = [o for o in objs if o.get("pred")] if view["motion"] else []
+    if moving:
+        overlay = canvas.copy()
+        for o in moving:
+            hull = np.array([to_px(*p) for p in cone(o)], np.int32)
+            cv2.fillPoly(overlay, [hull], COLORS.get(o["grp"], (200, 200, 200)), cv2.LINE_AA)
+        cv2.addWeighted(overlay, 0.2, canvas, 0.8, 0, canvas)
     for o in sorted(objs, key=lambda o: o.get("state") == "active"):  # remembered (stale) ones underneath
         u, v = to_px(*o["xy"])
         if not (0 <= u < MAP_W and 0 <= v < VIDEO_H):
@@ -260,6 +280,15 @@ def draw_map(st: State, bg: MapBackground, sid: str | None, view: dict) -> np.nd
         c = c if active else tuple(int(k * 0.55) for k in c)
         cv2.circle(canvas, (int(u), int(v)), 5, c, -1 if active else 1, cv2.LINE_AA)
         text(canvas, o["oid"][-4:], (u + 6, v - 4), 0.35, c)
+        if view["motion"] and o.get("pred"):
+            vx, vy = o["vel"]
+            tip = to_px(o["xy"][0] + vx * ARROW_S, o["xy"][1] + vy * ARROW_S)
+            cv2.arrowedLine(canvas, (int(u), int(v)), (int(tip[0]), int(tip[1])), c, 2, cv2.LINE_AA, tipLength=0.25)
+            text(canvas, f"{math.hypot(vx, vy) * 3.6:.0f} km/h", (u + 6, v + 10), 0.35, c)
+            for p in o["pred"]:
+                pu, pv = to_px(*p["xy"])
+                cv2.drawMarker(canvas, (int(pu), int(pv)), c, cv2.MARKER_DIAMOND, 7, 1)
+                text(canvas, f"{p['dt_s']:.0f}s", (pu + 5, pv - 3), 0.33, c)
     for e, _ in events:
         u, v = to_px(*e["xy"])
         cv2.drawMarker(canvas, (int(u), int(v)), COLORS.get(e["kind"], (0, 0, 255)), cv2.MARKER_TILTED_CROSS, 14, 2)
@@ -321,7 +350,7 @@ def main() -> int:
     stop = threading.Event()
     threading.Thread(target=lambda: asyncio.run(receive(url, st, stop)), daemon=True).start()
     bg = MapBackground(args.gateway)
-    view = {"cx": None, "cy": None, "mpp": args.mpp, "follow": True, "truth": True}
+    view = {"cx": None, "cy": None, "mpp": args.mpp, "follow": True, "truth": True, "motion": True}
     threading.Thread(target=poll_replays, args=(args.gateway, st, stop), daemon=True).start()
     order = [s for s in sids.split(",") if s]
     current = 0
@@ -356,6 +385,8 @@ def main() -> int:
             view["follow"] = not view["follow"]
         elif k == ord("t"):
             view["truth"] = not view["truth"]
+        elif k == ord("m"):
+            view["motion"] = not view["motion"]
         elif sid and chr(k) in " .[]jl":
             with st.lock:
                 rp = st.replays.get(sid)
