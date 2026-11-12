@@ -9,6 +9,18 @@ positions 30 s and 60 s after `last`, each with a 1-sigma radius that grows with
 with a tenth of the distance travelled (`HORIZONS_S`, `MANEUVER` in `fusion.py`). `vel_sigma` is the
 1-sigma of `vel`.
 
+## Drawing motion on the map
+
+For any map client (`tools/viewer` does this):
+
+- Draw an arrow and a cone only for objects that have `pred`; the rest stand still within the noise.
+- Arrow: from `xy` to `xy + vel * N s`, so its length scales with speed the same way for every class
+  (the viewer uses 10 s).
+- Cone: the hull of the circles of radius `k * sigma_m` around `xy` and around each `pred[].xy`. With k = 2
+  a circle holds the object ~86 % of the time in 2-D; k = 1 holds only ~39 %, which looks more certain than it is.
+- `pred` is anchored at `last` and not republished while the object is `stale`, so the client must hide a
+  horizon once `last + dt_s` is in the past, and the arrow and cone with the last one.
+
 ## Bus
 
 | | Subject |

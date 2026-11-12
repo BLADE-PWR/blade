@@ -49,7 +49,7 @@ Every message is one envelope (`v`, `sid`, `frame`, `wid`, `ts`, `data`). Payloa
 
 *Placeholder: not implemented yet.* It will be a React app that talks only to the gateway
 (REST for control, the WebSocket for live data). Until then, `tools/viewer` is a simple OpenCV window
-with the video, boxes and the map.
+with the video, boxes and the map. How to draw object motion (arrows, prediction cones): `services/world/README.md`.
 
 ## Run
 
