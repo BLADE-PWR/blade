@@ -9,11 +9,17 @@ __pycache__/
 maps/
 recordings/
 state/
+# *.ts is MPEG-TS video; TypeScript in frontend/ stays in git
 *.ts
+!frontend/**/*.ts
 
 # Model weights stay out of git (copy best.onnx into the package, or use Git LFS)
 *.onnx
 *.pt
+
+# Frontend
+node_modules/
+frontend/dist/
 
 # Editors / OS
 .vscode/

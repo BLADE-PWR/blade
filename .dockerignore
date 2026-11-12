@@ -7,3 +7,6 @@ recordings
 state
 tests
 *.ts
+!frontend/**/*.ts
+**/node_modules
+frontend/dist
