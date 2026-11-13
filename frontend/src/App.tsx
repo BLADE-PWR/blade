@@ -4,7 +4,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { Command } from "./Command";
 import type { Recording, Session } from "./contracts";
 import { recordingName } from "./format";
-import { connect, getJSON, send, type Target } from "./gateway";
+import { connect, getJSON, startReplay, type Target } from "./gateway";
 import { Operator } from "./Operator";
 import { ReplayBar } from "./Replay";
 import { addPreview, apply, clearWorld, dispose, emptySituation, latencyS, transmitting } from "./situation";
@@ -20,18 +20,6 @@ export function App() {
   const [target, setTarget] = useState<Target | null>(null);
   if (!target) return <Pick onPick={setTarget} />;
   return <Live key={JSON.stringify(target)} target={target} onPick={setTarget} onLeave={() => setTarget(null)} />;
-}
-
-/** Creates and starts a session that replays the recording in a loop; -> its id */
-async function startReplay(rec: Recording): Promise<string> {
-  const maps = await getJSON<{ id: string }[]>("/api/maps");
-  const map = maps.some((m) => m.id === rec.map) ? rec.map : (maps[0]?.id ?? rec.map);
-  // a new sid each time: starting a session replaces any replay with the same sid
-  const sid = `rp-${Date.now().toString(36).slice(-5)}`;
-  const s = await send<Session>("POST", "/sessions", { name: `Replay ${rec.scene ?? rec.id}`, map,
-    streams: [{ sid, source: "replay", wid: sid, recording: rec.id, loop: true }] });
-  await send("POST", `/sessions/${s.id}/start`);
-  return s.id;
 }
 
 function Pick({ onPick }: { onPick: (t: Target) => void }) {
@@ -198,7 +186,9 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
         </div>
       </header>
       {closed && <p className="error banner">WebSocket closed: {closed}</p>}
-      {replay && sit.session && <ReplayBar session={sit.session} onJump={() => clearWorld(sit)} />}
+      {replay && sit.session && (
+        <ReplayBar session={sit.session} onJump={() => clearWorld(sit)} onSwitch={(id) => onPick({ session: id })} />
+      )}
       {view === "operator"
         ? <Operator sit={sit} sid={sid} main={main} onMain={setMain} onDrone={setPicked} />
         : <Command sit={sit} sids={sids} sid={sid} main={main} onMain={setMain} onDrone={setPicked}

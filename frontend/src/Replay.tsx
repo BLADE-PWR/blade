@@ -1,9 +1,10 @@
-// The replay bar: position, pause, step, jumps and speed for every replay of the session (kept in step).
+// The replay bar: the mission (recording) being replayed, position, pause, step, jumps and speed for every replay
+// of the session (kept in step).
 import { useEffect, useState } from "react";
 
 import type { Recording, Replay, Session } from "./contracts";
 import { recordingName } from "./format";
-import { getJSON, send } from "./gateway";
+import { getJSON, send, startReplay } from "./gateway";
 
 const POLL_MS = 1000;
 const JUMP_S = 10;
@@ -12,13 +13,16 @@ const REBUILD_NOTE_MS = 5000; // how long the "picture rebuilds" note stays afte
 
 const mmss = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${(s % 60).toFixed(1).padStart(4, "0")}`;
 
-export function ReplayBar({ session, onJump }: { session: Session; onJump: () => void }) {
+type Props = { session: Session; onJump: () => void; onSwitch: (sessionId: string) => void };
+
+export function ReplayBar({ session, onJump, onSwitch }: Props) {
   const sids = session.streams.filter((st) => st.source === "replay").map((st) => st.sid).join(",");
   const [replays, setReplays] = useState<Replay[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<number | null>(null); // the slider position while it is being dragged
   const [jumpedAt, setJumpedAt] = useState(0);
   const [recording, setRecording] = useState<Recording | null>(null);
+  const [missions, setMissions] = useState<Recording[] | null>(null); // the open list of recordings to switch to
 
   useEffect(() => {
     let stopped = false;
@@ -65,12 +69,44 @@ export function ReplayBar({ session, onJump }: { session: Session; onJump: () =>
     setDraft(null);
   };
   const position = draft ?? first.position_s;
+  const toggleMissions = () => {
+    if (missions) {
+      setMissions(null);
+    } else {
+      getJSON<Recording[]>("/api/recordings").then(setMissions)
+        .catch((e: Error) => setError(`Cannot list the recordings (${e.message}).`));
+    }
+  };
+  // a new session for the chosen recording; this one is stopped so only one replay keeps the detector busy
+  const switchTo = (rec: Recording) => {
+    setMissions(null);
+    startReplay(rec)
+      .then(async (id) => {
+        await send("POST", `/sessions/${session.id}/stop`);
+        onSwitch(id);
+      })
+      .catch((e: Error) => setError(`Cannot switch to ${rec.scene ?? rec.id} (${e.message}).`));
+  };
 
   return (
     <div className="replaybar">
-      <span className="muted">
-        Recording <span className="value">{recording ? recordingName(recording) : first.recording}</span>
-      </span>
+      <div className="missions">
+        <span className="muted">Recording </span>
+        <button aria-expanded={missions !== null} onClick={toggleMissions}>
+          {recording ? recordingName(recording) : first.recording}
+        </button>
+        {missions && (
+          <ul className="mission-list" aria-label="Recordings">
+            {missions.map((r) => (
+              <li key={r.id}>
+                <button disabled={r.id === first.recording} onClick={() => switchTo(r)}>
+                  {recordingName(r)}, drone {r.sid}{r.id === first.recording && " (playing)"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       <div className="replay-buttons">
         <button onClick={() => jump(-JUMP_S)}>Back {JUMP_S} s</button>
         <button className="primary" onClick={() => control(() => ({ paused: !first.paused }))}>

@@ -12,7 +12,8 @@ Two views, in English, switched in the top bar. The layout follows the accepted 
   video (previews of all drones, the chosen drone, a small map, state per service, settings).
 
 Both views can put the map or the video on the main panel. A session with replays gets the replay bar
-(recording name, pause, next frame, 10 s jumps, speed, slider).
+(the mission: a button that lists the recordings and switches to another one, stopping the current replay; pause,
+next frame, 10 s jumps, speed, slider).
 
 Libraries besides React: `leaflet` (the map) and `milsymbol` (APP-6 symbols), both named in module 8.
 
@@ -65,7 +66,7 @@ GATEWAY_URL=http://<server-ip>:8000 npm run dev
 
 | File | What it is |
 |---|---|
-| `src/gateway.ts` | WebSocket client: JSON messages and `ZPIF` video previews (`b"ZPIF"` + uint32 BE header length + header JSON + JPEG); small REST helpers |
+| `src/gateway.ts` | WebSocket client: JSON messages and `ZPIF` video previews (`b"ZPIF"` + uint32 BE header length + header JSON + JPEG); small REST helpers, including starting a replay session for a recording |
 | `src/contracts.ts` | Types of the message payloads the UI reads, copied by hand from `libs/common/blade_common/contracts.py` |
 | `src/situation.ts` | The live picture of one connection (drones, objects, events, alerts, diag), updated by each message |
 | `src/App.tsx` | Session picker with the recording list (starts a replay session), the connection (redrawn at most once per screen frame) and the top bar |
@@ -73,7 +74,7 @@ GATEWAY_URL=http://<server-ip>:8000 npm run dev
 | `src/Command.tsx` | View 2: every drone of the session; map on the main panel (drone list, alerts, state) or video (drone previews, the chosen drone, small map, state per service, settings) |
 | `src/Video.tsx` | One drone's video preview with the boxes of the same frame and the mark at the centre of the frame |
 | `src/MapView.tsx` | The map: orthophoto tiles in Arma metres (Leaflet `CRS.Simple`), APP-6 symbols (milsymbol) stacked when close, drones, camera footprints, motion, uncertainty, events, true positions |
-| `src/Replay.tsx` | The replay bar: position, pause, next frame, 10 s jumps, speed; drives every replay of the session together |
+| `src/Replay.tsx` | The replay bar: the mission (switch to another recording), position, pause, next frame, 10 s jumps, speed; drives every replay of the session together |
 | `src/Lists.tsx` | The alert, object and event lists (clicking an alert selects its object and rings it on the map) |
 | `src/classes.ts` | Display names and fixed colours of the object groups and event kinds, alert colours |
 | `src/format.ts` | Times as text ("12 s ago", 24-hour clock) |

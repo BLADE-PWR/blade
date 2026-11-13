@@ -1,5 +1,6 @@
 // The gateway WebSocket (services/gateway/README.md): JSON text messages, plus binary video previews
-// b"ZPIF" + uint32 big-endian header length + header JSON + JPEG.
+// b"ZPIF" + uint32 big-endian header length + header JSON + JPEG. Also the few REST calls the UI makes.
+import type { Recording, Session } from "./contracts";
 
 export type Message = {
   type: string;
@@ -56,6 +57,18 @@ export async function send<T>(method: "POST" | "PATCH", path: string, body: obje
   const r = await fetch(path, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   if (!r.ok) throw new Error(`${method} ${path}: ${r.status} ${await r.text()}`);
   return (await r.json()) as T;
+}
+
+/** Creates and starts a session that replays the recording in a loop; -> its id */
+export async function startReplay(rec: Recording): Promise<string> {
+  const maps = await getJSON<{ id: string }[]>("/api/maps");
+  const map = maps.some((m) => m.id === rec.map) ? rec.map : (maps[0]?.id ?? rec.map);
+  // a new sid each time: starting a session replaces any replay with the same sid
+  const sid = `rp-${Date.now().toString(36).slice(-5)}`;
+  const s = await send<Session>("POST", "/sessions", { name: `Replay ${rec.scene ?? rec.id}`, map,
+    streams: [{ sid, source: "replay", wid: sid, recording: rec.id, loop: true }] });
+  await send("POST", `/sessions/${s.id}/start`);
+  return s.id;
 }
 
 /** Opens the WebSocket; returns a function that closes it. */
