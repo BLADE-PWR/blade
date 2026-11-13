@@ -734,8 +734,13 @@ button.primary {
 
 .thumbs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, 220px);
   gap: 12px;
+}
+
+/* as wide as fits under the bars and the drone strip, so the page does not scroll */
+.main-video {
+  width: min(100%, calc((100vh - 350px) * 16 / 9));
 }
 
 .thumb-card {

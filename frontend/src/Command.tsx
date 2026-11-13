@@ -76,7 +76,7 @@ export function Command({ sit, sids, sid, main, onMain, onDrone, onOperator }: P
             ))}
           </div>
           {sid && (
-            <section className="panel" aria-label="Video of the chosen drone">
+            <section className="panel main-video" aria-label="Video of the chosen drone">
               <div className="panel-head">
                 <strong>Drone {sid}</strong>
                 {drone?.geo && (
