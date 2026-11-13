@@ -1,7 +1,9 @@
 # sessions
 
 Records live streams to disk, imports recordings and replays them. A replay pushes the recorded
-`stream.ts` back into ingest under a new stream id, so from ingest onwards it looks like a live stream.
+`stream.ts` back into ingest under a new stream id, so from ingest onwards it looks like a live stream,
+except that its frames carry their recording time: the world model runs the replay on it, so pausing it
+does not age the world and other speeds keep the objects' speeds right (world README, "Time").
 
 A recording is a folder `recordings/<id>/` with `manifest.json`, `stream.ts`, `index.jsonl` and
 `truth.jsonl`.

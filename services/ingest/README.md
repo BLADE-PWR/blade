@@ -15,7 +15,7 @@ pairs it with its telemetry and publishes it as a JPEG; sim truth is passed on t
 
 | | Subject |
 |---|---|
-| publishes | `frames.<sid>` (telemetry + JPEG) |
+| publishes | `frames.<sid>` (telemetry + JPEG); `ts.capture` is the grab time live and the arrival in a replay, which also carries its recording time `ts.media` |
 | publishes | `truth.<sid>`, `registry.<sid>`, `events.<sid>` (sim truth) |
 | publishes | `raw.<sid>` (live MPEG-TS bytes, for the recorder) |
 | subscribes | `ack.<sid>` (for `delivery=all`) |

@@ -3,6 +3,10 @@
 Runs rules over the world state and raises alerts that tell the operator where to look and why. No
 rule ranks targets or suggests an action. An alert clears after its condition has been false for 5 s.
 
+Rules run on the world's clock (`t` in `world.<wid>.objects`, see the world README, "Time"), so a paused
+replay raises no lost contact; objects in `forgotten` (merged, or their replay went back) are not lost.
+A world that sends no clock runs on the wall clock.
+
 ## Rules
 
 | Rule | Fires when | Parameters |

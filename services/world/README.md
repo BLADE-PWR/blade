@@ -9,6 +9,22 @@ filter is still catching up with a jump) also carries `pred`: straight-line posi
 each with a 1-sigma radius that grows with the velocity uncertainty and with a tenth of the distance travelled
 (`HORIZONS_S`, `MANEUVER` in `fusion.py`). `vel_sigma` is the 1-sigma of `vel`.
 
+## Time
+
+Each world runs on its own clock (`clock.py`), and `first`, `last`, event and alert times are on it:
+
+- A live stream runs on the wall clock, so the objects of a drone that stops sending go stale as before.
+- A replay carries its recording time (`ts.media`, set by ingest), and the world runs it on that time: a
+  paused replay stands still (nothing goes stale, no lost contact), a replay at x2 runs twice as fast
+  (speeds come out the same as at x1), a seek ahead is time passing.
+- A replay that goes back in its recording (a seek back, a loop) joins again at the world's current time, and
+  what that stream saw is dropped and published in `forgotten`.
+- A world with a live stream follows the wall clock for all its streams. Replays in one world should play
+  together: the clock is the furthest of them, so a stream paused on its own ages.
+
+Every `world.<wid>.objects` message carries the clock as `t`, and the sweeper publishes it once a second
+while it moves, so clients and decision see time pass; while a replay is paused nothing is published.
+
 ## Drawing motion on the map
 
 For any map client (`tools/viewer` does this):
@@ -19,14 +35,15 @@ For any map client (`tools/viewer` does this):
 - Cone: the hull of the circles of radius `k * sigma_m` around `xy` and around each `pred[].xy`. With k = 2
   a circle holds the object ~86 % of the time in 2-D; k = 1 holds only ~39 %, which looks more certain than it is.
 - `pred` is anchored at `last` and not republished while the object is `stale`, so the client must hide a
-  horizon once `last + dt_s` is in the past, and the arrow and cone with the last one.
+  horizon once `last + dt_s` is behind the world's clock (`t`, not the client's clock: a paused replay keeps
+  its predictions), and the arrow and cone with the last one.
 
 ## Bus
 
 | | Subject |
 |---|---|
 | subscribes | `geo.<sid>` |
-| publishes | `world.<wid>.objects`: changed objects, expired ids, counts per group |
+| publishes | `world.<wid>.objects`: changed objects, expired and forgotten ids, counts per group, the world's clock `t` |
 | publishes | `world.<wid>.events`: events such as explosions |
 | publishes | `ack.<sid>`: frame done, for replays with `delivery: all` |
 
