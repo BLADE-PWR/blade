@@ -296,16 +296,20 @@ export function MapView(props: Props) {
   const now = worldNow(sit);
   const focusGeo = focus ? sit.drones.get(focus)?.geo : null;
 
-  const fitDrones = () => {
-    const pts = [...sit.drones.values()].flatMap((d) => (d.geo ? [d.geo.camera, ...d.geo.footprint] : []))
-      .flatMap((p) => (p ? [ll(p)] : []));
+  const fit = (pts: L.LatLng[]) => {
     if (map && pts.length) map.fitBounds(L.latLngBounds(pts), { padding: [FIT_PAD_PX, FIT_PAD_PX] });
+    return pts.length > 0;
   };
+  const fitDrones = () => fit([...sit.drones.values()]
+    .flatMap((d) => (d.geo ? [d.geo.camera, ...d.geo.footprint] : [])).flatMap((p) => (p ? [ll(p)] : [])));
 
+  // nothing is drawn before the map has a view: the operator's drone, else every drone, else the objects
   useEffect(() => {
-    if (!map || centred || !focusGeo?.centre) return;
-    if (overview) fitDrones();
-    else map.setView(ll(focusGeo.centre), START_ZOOM);
+    if (!map || centred) return;
+    if (!overview && focus) {
+      if (!focusGeo?.centre) return;
+      map.setView(ll(focusGeo.centre), START_ZOOM);
+    } else if (!fitDrones() && !fit([...sit.objects.values()].map((o) => ll(o.xy)))) return;
     setCentred(true);
   });
 
