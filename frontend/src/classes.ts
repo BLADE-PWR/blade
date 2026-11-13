@@ -3,7 +3,7 @@
 export const GROUPS = ["soldier", "tank", "military_vehicle"] as const;
 export const EVENT_KINDS = ["explosion", "tank_fire"] as const;
 
-export const NAMES: Record<string, string> = {
+const NAMES: Record<string, string> = {
   soldier: "soldier",
   tank: "tank",
   military_vehicle: "vehicle",
@@ -11,7 +11,7 @@ export const NAMES: Record<string, string> = {
   tank_fire: "tank fire",
 };
 
-export const COLORS: Record<string, string> = {
+const COLORS: Record<string, string> = {
   soldier: "#3d8bff",
   tank: "#a0dc3c",
   military_vehicle: "#ffc800",
