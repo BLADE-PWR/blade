@@ -3,9 +3,16 @@
 The operator app (module 8 in `docs/opis_projektu.md`): React + TypeScript, built with Vite. It talks only
 to the [gateway](../services/gateway/README.md): REST for control, one WebSocket for live data.
 
-Two views, both in Polish: the operator view (one drone: video, map, object details, alerts) and the command
-view (all drones of a session on one map). The layout follows the accepted mockups on the "Blade: widoki UI"
-canvas. Work in progress: so far the session picker, the top bar, the operator layout, the video with boxes, the map, the object details, the alert tabs and the bottom bar (filters, box threshold, stage times), the replay bar and the command view (map or video on the main panel, service state, settings).
+Two views, both in Polish, switched in the top bar. The layout follows the accepted mockups on the
+"Blade: widoki UI" canvas.
+
+- Operator: one drone. Video with the detector's boxes, the map, the chosen object's details, the alert,
+  object and event tabs, class filters and the time of each pipeline stage.
+- Command: every drone of the session. Either the map on the main panel (drone list, alerts, state) or the
+  video (previews of all drones, the chosen drone, a small map, state per service, settings).
+
+Both views can put the map or the video on the main panel. A session with replays gets the replay bar
+(pause, next frame, 10 s jumps, speed, slider).
 
 Libraries besides React: `leaflet` (the map) and `milsymbol` (APP-6 symbols), both named in module 8.
 
@@ -14,7 +21,19 @@ It is not part of the uv workspace; it has its own `package.json`. Needs Node.js
 
 ## Run
 
-With the server running (`uv run python tools/dev.py --map altis`) and, for data, a replay:
+Start the server (`uv run python tools/dev.py --map altis`, without an NVIDIA card add `--detect-fps 5`). For
+data, create a gateway session with a looping replay and start it (the replay bar needs a session; a replay
+started with `POST /api/replays` only shows up through "Albo strumienie i światy"):
+```bash
+curl -XPOST localhost:8000/sessions -H 'content-type: application/json' -d '{"name": "Demo", "map": "altis",
+  "streams": [{"sid": "rp-1", "source": "replay", "wid": "rp-1", "recording": "<id>", "loop": true}]}'
+```
+```bash
+curl -XPOST localhost:8000/sessions/<session id from the answer>/start
+```
+A second stream with the same `wid` (and e.g. `"offset_s": 40`) gives the command view two drones.
+
+Then:
 ```bash
 cd frontend
 ```
@@ -25,7 +44,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173. In dev, Vite forwards `/api`, `/sessions`, `/detectors`, `/streams` and the
+Open http://localhost:5173 and pick the session. In dev, Vite forwards `/api`, `/sessions`, `/detectors`, `/streams` and the
 `/ws` WebSocket to the gateway on `127.0.0.1:8000`. For a gateway on another machine:
 ```bash
 GATEWAY_URL=http://<server-ip>:8000 npm run dev
@@ -56,4 +75,5 @@ GATEWAY_URL=http://<server-ip>:8000 npm run dev
 | `src/Lists.tsx` | The alert, object and event lists (clicking an alert selects its object and rings it on the map) |
 | `src/classes.ts` | Polish names and fixed colours of the object groups and event kinds, alert colours |
 | `src/format.ts` | Numbers and times as Polish text |
+| `src/index.css` | All styles, one dark theme |
 | `vite.config.ts` | The dev proxy to the gateway |

@@ -1,7 +1,7 @@
 // The map: orthophoto tiles from the terrain service in flat Arma metres (Leaflet CRS.Simple, lat = y north,
 // lng = x east), APP-6 symbols from milsymbol, drones with their camera footprints, motion and uncertainty.
 import L from "leaflet";
-import ms from "milsymbol";
+import ms, { type Symbol as MilSymbol } from "milsymbol";
 import { useEffect, useRef, useState } from "react";
 
 import { colorOf, nameOf, SEVERITY_COLORS } from "./classes";
@@ -21,7 +21,8 @@ const CONE_K = 2; // cone and uncertainty circles in sigmas
 const HORIZON_S = 30; // prediction shown for every moving object; the selected one shows all
 const UNCERTAIN_M = 15; // others get an uncertainty circle from this sigma (decision rule uncertain_position)
 const ALERT_RING_PX = 16;
-const STACK_ORDER =["tank", "military_vehicle", "soldier"];
+const STACK_ORDER = ["tank", "military_vehicle", "soldier"];
+const CIRCLE_POINTS = 24;
 const SIDC: Record<string, string> = {
   soldier: "SHGPUCI--------",
   tank: "SHGPUCA--------",
@@ -58,17 +59,19 @@ class OrthoTiles extends L.TileLayer {
   }
 }
 
-const svgs = new Map<string, string>();
-function symbolSvg(sidc: string): string {
-  let svg = svgs.get(sidc);
-  if (!svg) {
-    svg = new ms.Symbol(sidc, { size: SYMBOL_PX }).asSVG();
-    svgs.set(sidc, svg);
+const symbols = new Map<string, MilSymbol>(); // drawing a symbol is slow, and the same few are drawn every frame
+function symbol(sidc: string): MilSymbol {
+  let s = symbols.get(sidc);
+  if (!s) {
+    s = new ms.Symbol(sidc, { size: SYMBOL_PX });
+    symbols.set(sidc, s);
   }
-  return svg;
+  return s;
 }
 
-export const symbolUrl = (grp: string) => new ms.Symbol(SIDC[grp] ?? SIDC.soldier, { size: SYMBOL_PX }).toDataURL();
+const symbolSvg = (sidc: string) => symbol(sidc).asSVG();
+
+export const symbolUrl = (grp: string) => symbol(SIDC[grp] ?? SIDC.soldier).toDataURL();
 
 function objectIcon(o: WorldObject, count: number, selected: boolean): L.DivIcon {
   const badge = count > 1 ? `<span class="badge">+${count - 1}</span>` : "";
@@ -121,8 +124,8 @@ function hull(pts: Vec2[]): Vec2[] {
 }
 
 function circle(xy: Vec2, r: number): Vec2[] {
-  return Array.from({ length: 24 }, (_, i) => {
-    const a = (i / 24) * 2 * Math.PI;
+  return Array.from({ length: CIRCLE_POINTS }, (_, i) => {
+    const a = (i / CIRCLE_POINTS) * 2 * Math.PI;
     return [xy[0] + r * Math.cos(a), xy[1] + r * Math.sin(a)] as Vec2;
   });
 }
