@@ -86,7 +86,7 @@ class Evaluator:
         objs = self.objects[wid]
         for o in env.data.get("objects", []):
             objs[o["oid"]] = o
-        for oid in env.data.get("expired", []):
+        for oid in env.data.get("expired", []) + env.data.get("forgotten", []):
             objs.pop(oid, None)
 
     async def tick(self) -> None:

@@ -40,6 +40,7 @@ class State:
         self.dets: dict[str, OrderedDict] = defaultdict(OrderedDict)  # frame -> (dets, t)
         self.geo: dict[str, dict] = {}
         self.objects: dict[str, dict[str, dict]] = defaultdict(dict)  # wid -> oid -> obj
+        self.clocks: dict[str, float] = {}  # wid -> world clock, s (stands still while a replay is paused)
         self.events: deque = deque(maxlen=50)
         self.diag: dict[str, dict] = {}
         self.alerts: dict[str, dict] = {}  # aid -> active alert
@@ -64,8 +65,10 @@ class State:
                 objs = self.objects[m["wid"]]
                 for o in data.get("objects", []):
                     objs[o["oid"]] = o
-                for oid in data.get("expired", []):
+                for oid in data.get("expired", []) + data.get("forgotten", []):
                     objs.pop(oid, None)
+                if data.get("t"):
+                    self.clocks[m["wid"]] = data["t"]
             elif typ == "world.events":
                 for e in data.get("events", []):
                     self.events.append((e, time.time()))
@@ -245,6 +248,7 @@ def draw_map(st: State, bg: MapBackground, sid: str | None, view: dict) -> np.nd
     with st.lock:
         geo = st.geo.get(sid) if sid else None
         objs = [o for w in st.objects.values() for o in w.values()]
+        clock = {o["oid"]: st.clocks.get(wid, time.time()) for wid, w in st.objects.items() for o in w.values()}
         events = [(e, t) for e, t in st.events if time.time() - t < e.get("ttl_s", 5)]
         map_id = st.map_id
         evals = dict(st.eval)
@@ -275,7 +279,7 @@ def draw_map(st: State, bg: MapBackground, sid: str | None, view: dict) -> np.nd
             u, v = to_px(cam[0], cam[1])
             if 0 <= u < MAP_W and 0 <= v < VIDEO_H:
                 cv2.drawMarker(canvas, (int(u), int(v)), (255, 255, 0), cv2.MARKER_TRIANGLE_UP, 14, 2)
-    preds = {o["oid"]: p for o in objs if (p := ahead(o, time.time()))} if view["motion"] else {}
+    preds = {o["oid"]: p for o in objs if (p := ahead(o, clock[o["oid"]]))} if view["motion"] else {}
     if preds:
         overlay = canvas.copy()
         for o in (o for o in objs if o["oid"] in preds):

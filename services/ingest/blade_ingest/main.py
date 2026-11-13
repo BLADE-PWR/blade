@@ -33,6 +33,15 @@ RAW_CHUNK = 64 * 1024
 RAW_FLUSH_S = 0.1
 
 
+def frame_ts(kind: str, tel: dict, t_in: float, t_out: float) -> dict:
+    """-> a frame's stamps: capture (grab time live, arrival in a replay) and, in a replay, its recording time"""
+    cap = tel.get("t_capture") if kind == "live" else None
+    ts = {"capture": round(cap or t_in, 6), "ingest": [round(t_in, 6), round(t_out, 6)]}
+    if kind != "live":  # a recording without times (stills) runs on the arrival, but not as a live stream
+        ts["media"] = round(tel.get("t_capture") or t_in, 6)
+    return ts
+
+
 class Ingest:
     def __init__(self):
         self.sources: dict[str, Source] = {}
@@ -55,16 +64,15 @@ class Ingest:
 
     def on_frame(self, src: Source, p: Paired) -> None:
         tel = p.tel
-        cap = tel.get("t_capture") if src.kind == "live" else None
-        env = Envelope(sid=p.sid, frame=tel.get("frame"), wid=self.wid_for(src),
-                       ts={"capture": round(cap or p.t_in, 6), "ingest": [round(p.t_in, 6), round(p.t_out, 6)]},
+        ts = frame_ts(src.kind, tel, p.t_in, p.t_out)
+        env = Envelope(sid=p.sid, frame=tel.get("frame"), wid=self.wid_for(src), ts=ts,
                        data=FrameData.model_validate({"tel": tel, "jpeg": {"w": p.jpeg_size[0],
                                                                          "h": p.jpeg_size[1]}}).model_dump(
                            exclude_none=True))
         self.diag.got(p.sid)
-        self.diag.sent(p.sid, latency_s=p.t_out - (cap or p.t_in))
-        if cap:
-            self.diag.clock(p.sid, p.t_in - cap)
+        self.diag.sent(p.sid, latency_s=p.t_out - ts["capture"])
+        if src.kind == "live" and tel.get("t_capture"):
+            self.diag.clock(p.sid, p.t_in - tel["t_capture"])
         if src.delivery == "all":
             env.delivery = "all"
         self._spawn(publish(self.nc, f"frames.{p.sid}", env, p.jpeg))

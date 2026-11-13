@@ -308,9 +308,25 @@ class World:
                 o = keep
 
     def take_merged(self) -> list[str]:
-        """oids absorbed since the last call (published as expired)."""
+        """oids absorbed since the last call (published as forgotten)."""
         out, self.merged = self.merged, []
         return out
+
+    def forget(self, sid: str) -> list[str]:
+        """Drop the objects only this stream saw and its tracks from the others; -> the published oids dropped"""
+        dropped = []
+        for oid, o in list(self.objects.items()):
+            if set(o.seen_by) <= {sid}:
+                del self.objects[oid]
+                if o.confirmed:
+                    dropped.append(oid)
+            else:
+                o.seen_by.pop(sid, None)
+                o.tracks = {k: v for k, v in o.tracks.items() if k[0] != sid}
+        self.by_track = {k: v for k, v in self.by_track.items() if k[0] != sid and v in self.objects}
+        self.close = Counter({k: v for k, v in self.close.items() if k[0] in self.objects and k[1] in self.objects})
+        self.events = {eid: e for eid, e in self.events.items() if e["sid"] != sid}
+        return dropped
 
     def _event(self, sid: str, p: dict, t: float) -> dict | None:
         xy = (p["xyz"][0], p["xyz"][1])

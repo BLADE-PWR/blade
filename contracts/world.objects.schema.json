@@ -38,6 +38,7 @@
     "WorldObject": {
       "properties": {
         "first": {
+          "description": "world clock, s: the wall clock live; in a replay the time the stream joined plus the recording time played since",
           "title": "First",
           "type": "number"
         },
@@ -46,6 +47,7 @@
           "type": "string"
         },
         "last": {
+          "description": "world clock, s",
           "title": "Last",
           "type": "number"
         },
@@ -229,6 +231,14 @@
       "title": "Expired",
       "type": "array"
     },
+    "forgotten": {
+      "description": "oids removed without losing contact: merged into another object, or dropped because their replay went back in time",
+      "items": {
+        "type": "string"
+      },
+      "title": "Forgotten",
+      "type": "array"
+    },
     "objects": {
       "description": "upserts",
       "items": {
@@ -236,6 +246,19 @@
       },
       "title": "Objects",
       "type": "array"
+    },
+    "t": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "world clock when published, s: stands still while a replay is paused",
+      "title": "T"
     }
   },
   "title": "WorldObjectsData",

@@ -1,5 +1,6 @@
 import numpy as np
 
+from blade_world.clock import WorldClock
 from blade_world.fusion import GAP_S, MANEUVER, World
 
 
@@ -194,3 +195,90 @@ def test_velocity_spike_after_a_jump_is_not_predicted():
         w.observe("s1", [pt(1, 130 + 1.5 * t, 200)], t)
     (o,) = w.objects.values()
     assert o.speed > 7.0 and o.model().pred is None  # the filter is still catching up
+
+
+def replayed(w, clock, sid, frames):
+    """frames: (recording time, wall time, points); observes each at its world time"""
+    for media, wall, pts in frames:
+        t, _ = clock.frame(sid, media, wall)
+        w.observe(sid, pts, t)
+
+
+def test_replay_clock_stands_still_while_paused():
+    w, clock = World("w"), WorldClock(1000.0)
+    replayed(w, clock, "s1", [(500 + k / 10, 1000 + k / 10, [tank(1, 500, 500)]) for k in range(30)])
+    t = clock.tick(1002.9 + 120)  # paused for two minutes: no frames
+    assert t == 1002.9 and w.sweep(t) == ([], [])
+    assert w.objects["w-0001"].state == "active"
+
+
+def test_live_clock_follows_the_wall():
+    w, clock = World("w"), WorldClock(1000.0)
+    replayed(w, clock, "s1", [(None, 1000 + k / 10, [tank(1, 500, 500)]) for k in range(30)])
+    stale, _ = w.sweep(clock.tick(1002.9 + 3.5))  # the drone stopped sending
+    assert [o.oid for o in stale] == ["w-0001"]
+
+
+def test_double_speed_gives_the_same_velocity():
+    w, clock = World("w"), WorldClock(1000.0)
+    # driving east at 6 m/s in the recording, replayed at x2: frames 0.1 s apart in it, 0.05 s on the wall
+    replayed(w, clock, "s1", [(500 + k / 10, 1000 + k / 20, [tank(1, 500 + 0.6 * k, 500)]) for k in range(40)])
+    (o,) = w.objects.values()
+    assert abs(o.speed - 6) < 0.5
+    p30, _ = o.model().pred
+    assert abs(p30.xy[0] - (500 + 0.6 * 39 + 180)) < 5
+
+
+def test_jump_ahead_keeps_object_and_velocity():
+    w, clock = World("w"), WorldClock(1000.0)
+    replayed(w, clock, "s1", [(500 + k / 10, 1000 + k / 10, [tank(1, 500 + 0.6 * k, 500)]) for k in range(40)])
+    # a seek 10 s ahead: the tank is 60 m further on, the tracker keeps its id
+    replayed(w, clock, "s1", [(513.9 + k / 10, 1004 + k / 10, [tank(1, 583.4 + 0.6 * k, 500)]) for k in range(10)])
+    assert list(w.objects) == ["w-0001"]
+    o = w.objects["w-0001"]
+    assert abs(o.speed - 6) < 1 and o.model().pred is not None
+
+
+def test_paused_stream_ages_while_another_plays():
+    w, clock = World("w"), WorldClock(1000.0)
+    both = [(500 + k / 10, 1000 + k / 10) for k in range(30)]
+    replayed(w, clock, "s1", [(m, wall, [tank(1, 500, 500)]) for m, wall in both])
+    replayed(w, clock, "s2", [(m, wall, [tank(1, 900, 900)]) for m, wall in both])
+    # s1 paused, s2 plays on for 5 s: the world's time is s2's, so s1's tank is not seen for 5 s
+    replayed(w, clock, "s2", [(503 + k / 10, 1003 + k / 10, [tank(1, 900, 900)]) for k in range(50)])
+    stale, _ = w.sweep(clock.tick(1008))
+    assert [o.oid for o in stale] == ["w-0001"]
+
+
+def test_rewind_forgets_the_stream():
+    w, clock = World("w"), WorldClock(1000.0)
+    replayed(w, clock, "s1", [(500 + k / 10, 1000 + k / 10, [tank(1, 500 + 0.6 * k, 500)]) for k in range(40)])
+    replayed(w, clock, "s2", [(800 + k / 10, 1000 + k / 10, [tank(4, 700, 700)]) for k in range(40)])
+    t, rewind = clock.frame("s1", 501.0, 1004.0)  # a seek 3 s back in s1's recording
+    assert rewind and t >= 1003.9  # the world's time does not go back
+    assert w.forget("s1") == ["w-0001"] and list(w.objects) == ["w-0002"]  # s2's tank stays
+    w.observe("s1", [tank(1, 506, 500)], t)  # the same tid again: a new object, not a jump of the old one
+    replayed(w, clock, "s1", [(501.1 + k / 10, 1004.1 + k / 10, [tank(1, 506 + 0.6 * k, 500)]) for k in range(20)])
+    o = w.objects["w-0003"]
+    assert abs(o.speed - 6) < 1  # no velocity spike from the jump
+
+
+def test_live_after_a_fast_replay_keeps_its_objects():
+    w, clock = World("w"), WorldClock(1000.0)
+    replayed(w, clock, "s1", [(500 + k * 0.4, 1000 + k / 10, []) for k in range(1000)])  # x4 for 100 s
+    assert clock.t > 1390  # the world ran ahead of the wall
+    replayed(w, clock, "live", [(None, 1100 + k / 10, [tank(1, 700, 700)]) for k in range(30)])
+    assert w.sweep(clock.tick(1103.5)) == ([], [])  # seen half a second ago, not 300 s
+    assert w.objects["w-0001"].state == "active"
+
+
+def test_replay_carries_on_after_the_live_stream_stops():
+    w, clock = World("w"), WorldClock(1000.0, live_keep_s=10)
+    replayed(w, clock, "s1", [(500 + k / 10, 1000 + k / 10, [tank(1, 900, 900)]) for k in range(20)])
+    replayed(w, clock, "live", [(None, 1002 + k / 10, []) for k in range(30)])  # s1 paused meanwhile
+    for wall in range(1005, 1016):  # the sweeper's ticks: the wall clock until the live stream is 10 s quiet
+        clock.tick(wall)
+    t, rewind = clock.frame("s1", 502.0, 1016.0)  # s1 plays on
+    assert not rewind and t == clock.t == 1014.0  # at the world's time, not back at 1002
+    w.observe("s1", [tank(1, 900, 900)], t)
+    assert w.sweep(clock.tick(1016.5))[1] == [] and w.objects["w-0001"].state == "active"

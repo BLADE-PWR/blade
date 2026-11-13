@@ -1,5 +1,6 @@
 """decision-support: world.<wid>.objects / .events + geo.<sid> -> alerts.<wid> (rules.py), published when
-an alert appears and when it clears."""
+an alert appears and when it clears. Rules run on the world's clock (WorldObjectsData.t), so a paused replay raises
+no lost contact; a world that sends no clock runs on the wall clock."""
 from __future__ import annotations
 
 import asyncio
@@ -33,7 +34,11 @@ class Engine:
         self.active: dict[str, Alert] = {}
         self.history: deque[Alert] = deque(maxlen=200)
         self.missing: dict[str, float] = {}  # alert key -> when its condition became false
+        self.clock: float | None = None  # the world's time, s, from its object updates
         self._ids = itertools.count(1)
+
+    def now(self) -> float:
+        return time.time() if self.clock is None else self.clock
 
     def step(self, t: float) -> list[Alert]:
         """Run every enabled rule; -> alerts raised or cleared now."""
@@ -94,13 +99,18 @@ def engine(wid: str) -> Engine:
 
 async def on_objects(msg) -> None:
     env, _ = decode(msg)
-    ws = engine(msg.subject.split(".")[1]).ws
+    eng = engine(msg.subject.split(".")[1])
+    if env.data.get("t") is not None:
+        eng.clock = max(eng.clock or 0.0, env.data["t"])
+    ws = eng.ws
     for o in env.data.get("objects", []):
         ws.objects[o["oid"]] = o
     for oid in env.data.get("expired", []):
         o = ws.objects.pop(oid, None)
         if o:
             ws.gone[oid] = o
+    for oid in env.data.get("forgotten", []):  # merged, or its replay went back: not a lost contact
+        ws.objects.pop(oid, None)
 
 
 async def on_events(msg) -> None:
@@ -112,19 +122,19 @@ async def on_geo(msg) -> None:
     env, _ = decode(msg)
     wid = env.wid or "default"
     sid_wid[env.sid] = wid
-    engine(wid).ws.cameras[env.sid] = {"gsd_m": env.data.get("gsd_m"), "centre": env.data.get("centre"),
-                                       "t": time.time()}
+    eng = engine(wid)
+    eng.ws.cameras[env.sid] = {"gsd_m": env.data.get("gsd_m"), "centre": env.data.get("centre"), "t": eng.now()}
 
 
 async def loop() -> None:
     while True:
         await asyncio.sleep(PERIOD_S)
-        t = time.time()
+        wall = time.time()
         for wid, eng in list(engines.items()):
-            changed = eng.step(t)
+            changed = eng.step(eng.now())
             if changed:
                 data = AlertsData(alerts=changed).model_dump(exclude_none=True)
-                await publish(state["nc"], f"alerts.{wid}", Envelope(wid=wid, ts={"decision": [t, time.time()]},
+                await publish(state["nc"], f"alerts.{wid}", Envelope(wid=wid, ts={"decision": [wall, time.time()]},
                                                                       data=data))
                 for a in changed:
                     log.info("%s %s [%s] %s", wid, a.state, a.rule, a.title)

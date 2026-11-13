@@ -1,5 +1,6 @@
 """world-model: geo.<sid> -> world.<wid>.objects / .events (+ ack.<sid> for delivery "all"). Fusion is in
-fusion.py; streams of different worlds never merge. Unseen objects stay "stale" for EXPIRE_S."""
+fusion.py; streams of different worlds never merge. Unseen objects stay "stale" for EXPIRE_S. Each world runs on
+its own clock (clock.py): the wall clock live, the recording's time in a replay, published as WorldObjectsData.t."""
 from __future__ import annotations
 
 import asyncio
@@ -14,6 +15,7 @@ from blade_common.bus import close, connect, decode, forward, jdump, now, publis
 from blade_common.contracts import Envelope, WorldEventsData, WorldObjectsData
 from blade_common.service import Diag, env_float, env_int, env_str, run_app
 
+from .clock import WorldClock
 from .fusion import World
 
 log = logging.getLogger("world")
@@ -24,6 +26,8 @@ CONFIRM_N = env_int("CONFIRM_N", 5)
 EVENT_CLASSES = set(env_str("EVENT_CLASSES", "explosion,tank_fire").split(","))
 
 worlds: dict[str, World] = {}
+clocks: dict[str, WorldClock] = {}
+swept: dict[str, float] = {}  # wid -> world time at the last sweep
 state: dict = {"nc": None}
 diag = Diag("world")
 
@@ -31,6 +35,7 @@ diag = Diag("world")
 def world(wid: str) -> World:
     if wid not in worlds:
         worlds[wid] = World(wid, STALE_S, EXPIRE_S, EVENT_TTL_S, EVENT_CLASSES, CONFIRM_N)
+        clocks[wid] = WorldClock(time.time(), EXPIRE_S)
         log.info("new world %s", wid)
     return worlds[wid]
 
@@ -40,12 +45,14 @@ async def on_geo(msg) -> None:
     env, _ = decode(msg)
     wid = env.wid or "default"
     w = world(wid)
-    changed, events = w.observe(env.sid, env.data.get("pts", []), t_in)
-    merged = w.take_merged()
+    t, rewind = clocks[wid].frame(env.sid, env.ts.get("media"), t_in)
+    forgotten = w.forget(env.sid) if rewind else []
+    changed, events = w.observe(env.sid, env.data.get("pts", []), t)
+    forgotten += w.take_merged()
     diag.got(env.sid)
-    if changed or merged:
-        data = WorldObjectsData(objects=[o.model() for o in changed], expired=merged,
-                                counts=w.smoothed_counts(t_in))
+    if changed or forgotten:
+        data = WorldObjectsData(objects=[o.model() for o in changed], forgotten=forgotten,
+                                counts=w.smoothed_counts(t), t=clocks[wid].t)
         out = forward(env, data.model_dump(exclude_none=True), "world", t_in)
         await publish(state["nc"], f"world.{wid}.objects", out)
         diag.sent(env.sid, latency_s=now() - env.ts.get("capture", now()))
@@ -57,17 +64,23 @@ async def on_geo(msg) -> None:
                                                            "data": {"frame": env.frame}}))
 
 
+async def sweep_once(wall: float) -> None:
+    """Age every world on its own clock; publish what went stale or expired, and the clock whenever it moved"""
+    for wid, w in list(worlds.items()):
+        t = clocks[wid].tick(wall)
+        stale, expired = w.sweep(t)
+        if stale or expired or swept.get(wid) != t:
+            data = WorldObjectsData(objects=[o.model() for o in stale], expired=expired,
+                                    counts=w.smoothed_counts(t), t=t)
+            env = Envelope(wid=wid, ts={"world": [wall, time.time()]}, data=data.model_dump(exclude_none=True))
+            await publish(state["nc"], f"world.{wid}.objects", env)
+        swept[wid] = t
+
+
 async def sweeper() -> None:
     while True:
         await asyncio.sleep(1.0)
-        t = time.time()
-        for wid, w in list(worlds.items()):
-            stale, expired = w.sweep(t)
-            if stale or expired:
-                data = WorldObjectsData(objects=[o.model() for o in stale], expired=expired,
-                                        counts=w.smoothed_counts(t))
-                env = Envelope(wid=wid, ts={"world": [t, time.time()]}, data=data.model_dump(exclude_none=True))
-                await publish(state["nc"], f"world.{wid}.objects", env)
+        await sweep_once(time.time())
 
 
 @asynccontextmanager
@@ -99,7 +112,7 @@ async def snapshot(wid: str):
     w = worlds.get(wid)
     objs = [o.model().model_dump(exclude_none=True) for o in w.published()] if w else []
     events = [{k: v for k, v in e.items() if k != "seen"} for e in w.events.values()] if w else []
-    return {"wid": wid, "t": time.time(), "objects": objs, "events": events}
+    return {"wid": wid, "t": clocks[wid].t if w else time.time(), "objects": objs, "events": events}
 
 
 @app.get("/worlds/{wid}/objects/{oid}")

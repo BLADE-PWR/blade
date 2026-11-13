@@ -1,3 +1,5 @@
+import blade_decision.main as dm
+from blade_common.contracts import Envelope
 from blade_decision.main import Engine
 from blade_evaluator.evaluate import StreamTruth, WorldEval, cep, inside, match
 
@@ -70,3 +72,28 @@ def test_group_alert_survives_membership_change():
     assert [x for x in e.step(2.0) if x.rule == "vehicle_group"] == []  # updated in place, no raise/clear
     (live,) = [x for x in e.active.values() if x.rule == "vehicle_group"]
     assert live.aid == a.aid and live.objects == ["v2", "v3", "v4", "v5"]
+
+
+class ObjectsMsg:
+    def __init__(self, wid, data):
+        self.subject, self.headers = f"world.{wid}.objects", None
+        self.data = Envelope(wid=wid, data=data).model_dump_json().encode()
+
+
+async def test_paused_replay_raises_no_lost_contact(monkeypatch):
+    monkeypatch.setattr(dm, "engines", {})
+    await dm.on_objects(ObjectsMsg("w1", {"objects": [obj("t1", "tank", 0, 0, last=200.0)], "t": 200.0}))
+    e = dm.engines["w1"]
+    assert e.now() == 200.0  # the world's clock, not the wall's
+    assert not [a for a in e.step(e.now()) if a.rule == "lost_contact"]  # paused: world time stands at 200
+    await dm.on_objects(ObjectsMsg("w1", {"t": 261.0}))  # 61 s of world time later, still not seen
+    assert [a.objects for a in e.step(e.now()) if a.rule == "lost_contact"] == [["t1"]]
+
+
+async def test_forgotten_objects_are_not_lost(monkeypatch):
+    monkeypatch.setattr(dm, "engines", {})
+    await dm.on_objects(ObjectsMsg("w1", {"objects": [obj("t1", "tank", 0, 0, last=200.0)], "t": 200.0}))
+    await dm.on_objects(ObjectsMsg("w1", {"forgotten": ["t1"], "t": 300.0}))  # its replay went back
+    e = dm.engines["w1"]
+    assert "t1" not in e.ws.objects and "t1" not in e.ws.gone
+    assert not [a for a in e.step(e.now()) if a.rule == "lost_contact"]

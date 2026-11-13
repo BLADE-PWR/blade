@@ -1,53 +1,74 @@
-// Walking skeleton: pick a gateway session (or streams and worlds), open the WebSocket, show the video
-// previews and how many messages of each type arrive. The map and the panels come next.
+// Session picker, the live connection and the top bar shared by both views.
 import { type FormEvent, useEffect, useState } from "react";
 
-import { connect, type Target } from "./gateway";
+import { Command } from "./Command";
+import type { Alert, Recording, Session } from "./contracts";
+import { recordingName } from "./format";
+import { connect, getJSON, startReplay, type Target } from "./gateway";
+import { Operator } from "./Operator";
+import { ReplayBar } from "./Replay";
+import { addPreview, apply, dispose, emptySituation, latencyS, transmitting } from "./situation";
 
-type Session = {
-  id: string;
-  name: string;
-  state: string;
-  streams: { sid: string; wid: string; source: string }[];
-};
+const CLOCK_MS = 1000;
+
+export type View = "operator" | "command";
+export type MainPanel = "video" | "map";
 
 const list = (s: string) => s.split(",").map((x) => x.trim()).filter(Boolean);
 
 export function App() {
   const [target, setTarget] = useState<Target | null>(null);
-  if (target) return <Live target={target} onLeave={() => setTarget(null)} />;
-  return <Pick onPick={setTarget} />;
+  if (!target) return <Pick onPick={setTarget} />;
+  return <Live key={JSON.stringify(target)} target={target} onPick={setTarget} onLeave={() => setTarget(null)} />;
 }
 
 function Pick({ onPick }: { onPick: (t: Target) => void }) {
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [recordings, setRecordings] = useState<Recording[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [sids, setSids] = useState("rp-1");
   const [wids, setWids] = useState("rp-1");
 
   useEffect(() => {
-    fetch("/sessions")
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`GET /sessions: ${r.status}`))))
-      .then(setSessions)
-      .catch((e: Error) => setError(`gateway unreachable (${e.message}); is tools/dev.py running?`));
+    Promise.all([getJSON<Session[]>("/sessions"), getJSON<Recording[]>("/api/recordings")])
+      .then(([s, r]) => {
+        setSessions(s);
+        setRecordings(r);
+      })
+      .catch((e: Error) => setError(`Gateway unreachable (${e.message}). Is tools/dev.py running?`));
   }, []);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     onPick({ sids: list(sids), wids: list(wids) });
   };
+  const replay = (rec: Recording) => {
+    setError(null);
+    startReplay(rec).then((id) => onPick({ session: id }))
+      .catch((e: Error) => setError(`Cannot start the replay (${e.message}).`));
+  };
 
   return (
-    <main>
-      <h1>blade</h1>
+    <main className="pick">
+      <h1>Blade</h1>
       {error && <p className="error">{error}</p>}
       <h2>Sessions</h2>
       {sessions.length === 0 && !error && <p>No sessions on the gateway yet.</p>}
       <ul>
         {sessions.map((s) => (
           <li key={s.id}>
-            <button onClick={() => onPick({ session: s.id })}>{s.name}</button> {s.state} ·{" "}
-            {s.streams.map((st) => `${st.sid} (${st.source}) → ${st.wid}`).join(", ")}
+            <button onClick={() => onPick({ session: s.id })}>{s.name}</button> {s.state},{" "}
+            {s.streams.map((st) => `${st.sid} (${st.source}) in world ${st.wid}`).join(", ")}
+          </li>
+        ))}
+      </ul>
+      <h2>Recordings</h2>
+      {recordings.length === 0 && !error && <p>No recordings on the server.</p>}
+      <ul>
+        {recordings.map((r) => (
+          <li key={r.id}>
+            <button onClick={() => replay(r)}>Replay</button> {recordingName(r)}, drone {r.sid}
+            {!r.has_truth && ", without true positions"}
           </li>
         ))}
       </ul>
@@ -61,53 +82,128 @@ function Pick({ onPick }: { onPick: (t: Target) => void }) {
   );
 }
 
-function Live({ target, onLeave }: { target: Target; onLeave: () => void }) {
-  const [counts, setCounts] = useState<Record<string, number>>({});
-  const [frames, setFrames] = useState<Record<string, string>>({}); // sid -> object URL of the last preview
+function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target) => void; onLeave: () => void }) {
+  const [sit] = useState(emptySituation);
+  const [, setTick] = useState(0);
   const [closed, setClosed] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<View>("operator");
+  const [main, setMain] = useState<MainPanel>("video");
+  const [picked, setPicked] = useState<string | null>(null);
 
   useEffect(() => {
-    const urls: Record<string, string> = {};
-    const count = (type: string) => setCounts((c) => ({ ...c, [type]: (c[type] ?? 0) + 1 }));
+    let frame = 0;
+    const redraw = () => {
+      if (!frame) frame = requestAnimationFrame(() => {
+        frame = 0;
+        setTick((t) => t + 1);
+      });
+    };
     const stop = connect(target, {
-      onMessage: (m) => count(m.type),
-      onFrame: ({ header, jpeg }) => {
-        const old = urls[header.sid];
-        urls[header.sid] = URL.createObjectURL(jpeg);
-        setFrames((f) => ({ ...f, [header.sid]: urls[header.sid] }));
-        if (old) URL.revokeObjectURL(old);
-        count("frame");
+      onMessage: (m) => {
+        apply(sit, m);
+        redraw();
+        if (m.type === "snapshot") {
+          getJSON<Alert[]>(`/api/decision/${m.wid}/alerts`)
+            .then((alerts) => {
+              apply(sit, { type: "alerts", wid: m.wid, data: { alerts } });
+              redraw();
+            })
+            .catch((e: Error) => setError(`Cannot read the active alerts of world ${m.wid} (${e.message}).`));
+        }
+      },
+      onFrame: (f) => {
+        addPreview(sit, f);
+        redraw();
       },
       onClose: setClosed,
     });
+    const clock = setInterval(redraw, CLOCK_MS);
     return () => {
       stop();
-      Object.values(urls).forEach((u) => URL.revokeObjectURL(u));
+      clearInterval(clock);
+      cancelAnimationFrame(frame);
+      dispose(sit);
     };
-  }, [target]);
+  }, [sit, target]);
+
+  useEffect(() => {
+    getJSON<Session[]>("/sessions").then(setSessions)
+      .catch((e: Error) => setError(`Cannot list the sessions to switch between Live and Replay (${e.message}).`));
+  }, []);
+
+  const now = Date.now() / 1000;
+  const sids = sit.session?.streams.map((st) => st.sid) ?? ("sids" in target ? target.sids : []);
+  const sid = picked && sids.includes(picked) ? picked : (sids[0] ?? null);
+  const drone = sid ? sit.drones.get(sid) : undefined;
+  const replay = sit.session?.streams.some((st) => st.source === "replay") ?? false;
+  const latest = (source: "live" | "replay") => sessions
+    .filter((s) => s.state === "running" && s.streams.some((st) => st.source === source)).at(-1);
+  const switchMode = (source: "live" | "replay") => {
+    const s = latest(source);
+    if (s) onPick({ session: s.id });
+    else if (source === "replay") onLeave();
+  };
+  const fps = sid ? sit.diag.get("ingest")?.streams[sid]?.fps_in : undefined;
+  const latency = drone ? latencyS(drone) : null;
 
   return (
-    <main>
-      <button onClick={onLeave}>← back</button>
-      {closed && <p className="error">WebSocket {closed}</p>}
-      <div className="videos">
-        {Object.entries(frames).map(([sid, url]) => (
-          <figure key={sid}>
-            <img src={url} alt={`${sid} preview`} />
-            <figcaption>{sid}</figcaption>
-          </figure>
-        ))}
-      </div>
-      <table>
-        <thead>
-          <tr><th>type</th><th>messages</th></tr>
-        </thead>
-        <tbody>
-          {Object.entries(counts).sort().map(([type, n]) => (
-            <tr key={type}><td>{type}</td><td>{n}</td></tr>
-          ))}
-        </tbody>
-      </table>
-    </main>
+    <div className="live">
+      <header className="topbar">
+        <strong className="brand">Blade</strong>
+        <div className="switch" role="group" aria-label="View">
+          <button aria-pressed={view === "operator"} onClick={() => setView("operator")}>Operator</button>
+          <button aria-pressed={view === "command"} onClick={() => setView("command")}>Command</button>
+        </div>
+        <label className="muted">Session <button onClick={onLeave}>{sit.session?.name ?? "no session"}</button></label>
+        <div className="switch" role="group" aria-label="Mode">
+          <button aria-pressed={!replay} disabled={replay && !latest("live")} onClick={() => switchMode("live")}>
+            <span className="dot live-dot" />Live
+          </button>
+          <button aria-pressed={replay} onClick={() => switchMode("replay")}>
+            Replay
+          </button>
+        </div>
+        <span className="muted">Main panel</span>
+        <div className="switch" role="group" aria-label="Main panel">
+          <button aria-pressed={main === "map"} onClick={() => setMain("map")}>Map</button>
+          <button aria-pressed={main === "video"} onClick={() => setMain("video")}>Video</button>
+        </div>
+        <div className="topbar-right">
+          {sid && (
+            <span className="chip">
+              <span className={drone && transmitting(drone, now) ? "dot ok" : "dot warn"} />
+              {sids.length > 1 ? (
+                <label>
+                  Drone{" "}
+                  <select value={sid} onChange={(e) => setPicked(e.target.value)}>
+                    {sids.map((s) => <option key={s}>{s}</option>)}
+                  </select>
+                </label>
+              ) : (
+                <span className="mono">{sid}</span>
+              )}
+              {fps !== undefined && <span className="muted">{fps.toFixed(0)} fps</span>}
+            </span>
+          )}
+          {latency !== null && (
+            <span className="muted">
+              latency <span className="mono value">{(latency * 1000).toFixed(0)} ms</span>
+            </span>
+          )}
+          <span className="mono">{new Date().toLocaleTimeString("en-GB")}</span>
+        </div>
+      </header>
+      {closed && <p className="error banner">WebSocket closed: {closed}</p>}
+      {error && <p className="error banner">{error}</p>}
+      {replay && sit.session && (
+        <ReplayBar session={sit.session} onSwitch={(id) => onPick({ session: id })} />
+      )}
+      {view === "operator"
+        ? <Operator sit={sit} sid={sid} main={main} onMain={setMain} onDrone={setPicked} />
+        : <Command sit={sit} sids={sids} sid={sid} main={main} onMain={setMain} onDrone={setPicked}
+          onOperator={() => setView("operator")} />}
+    </div>
   );
 }
