@@ -8,6 +8,7 @@ from conftest import frame_image, look_at_tel, write_map
 from blade_detector.oracle import Oracle
 from blade_geometry import Camera, MapPackage
 from blade_georef.project import project_frame
+from blade_ingest.main import frame_ts
 from blade_ingest.source import Source
 from blade_sessions.recording import finalize, load_index
 from blade_uplink.encoder import TsWriter
@@ -68,6 +69,15 @@ def test_ingest_pairs_every_frame(ts_bytes):
     assert frames == list(range(1000, 1045))
     assert got[0].sid == "t-uav1" and got[0].jpeg[:2] == b"\xff\xd8"
     assert src.unpaired == 0
+
+
+def test_replay_frames_carry_their_recording_time():
+    tel = {"frame": 7, "t_capture": 1000.25}
+    replay = frame_ts("replay", tel, 5000.0, 5000.01)
+    assert replay == {"capture": 5000.0, "ingest": [5000.0, 5000.01], "media": 1000.25}  # latency from the arrival
+    live = frame_ts("live", tel, 5000.0, 5000.01)
+    assert live["capture"] == 1000.25 and "media" not in live  # live streams stay on the wall clock
+    assert "media" not in frame_ts("replay", {"frame": 7}, 5000.0, 5000.01)  # stills have no recording time
 
 
 def test_recording_scan_builds_index(tmp_path, ts_bytes):
