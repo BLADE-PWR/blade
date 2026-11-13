@@ -3,8 +3,9 @@
 The operator app (module 8 in `docs/opis_projektu.md`): React + TypeScript, built with Vite. It talks only
 to the [gateway](../services/gateway/README.md): REST for control, one WebSocket for live data.
 
-For now it is a walking skeleton: pick a gateway session (or streams and worlds), open the WebSocket, see
-the video previews and how many messages of each type arrive. The map comes next.
+Two views, both in Polish: the operator view (one drone: video, map, object details, alerts) and the command
+view (all drones of a session on one map). The layout follows the accepted mockups on the "Blade: widoki UI"
+canvas. Work in progress: so far the session picker, the top bar and the operator layout.
 
 It is not part of the uv workspace; it has its own `package.json`. Needs Node.js 22 or newer
 (Fedora: `sudo dnf install nodejs`, Windows: `winget install OpenJS.NodeJS.LTS`).
@@ -41,6 +42,9 @@ GATEWAY_URL=http://<server-ip>:8000 npm run dev
 
 | File | What it is |
 |---|---|
-| `src/gateway.ts` | WebSocket client: JSON messages and `ZPIF` video previews (`b"ZPIF"` + uint32 BE header length + header JSON + JPEG) |
-| `src/App.tsx` | Session picker and the live view |
+| `src/gateway.ts` | WebSocket client: JSON messages and `ZPIF` video previews (`b"ZPIF"` + uint32 BE header length + header JSON + JPEG); small REST helpers |
+| `src/contracts.ts` | Types of the message payloads the UI reads, copied by hand from `libs/common/blade_common/contracts.py` |
+| `src/situation.ts` | The live picture of one connection (drones, objects, events, alerts, diag), updated by each message |
+| `src/App.tsx` | Session picker, the connection (redrawn at most once per screen frame) and the top bar |
+| `src/Operator.tsx` | View 1: one drone |
 | `vite.config.ts` | The dev proxy to the gateway |

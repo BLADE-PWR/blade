@@ -46,6 +46,18 @@ export type Handlers = {
   onClose: (reason: string) => void;
 };
 
+export async function getJSON<T>(path: string): Promise<T> {
+  const r = await fetch(path);
+  if (!r.ok) throw new Error(`GET ${path}: ${r.status}`);
+  return (await r.json()) as T;
+}
+
+export async function patchJSON(path: string, body: object): Promise<void> {
+  const r = await fetch(path, { method: "PATCH", headers: { "content-type": "application/json" },
+    body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(`PATCH ${path}: ${r.status}`);
+}
+
 /** Opens the WebSocket; returns a function that closes it. */
 export function connect(target: Target, h: Handlers): () => void {
   const ws = new WebSocket(wsUrl(target));
@@ -55,5 +67,8 @@ export function connect(target: Target, h: Handlers): () => void {
     else h.onFrame(parseFrame(e.data));
   };
   ws.onclose = (e) => h.onClose(e.reason || `closed (${e.code})`);
-  return () => ws.close();
+  return () => {
+    ws.onclose = null; // closing on purpose is not an error to show
+    ws.close();
+  };
 }
