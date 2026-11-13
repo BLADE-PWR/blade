@@ -351,8 +351,10 @@ export function MapView(props: Props) {
           </div>
         )}
       </div>
-      {onExpand && <button className="map-expand" onClick={onExpand}>Map to the main panel</button>}
-      {overview && <button className="map-expand" onClick={fitDrones}>Show all drones</button>}
+      <div className="map-actions">
+        {overview && <button onClick={fitDrones}>Show all drones</button>}
+        {onExpand && <button onClick={onExpand}>Map to the main panel</button>}
+      </div>
     </div>
   );
 }

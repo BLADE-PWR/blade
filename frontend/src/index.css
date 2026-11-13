@@ -477,7 +477,7 @@ button.primary {
 }
 
 .map-layers,
-.map-expand,
+.map-actions,
 .map-away,
 .map-error {
   position: absolute;
@@ -507,9 +507,16 @@ button.primary {
   min-height: 26px;
 }
 
-.map-expand {
+.map-actions {
   right: 8px;
   bottom: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.map-actions button {
   background: rgba(13, 16, 21, 0.9);
 }
 
