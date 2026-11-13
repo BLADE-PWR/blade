@@ -5,7 +5,7 @@ to the [gateway](../services/gateway/README.md): REST for control, one WebSocket
 
 Two views, both in Polish: the operator view (one drone: video, map, object details, alerts) and the command
 view (all drones of a session on one map). The layout follows the accepted mockups on the "Blade: widoki UI"
-canvas. Work in progress: so far the session picker, the top bar and the operator layout.
+canvas. Work in progress: so far the session picker, the top bar, the operator layout and the video with boxes.
 
 It is not part of the uv workspace; it has its own `package.json`. Needs Node.js 22 or newer
 (Fedora: `sudo dnf install nodejs`, Windows: `winget install OpenJS.NodeJS.LTS`).
@@ -47,4 +47,6 @@ GATEWAY_URL=http://<server-ip>:8000 npm run dev
 | `src/situation.ts` | The live picture of one connection (drones, objects, events, alerts, diag), updated by each message |
 | `src/App.tsx` | Session picker, the connection (redrawn at most once per screen frame) and the top bar |
 | `src/Operator.tsx` | View 1: one drone |
+| `src/Video.tsx` | One drone's video preview with the boxes of the same frame and the mark at the centre of the frame |
+| `src/classes.ts` | Polish names and fixed colours of the object groups and event kinds |
 | `vite.config.ts` | The dev proxy to the gateway |
