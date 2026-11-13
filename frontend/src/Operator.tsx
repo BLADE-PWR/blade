@@ -90,8 +90,8 @@ export function Operator({ sit, sid, main, onMain, onDrone }: Props) {
           <section className="panel details" aria-label="Object details">
             {object ? (
               <Details sit={sit} object={object} onCentre={() => setCentre({ xy: object.xy, at: Date.now() })}
-                onVideo={() => {
-                  onDrone(object.tracks.at(-1)?.[0] ?? object.seen_by[0]);
+                onVideo={(s) => {
+                  onDrone(s);
                   onMain("video");
                 }} />
             ) : (
@@ -170,19 +170,19 @@ function BottomBar({ sit, sid, filter, onFilter }: BarProps) {
   );
 }
 
-/** -> the picture and box of the object's newest track that is in the frame shown now */
+/** -> the drone, picture and box of a track of the object that is in the frame shown now */
 function trackCrop(sit: Situation, o: WorldObject) {
   for (const [sid, tid] of [...o.tracks].reverse()) {
     const drone = sit.drones.get(sid);
     if (!drone) continue;
     const { preview, dets } = shownFrame(drone);
     const det = dets?.dets.find((d) => d.tid === tid);
-    if (preview && dets && det) return { preview, box: det.box, conf: det.conf, img: dets.img };
+    if (preview && dets && det) return { sid, preview, box: det.box, conf: det.conf, img: dets.img };
   }
   return null;
 }
 
-type DetailsProps = { sit: Situation; object: WorldObject; onCentre: () => void; onVideo: () => void };
+type DetailsProps = { sit: Situation; object: WorldObject; onCentre: () => void; onVideo: (sid: string) => void };
 
 function Details({ sit, object: o, onCentre, onVideo }: DetailsProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -225,7 +225,7 @@ function Details({ sit, object: o, onCentre, onVideo }: DetailsProps) {
           </span>
           <div className="push details-actions">
             <button onClick={onCentre}>Centre map</button>
-            <button onClick={onVideo}>Show in video</button>
+            <button onClick={() => onVideo(crop?.sid ?? o.seen_by[0])}>Show in video</button>
           </div>
         </div>
         <dl className="fields">
