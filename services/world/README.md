@@ -19,8 +19,9 @@ Each world runs on its own clock (`clock.py`), and `first`, `last`, event and al
   (speeds come out the same as at x1), a seek ahead is time passing.
 - A replay that goes back in its recording (a seek back, a loop) joins again at the world's current time, and
   what that stream saw is dropped and published in `forgotten`.
-- A world with a live stream follows the wall clock for all its streams. Replays in one world should play
-  together: the clock is the furthest of them, so a stream paused on its own ages.
+- A world with a live stream follows the wall clock for all its streams (ahead of it by as much as a fast
+  replay had taken the world before). Replays in one world should play together: the clock is the furthest of
+  them, so a stream paused on its own ages, and joins at the world's time when it plays on.
 
 Every `world.<wid>.objects` message carries the clock as `t`, and the sweeper publishes it once a second
 while it moves, so clients and decision see time pass; while a replay is paused nothing is published.

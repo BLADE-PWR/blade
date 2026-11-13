@@ -38,7 +38,7 @@
     "WorldObject": {
       "properties": {
         "first": {
-          "description": "world clock, s: the wall clock live, the recording's time in a replay",
+          "description": "world clock, s: the wall clock live; in a replay the time the stream joined plus the recording time played since",
           "title": "First",
           "type": "number"
         },

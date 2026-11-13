@@ -261,3 +261,24 @@ def test_rewind_forgets_the_stream():
     replayed(w, clock, "s1", [(501.1 + k / 10, 1004.1 + k / 10, [tank(1, 506 + 0.6 * k, 500)]) for k in range(20)])
     o = w.objects["w-0003"]
     assert abs(o.speed - 6) < 1  # no velocity spike from the jump
+
+
+def test_live_after_a_fast_replay_keeps_its_objects():
+    w, clock = World("w"), WorldClock(1000.0)
+    replayed(w, clock, "s1", [(500 + k * 0.4, 1000 + k / 10, []) for k in range(1000)])  # x4 for 100 s
+    assert clock.t > 1390  # the world ran ahead of the wall
+    replayed(w, clock, "live", [(None, 1100 + k / 10, [tank(1, 700, 700)]) for k in range(30)])
+    assert w.sweep(clock.tick(1103.5)) == ([], [])  # seen half a second ago, not 300 s
+    assert w.objects["w-0001"].state == "active"
+
+
+def test_replay_carries_on_after_the_live_stream_stops():
+    w, clock = World("w"), WorldClock(1000.0, live_keep_s=10)
+    replayed(w, clock, "s1", [(500 + k / 10, 1000 + k / 10, [tank(1, 900, 900)]) for k in range(20)])
+    replayed(w, clock, "live", [(None, 1002 + k / 10, []) for k in range(30)])  # s1 paused meanwhile
+    for wall in range(1005, 1016):  # the sweeper's ticks: the wall clock until the live stream is 10 s quiet
+        clock.tick(wall)
+    t, rewind = clock.frame("s1", 502.0, 1016.0)  # s1 plays on
+    assert not rewind and t == clock.t == 1014.0  # at the world's time, not back at 1002
+    w.observe("s1", [tank(1, 900, 900)], t)
+    assert w.sweep(clock.tick(1016.5))[1] == [] and w.objects["w-0001"].state == "active"

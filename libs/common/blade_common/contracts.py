@@ -151,7 +151,8 @@ class WorldObject(BaseModel):
     n_obs: int
     seen_by: list[str]
     tracks: list[tuple[str, int]] = Field(default_factory=list, description="(sid, tid) pairs behind this object")
-    first: float = Field(description="world clock, s: the wall clock live, the recording's time in a replay")
+    first: float = Field(description="world clock, s: the wall clock live; in a replay the time the stream joined "
+                                     "plus the recording time played since")
     last: float = Field(description="world clock, s")
     state: str = Field(description="active | stale (not seen for a few seconds; remembered until expired)")
 
