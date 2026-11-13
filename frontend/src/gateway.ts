@@ -52,10 +52,10 @@ export async function getJSON<T>(path: string): Promise<T> {
   return (await r.json()) as T;
 }
 
-export async function patchJSON(path: string, body: object): Promise<void> {
-  const r = await fetch(path, { method: "PATCH", headers: { "content-type": "application/json" },
-    body: JSON.stringify(body) });
-  if (!r.ok) throw new Error(`PATCH ${path}: ${r.status}`);
+export async function send<T>(method: "POST" | "PATCH", path: string, body: object = {}): Promise<T> {
+  const r = await fetch(path, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(`${method} ${path}: ${r.status} ${await r.text()}`);
+  return (await r.json()) as T;
 }
 
 /** Opens the WebSocket; returns a function that closes it. */

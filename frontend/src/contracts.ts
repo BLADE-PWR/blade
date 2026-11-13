@@ -77,3 +77,13 @@ export type Replay = {
   paused: boolean;
   loop: boolean;
 };
+
+export type Recording = {
+  id: string;
+  sid: string;
+  map: string;
+  scene: string | null;
+  started: number;
+  duration_s: number;
+  has_truth: boolean;
+};

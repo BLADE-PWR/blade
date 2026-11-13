@@ -2,8 +2,9 @@
 import { type FormEvent, useEffect, useState } from "react";
 
 import { Command } from "./Command";
-import type { Session } from "./contracts";
-import { connect, getJSON, type Target } from "./gateway";
+import type { Recording, Session } from "./contracts";
+import { recordingName } from "./format";
+import { connect, getJSON, send, type Target } from "./gateway";
 import { Operator } from "./Operator";
 import { ReplayBar } from "./Replay";
 import { addPreview, apply, clearWorld, dispose, emptySituation, latencyS, transmitting } from "./situation";
@@ -21,8 +22,21 @@ export function App() {
   return <Live key={JSON.stringify(target)} target={target} onPick={setTarget} onLeave={() => setTarget(null)} />;
 }
 
+/** Creates and starts a session that replays the recording in a loop; -> its id */
+async function startReplay(rec: Recording): Promise<string> {
+  const maps = await getJSON<{ id: string }[]>("/api/maps");
+  const map = maps.some((m) => m.id === rec.map) ? rec.map : (maps[0]?.id ?? rec.map);
+  // a new sid each time: starting a session replaces any replay with the same sid
+  const sid = `rp-${Date.now().toString(36).slice(-5)}`;
+  const s = await send<Session>("POST", "/sessions", { name: `Replay ${rec.scene ?? rec.id}`, map,
+    streams: [{ sid, source: "replay", wid: sid, recording: rec.id, loop: true }] });
+  await send("POST", `/sessions/${s.id}/start`);
+  return s.id;
+}
+
 function Pick({ onPick }: { onPick: (t: Target) => void }) {
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [recordings, setRecordings] = useState<Recording[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [sids, setSids] = useState("rp-1");
   const [wids, setWids] = useState("rp-1");
@@ -31,11 +45,19 @@ function Pick({ onPick }: { onPick: (t: Target) => void }) {
     getJSON<Session[]>("/sessions")
       .then(setSessions)
       .catch((e: Error) => setError(`Gateway unreachable (${e.message}). Is tools/dev.py running?`));
+    getJSON<Recording[]>("/api/recordings")
+      .then(setRecordings)
+      .catch((e: Error) => setError(`Cannot list the recordings (${e.message}).`));
   }, []);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     onPick({ sids: list(sids), wids: list(wids) });
+  };
+  const replay = (rec: Recording) => {
+    setError(null);
+    startReplay(rec).then((id) => onPick({ session: id }))
+      .catch((e: Error) => setError(`Cannot start the replay (${e.message}).`));
   };
 
   return (
@@ -49,6 +71,16 @@ function Pick({ onPick }: { onPick: (t: Target) => void }) {
           <li key={s.id}>
             <button onClick={() => onPick({ session: s.id })}>{s.name}</button> {s.state},{" "}
             {s.streams.map((st) => `${st.sid} (${st.source}) in world ${st.wid}`).join(", ")}
+          </li>
+        ))}
+      </ul>
+      <h2>Recordings</h2>
+      {recordings.length === 0 && !error && <p>No recordings on the server.</p>}
+      <ul>
+        {recordings.map((r) => (
+          <li key={r.id}>
+            <button onClick={() => replay(r)}>Replay</button> {recordingName(r)}, drone {r.sid}
+            {!r.has_truth && ", without true positions"}
           </li>
         ))}
       </ul>
@@ -113,6 +145,7 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
   const switchMode = (source: "live" | "replay") => {
     const s = latest(source);
     if (s) onPick({ session: s.id });
+    else if (source === "replay") onLeave(); // no replay session yet: pick a recording
   };
   const fps = sid ? sit.diag.get("ingest")?.streams[sid]?.fps_in : undefined;
   const latency = drone ? latencyS(drone) : null;
@@ -130,7 +163,7 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
           <button aria-pressed={!replay} disabled={replay && !latest("live")} onClick={() => switchMode("live")}>
             <span className="dot live-dot" />Live
           </button>
-          <button aria-pressed={replay} disabled={!replay && !latest("replay")} onClick={() => switchMode("replay")}>
+          <button aria-pressed={replay} onClick={() => switchMode("replay")}>
             Replay
           </button>
         </div>

@@ -1,8 +1,9 @@
 // The replay bar: position, pause, step, jumps and speed for every replay of the session (kept in step).
 import { useEffect, useState } from "react";
 
-import type { Replay, Session } from "./contracts";
-import { getJSON, patchJSON } from "./gateway";
+import type { Recording, Replay, Session } from "./contracts";
+import { recordingName } from "./format";
+import { getJSON, send } from "./gateway";
 
 const POLL_MS = 1000;
 const JUMP_S = 10;
@@ -17,6 +18,7 @@ export function ReplayBar({ session, onJump }: { session: Session; onJump: () =>
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<number | null>(null); // the slider position while it is being dragged
   const [jumpedAt, setJumpedAt] = useState(0);
+  const [recording, setRecording] = useState<Recording | null>(null);
 
   useEffect(() => {
     let stopped = false;
@@ -34,6 +36,13 @@ export function ReplayBar({ session, onJump }: { session: Session; onJump: () =>
     };
   }, [sids]);
 
+  const recordingId = replays[0]?.recording;
+  useEffect(() => {
+    if (!recordingId) return;
+    getJSON<Recording>(`/api/recordings/${recordingId}`).then(setRecording)
+      .catch((e: Error) => setError(`Cannot read the recording ${recordingId} (${e.message}).`));
+  }, [recordingId]);
+
   const first = replays[0];
   if (!first) {
     return <div className="replaybar muted">Replay {sids}: waiting for its state.{error && ` ${error}`}</div>;
@@ -41,7 +50,7 @@ export function ReplayBar({ session, onJump }: { session: Session; onJump: () =>
 
   const control = (body: (r: Replay) => object) => {
     setError(null);
-    Promise.all(replays.map((r) => patchJSON(`/sessions/${session.id}/replays/${r.sid}`, body(r))))
+    Promise.all(replays.map((r) => send("PATCH", `/sessions/${session.id}/replays/${r.sid}`, body(r))))
       .catch((e: Error) => setError(`Replay control failed (${e.message}).`));
   };
   const jump = (delta: number) => {
@@ -58,7 +67,9 @@ export function ReplayBar({ session, onJump }: { session: Session; onJump: () =>
 
   return (
     <div className="replaybar">
-      <span className="muted">Recording <span className="mono value">{first.recording}</span></span>
+      <span className="muted">
+        Recording <span className="value">{recording ? recordingName(recording) : first.recording}</span>
+      </span>
       <div className="replay-buttons">
         <button onClick={() => jump(-JUMP_S)}>Back {JUMP_S} s</button>
         <button className="primary" onClick={() => control(() => ({ paused: !first.paused }))}>
