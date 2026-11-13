@@ -1,6 +1,7 @@
 // One drone's video preview with the detector's boxes and, optionally, the mark at the centre of the frame.
 import { colorOf, nameOf } from "./classes";
 import type { GeoData, WorldObject } from "./contracts";
+import { pl } from "./format";
 import type { Drone, Preview } from "./situation";
 
 const pct = (v: number, of: number) => `${(100 * v) / of}%`;
@@ -16,7 +17,7 @@ function centreLabel(geo: GeoData): string | null {
   if (!geo.centre) return null;
   const [cx, cy, cz] = geo.camera;
   const range = Math.hypot(geo.centre[0] - cx, geo.centre[1] - cy, geo.centre[2] - cz);
-  const gsd = geo.gsd_m === null ? "" : `, ${geo.gsd_m.toFixed(2).replace(".", ",")} m/px`;
+  const gsd = geo.gsd_m === null ? "" : `, ${pl(geo.gsd_m, 2)} m/px`;
   return `Środek kadru: ${range.toFixed(0)} m${gsd}`;
 }
 

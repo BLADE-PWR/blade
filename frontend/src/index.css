@@ -260,6 +260,88 @@ button:disabled {
   min-height: 120px;
 }
 
+/* object details */
+
+.hint {
+  padding: 12px;
+  margin: 0;
+}
+
+.details-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  padding: 12px;
+}
+
+.details-body canvas {
+  width: 112px;
+  height: 112px;
+  border-radius: 6px;
+  background: #0a0c10;
+}
+
+.details-main {
+  flex: 1 1 360px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.details-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.details-head strong {
+  display: inline-block;
+  font-size: 15px;
+}
+
+.details-head strong::first-letter {
+  text-transform: uppercase;
+}
+
+.details-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.state {
+  font-size: 11px;
+  border-radius: 10px;
+  padding: 2px 8px;
+}
+
+.state.ok {
+  background: #1f3324;
+  color: #8ee09a;
+}
+
+.state.stale {
+  background: #2a2113;
+  color: #ffd29a;
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 16px;
+  margin: 0;
+}
+
+.fields dt {
+  font-size: 11px;
+  color: #a3aeba;
+}
+
+.fields dd {
+  margin: 0;
+}
+
 /* map */
 
 .map-panel {

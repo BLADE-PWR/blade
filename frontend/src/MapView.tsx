@@ -64,6 +64,8 @@ function symbolSvg(sidc: string): string {
   return svg;
 }
 
+export const symbolUrl = (grp: string) => new ms.Symbol(SIDC[grp] ?? SIDC.soldier, { size: SYMBOL_PX }).toDataURL();
+
 function objectIcon(o: WorldObject, count: number, selected: boolean): L.DivIcon {
   const badge = count > 1 ? `<span class="badge">+${count - 1}</span>` : "";
   const label = selected ? `<span class="sym-label selected">${o.oid}</span>` : "";
@@ -218,9 +220,10 @@ type Props = {
   selected: string | null;
   onSelect: (oid: string) => void;
   onExpand?: () => void;
+  centre?: { xy: Vec2; at: number } | null;
 };
 
-export function MapView({ sit, focus, selected, onSelect, onExpand }: Props) {
+export function MapView({ sit, focus, selected, onSelect, onExpand, centre }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const markers = useRef<Markers>(new Map());
   const [map, setMap] = useState<L.Map | null>(null);
@@ -266,6 +269,10 @@ export function MapView({ sit, focus, selected, onSelect, onExpand }: Props) {
       setCentred(true);
     }
   }, [map, centred, focusGeo]);
+
+  useEffect(() => {
+    if (map && centred && centre) map.panTo(ll(centre.xy));
+  }, [map, centred, centre]);
 
   useEffect(() => {
     if (!map || !centred) return;
