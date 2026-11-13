@@ -248,7 +248,7 @@ def draw_map(st: State, bg: MapBackground, sid: str | None, view: dict) -> np.nd
     with st.lock:
         geo = st.geo.get(sid) if sid else None
         objs = [o for w in st.objects.values() for o in w.values()]
-        clock = max(st.clocks.values(), default=time.time())
+        clock = {o["oid"]: st.clocks.get(wid, time.time()) for wid, w in st.objects.items() for o in w.values()}
         events = [(e, t) for e, t in st.events if time.time() - t < e.get("ttl_s", 5)]
         map_id = st.map_id
         evals = dict(st.eval)
@@ -279,7 +279,7 @@ def draw_map(st: State, bg: MapBackground, sid: str | None, view: dict) -> np.nd
             u, v = to_px(cam[0], cam[1])
             if 0 <= u < MAP_W and 0 <= v < VIDEO_H:
                 cv2.drawMarker(canvas, (int(u), int(v)), (255, 255, 0), cv2.MARKER_TRIANGLE_UP, 14, 2)
-    preds = {o["oid"]: p for o in objs if (p := ahead(o, clock))} if view["motion"] else {}
+    preds = {o["oid"]: p for o in objs if (p := ahead(o, clock[o["oid"]]))} if view["motion"] else {}
     if preds:
         overlay = canvas.copy()
         for o in (o for o in objs if o["oid"] in preds):
