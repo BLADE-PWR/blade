@@ -308,7 +308,7 @@ class World:
                 o = keep
 
     def take_merged(self) -> list[str]:
-        """oids absorbed since the last call (published as expired)."""
+        """oids absorbed since the last call (published as forgotten)."""
         out, self.merged = self.merged, []
         return out
 

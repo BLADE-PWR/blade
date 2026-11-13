@@ -8,7 +8,6 @@ stops sending still go stale. The clock never goes back."""
 from __future__ import annotations
 
 JUMP_BACK_S = 0.5  # s of recording time a stream may go back before it counts as a rewind (seek back, loop)
-JUMP_AHEAD_S = 600.0  # s: further ahead is another recording, not a seek, so the stream joins again
 LAG_S = 5.0  # s a stream may fall behind the world's time before it joins again
 
 
@@ -33,8 +32,7 @@ class WorldClock:
             return self.tick(wall), False
         last = self.media.get(sid)
         rewind = last is not None and media < last - JUMP_BACK_S
-        if self._live(wall) or last is None or rewind or media > last + JUMP_AHEAD_S or \
-                media + self.offset[sid] < self.t - LAG_S:
+        if self._live(wall) or last is None or rewind or media + self.offset[sid] < self.t - LAG_S:
             self.offset[sid] = self.tick(wall) - media
         self.media[sid] = media
         t = media + self.offset[sid]
