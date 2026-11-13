@@ -42,12 +42,12 @@ function Pick({ onPick }: { onPick: (t: Target) => void }) {
   const [wids, setWids] = useState("rp-1");
 
   useEffect(() => {
-    getJSON<Session[]>("/sessions")
-      .then(setSessions)
+    Promise.all([getJSON<Session[]>("/sessions"), getJSON<Recording[]>("/api/recordings")])
+      .then(([s, r]) => {
+        setSessions(s);
+        setRecordings(r);
+      })
       .catch((e: Error) => setError(`Gateway unreachable (${e.message}). Is tools/dev.py running?`));
-    getJSON<Recording[]>("/api/recordings")
-      .then(setRecordings)
-      .catch((e: Error) => setError(`Cannot list the recordings (${e.message}).`));
   }, []);
 
   const submit = (e: FormEvent) => {
