@@ -37,8 +37,8 @@ def frame_ts(kind: str, tel: dict, t_in: float, t_out: float) -> dict:
     """-> a frame's stamps: capture (grab time live, arrival in a replay) and, in a replay, its recording time"""
     cap = tel.get("t_capture") if kind == "live" else None
     ts = {"capture": round(cap or t_in, 6), "ingest": [round(t_in, 6), round(t_out, 6)]}
-    if kind != "live" and tel.get("t_capture") is not None:
-        ts["media"] = round(tel["t_capture"], 6)
+    if kind != "live":  # a recording without times (stills) runs on the arrival, but not as a live stream
+        ts["media"] = round(tel.get("t_capture") or t_in, 6)
     return ts
 
 

@@ -31,8 +31,8 @@ class Envelope(BaseModel):
     ts: dict[str, float | list[float]] = Field(
         default_factory=dict,
         description="capture: epoch s; every stage appends [t_in, t_out] under its own name, on its own clock; "
-                    "media (replays only): the frame's tel.t_capture in the recording, epoch s; the world model "
-                    "runs a replayed stream on this clock")
+                    "media (replays only): the frame's tel.t_capture in the recording, or its arrival if it has none, "
+                    "epoch s; the world model runs a replayed stream on this clock")
     data: dict[str, Any] = Field(default_factory=dict)
 
 
