@@ -87,6 +87,7 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
   const [, setTick] = useState(0);
   const [closed, setClosed] = useState<string | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>("operator");
   const [main, setMain] = useState<MainPanel>("video");
   const [picked, setPicked] = useState<string | null>(null);
@@ -120,7 +121,8 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
   }, [sit, target]);
 
   useEffect(() => {
-    getJSON<Session[]>("/sessions").then(setSessions).catch(() => setSessions([]));
+    getJSON<Session[]>("/sessions").then(setSessions)
+      .catch((e: Error) => setError(`Cannot list the sessions to switch between Live and Replay (${e.message}).`));
   }, []);
 
   const now = Date.now() / 1000;
@@ -186,6 +188,7 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
         </div>
       </header>
       {closed && <p className="error banner">WebSocket closed: {closed}</p>}
+      {error && <p className="error banner">{error}</p>}
       {replay && sit.session && (
         <ReplayBar session={sit.session} onSwitch={(id) => onPick({ session: id })} />
       )}
