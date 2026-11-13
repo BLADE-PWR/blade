@@ -1,14 +1,14 @@
-// Object groups and event kinds: Polish names and the fixed colours (the same as tools/viewer); alert colours.
+// Object groups and event kinds: display names and the fixed colours (the same as tools/viewer); alert colours.
 
 export const GROUPS = ["soldier", "tank", "military_vehicle"] as const;
 export const EVENT_KINDS = ["explosion", "tank_fire"] as const;
 
 export const NAMES: Record<string, string> = {
-  soldier: "żołnierz",
-  tank: "czołg",
-  military_vehicle: "pojazd",
-  explosion: "wybuch",
-  tank_fire: "strzał czołgu",
+  soldier: "soldier",
+  tank: "tank",
+  military_vehicle: "vehicle",
+  explosion: "explosion",
+  tank_fire: "tank fire",
 };
 
 export const COLORS: Record<string, string> = {
@@ -21,5 +21,5 @@ export const COLORS: Record<string, string> = {
 
 export const SEVERITY_COLORS: Record<string, string> = { warning: "#ff9f43", notice: "#9fb3c8", info: "#a3aeba" };
 
-export const nameOf =(grp: string) => NAMES[grp] ?? grp;
+export const nameOf = (grp: string) => NAMES[grp] ?? grp;
 export const colorOf = (grp: string) => COLORS[grp] ?? "#c9d1d9";

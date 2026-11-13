@@ -1,13 +1,13 @@
 // The alert, object and event lists (alert tabs in view 1, the alert list in view 2).
 import { nameOf, SEVERITY_COLORS } from "./classes";
 import type { Alert, WorldEvent, WorldObject } from "./contracts";
-import { ago, clock, pl } from "./format";
+import { ago, clock } from "./format";
 import { symbolUrl } from "./MapView";
 
 const SEVERITY_NAMES: Record<Alert["severity"], string> = {
-  warning: "Ostrzeżenie",
-  notice: "Uwaga",
-  info: "Informacja",
+  warning: "Warning",
+  notice: "Notice",
+  info: "Info",
 };
 
 function SeverityIcon({ severity }: { severity: Alert["severity"] }) {
@@ -27,7 +27,7 @@ function SeverityIcon({ severity }: { severity: Alert["severity"] }) {
 type AlertProps = { alerts: Alert[]; picked: string | null; onPick: (a: Alert) => void; now: number };
 
 export function AlertList({ alerts, picked, onPick, now }: AlertProps) {
-  if (alerts.length === 0) return <p className="muted hint">Brak aktywnych alertów.</p>;
+  if (alerts.length === 0) return <p className="muted hint">No active alerts.</p>;
   return (
     <ul className="rows">
       {alerts.map((a) => (
@@ -49,7 +49,7 @@ export function AlertList({ alerts, picked, onPick, now }: AlertProps) {
 type ObjectProps = { objects: WorldObject[]; selected: string | null; onSelect: (oid: string) => void; now: number };
 
 export function ObjectList({ objects, selected, onSelect, now }: ObjectProps) {
-  if (objects.length === 0) return <p className="muted hint">Brak obiektów.</p>;
+  if (objects.length === 0) return <p className="muted hint">No objects.</p>;
   const sorted = [...objects].sort((a, b) => a.state.localeCompare(b.state) || a.oid.localeCompare(b.oid));
   return (
     <ul className="rows">
@@ -61,8 +61,8 @@ export function ObjectList({ objects, selected, onSelect, now }: ObjectProps) {
             <span className="row-text">
               <strong>{nameOf(o.grp)} <span className="mono muted">{o.oid}</span></strong>
               <span className="muted">
-                {o.state === "active" ? "aktywny" : "nieobserwowany"}, ostatnio {ago(o.last, now)}
-                {o.sigma_m !== null && `, ± ${pl(o.sigma_m, 1)} m`}
+                {o.state === "active" ? "active" : "not seen now"}, last seen {ago(o.last, now)}
+                {o.sigma_m !== null && `, ± ${o.sigma_m.toFixed(1)} m`}
               </span>
             </span>
           </button>
@@ -75,7 +75,7 @@ export function ObjectList({ objects, selected, onSelect, now }: ObjectProps) {
 type EventProps = { events: WorldEvent[]; onPick: (e: WorldEvent) => void; now: number };
 
 export function EventList({ events, onPick, now }: EventProps) {
-  if (events.length === 0) return <p className="muted hint">Brak zdarzeń.</p>;
+  if (events.length === 0) return <p className="muted hint">No events.</p>;
   return (
     <ul className="rows">
       {[...events].reverse().map((e) => (
@@ -83,7 +83,7 @@ export function EventList({ events, onPick, now }: EventProps) {
           <button className="row" onClick={() => onPick(e)}>
             <span className="row-text">
               <strong>{nameOf(e.kind)}</strong>
-              <span className="muted">{clock(e.t)}, {ago(e.t, now)}, dron {e.sid}</span>
+              <span className="muted">{clock(e.t)}, {ago(e.t, now)}, drone {e.sid}</span>
             </span>
           </button>
         </li>

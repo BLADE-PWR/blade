@@ -32,10 +32,10 @@ const DRONE_SIDC = "SFAPMFQ--------";
 
 type Layers = { drones: boolean; motion: boolean; uncertainty: boolean; truth: boolean };
 const LAYER_NAMES: [keyof Layers, string][] = [
-  ["drones", "Drony i ślady kamer"],
-  ["motion", "Ruch i predykcja"],
-  ["uncertainty", "Niepewność"],
-  ["truth", "Prawdziwe pozycje"],
+  ["drones", "Drones and camera footprints"],
+  ["motion", "Motion and prediction"],
+  ["uncertainty", "Uncertainty"],
+  ["truth", "True positions"],
 ];
 
 type Meta = { extent: [number, number, number, number] };
@@ -259,7 +259,7 @@ export function MapView(props: Props) {
   useEffect(() => {
     const m = L.map(box.current!, { crs: L.CRS.Simple, minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM, zoomControl: false,
       attributionControl: false });
-    L.control.zoom({ position: "topright", zoomInTitle: "Przybliż", zoomOutTitle: "Oddal" }).addTo(m);
+    L.control.zoom({ position: "topright", zoomInTitle: "Zoom in", zoomOutTitle: "Zoom out" }).addTo(m);
     L.control.scale({ position: "bottomright", imperial: false }).addTo(m);
     vectors.addTo(m);
     const moved = () => setMoved((n) => n + 1);
@@ -286,7 +286,7 @@ export function MapView(props: Props) {
         if (stopped) return;
         tiles = new OrthoTiles(mapId, layer, L.latLngBounds(ll([x0, y0]), ll([x1, y1]))).addTo(map);
       })
-      .catch((e: Error) => setError(`Nie udało się pobrać mapy ${mapId} (${e.message}).`));
+      .catch((e: Error) => setError(`Could not load map ${mapId} (${e.message}).`));
     return () => {
       stopped = true;
       tiles?.remove();
@@ -334,12 +334,12 @@ export function MapView(props: Props) {
       {error && <p className="error map-error">{error}</p>}
       {away && focusGeo && (
         <span className="map-away">
-          Dron poza mapą, {Math.hypot(focusGeo.camera[0] - away.lng, focusGeo.camera[1] - away.lat).toFixed(0)} m
-          od środka
+          Drone off the map, {Math.hypot(focusGeo.camera[0] - away.lng, focusGeo.camera[1] - away.lat).toFixed(0)} m
+          from the centre
         </span>
       )}
       <div className="map-layers">
-        <button aria-expanded={showLayers} onClick={() => setShowLayers(!showLayers)}>Warstwy</button>
+        <button aria-expanded={showLayers} onClick={() => setShowLayers(!showLayers)}>Layers</button>
         {showLayers && (
           <div className="map-layer-list">
             {LAYER_NAMES.map(([k, name]) => (
@@ -351,8 +351,8 @@ export function MapView(props: Props) {
           </div>
         )}
       </div>
-      {onExpand && <button className="map-expand" onClick={onExpand}>Mapa na główny panel</button>}
-      {overview && <button className="map-expand" onClick={fitDrones}>Pokaż wszystkie drony</button>}
+      {onExpand && <button className="map-expand" onClick={onExpand}>Map to the main panel</button>}
+      {overview && <button className="map-expand" onClick={fitDrones}>Show all drones</button>}
     </div>
   );
 }

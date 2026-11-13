@@ -1,7 +1,6 @@
 // One drone's video preview with the detector's boxes and, optionally, the mark at the centre of the frame.
 import { colorOf, nameOf } from "./classes";
 import type { GeoData, WorldObject } from "./contracts";
-import { pl } from "./format";
 import { boxVisible, type Drone, type Filter, type Preview } from "./situation";
 
 const pct = (v: number, of: number) => `${(100 * v) / of}%`;
@@ -17,8 +16,8 @@ function centreLabel(geo: GeoData): string | null {
   if (!geo.centre) return null;
   const [cx, cy, cz] = geo.camera;
   const range = Math.hypot(geo.centre[0] - cx, geo.centre[1] - cy, geo.centre[2] - cz);
-  const gsd = geo.gsd_m === null ? "" : `, ${pl(geo.gsd_m, 2)} m/px`;
-  return `Środek kadru: ${range.toFixed(0)} m${gsd}`;
+  const gsd = geo.gsd_m === null ? "" : `, ${geo.gsd_m.toFixed(2)} m/px`;
+  return `Frame centre: ${range.toFixed(0)} m${gsd}`;
 }
 
 type Props = {
@@ -33,13 +32,13 @@ type Props = {
 
 export function Video({ sid, shown, geo, objects, selected, filter, labels = true }: Props) {
   const { preview, dets } = shown;
-  if (!preview) return <div className="video empty">Brak obrazu z drona {sid}</div>;
+  if (!preview) return <div className="video empty">No picture from drone {sid}</div>;
   const oids = trackOids(objects);
   const [w, h] = dets?.img ?? preview.src;
   const centre = geo ? centreLabel(geo) : null;
   return (
     <div className="video">
-      <img src={preview.url} alt={`Obraz z drona ${sid}, klatka ${preview.frame ?? "?"}`} />
+      <img src={preview.url} alt={`Video from drone ${sid}, frame ${preview.frame ?? "?"}`} />
       {dets?.dets.filter((d) => !filter || boxVisible(d, filter)).map((d, i) => {
         const oid = d.tid === null ? undefined : oids.get(`${sid}:${d.tid}`);
         const [x0, y0, x1, y1] = d.box;

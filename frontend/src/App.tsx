@@ -30,7 +30,7 @@ function Pick({ onPick }: { onPick: (t: Target) => void }) {
   useEffect(() => {
     getJSON<Session[]>("/sessions")
       .then(setSessions)
-      .catch((e: Error) => setError(`Brak połączenia z gatewayem (${e.message}). Czy działa tools/dev.py?`));
+      .catch((e: Error) => setError(`Gateway unreachable (${e.message}). Is tools/dev.py running?`));
   }, []);
 
   const submit = (e: FormEvent) => {
@@ -42,21 +42,21 @@ function Pick({ onPick }: { onPick: (t: Target) => void }) {
     <main className="pick">
       <h1>Blade</h1>
       {error && <p className="error">{error}</p>}
-      <h2>Sesje</h2>
-      {sessions.length === 0 && !error && <p>Gateway nie ma jeszcze żadnej sesji.</p>}
+      <h2>Sessions</h2>
+      {sessions.length === 0 && !error && <p>No sessions on the gateway yet.</p>}
       <ul>
         {sessions.map((s) => (
           <li key={s.id}>
             <button onClick={() => onPick({ session: s.id })}>{s.name}</button> {s.state},{" "}
-            {s.streams.map((st) => `${st.sid} (${st.source}) w świecie ${st.wid}`).join(", ")}
+            {s.streams.map((st) => `${st.sid} (${st.source}) in world ${st.wid}`).join(", ")}
           </li>
         ))}
       </ul>
-      <h2>Albo strumienie i światy</h2>
+      <h2>Or streams and worlds</h2>
       <form onSubmit={submit}>
         <label>sids <input value={sids} onChange={(e) => setSids(e.target.value)} /></label>
         <label>wids <input value={wids} onChange={(e) => setWids(e.target.value)} /></label>
-        <button type="submit">Połącz</button>
+        <button type="submit">Connect</button>
       </form>
     </main>
   );
@@ -121,23 +121,23 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
     <div className="live">
       <header className="topbar">
         <strong className="brand">Blade</strong>
-        <div className="switch" role="group" aria-label="Widok">
+        <div className="switch" role="group" aria-label="View">
           <button aria-pressed={view === "operator"} onClick={() => setView("operator")}>Operator</button>
-          <button aria-pressed={view === "command"} onClick={() => setView("command")}>Dowodzenie</button>
+          <button aria-pressed={view === "command"} onClick={() => setView("command")}>Command</button>
         </div>
-        <label className="muted">Sesja <button onClick={onLeave}>{sit.session?.name ?? "bez sesji"}</button></label>
-        <div className="switch" role="group" aria-label="Tryb">
+        <label className="muted">Session <button onClick={onLeave}>{sit.session?.name ?? "no session"}</button></label>
+        <div className="switch" role="group" aria-label="Mode">
           <button aria-pressed={!replay} disabled={replay && !latest("live")} onClick={() => switchMode("live")}>
-            <span className="dot live-dot" />Na żywo
+            <span className="dot live-dot" />Live
           </button>
           <button aria-pressed={replay} disabled={!replay && !latest("replay")} onClick={() => switchMode("replay")}>
-            Odtwarzanie
+            Replay
           </button>
         </div>
-        <span className="muted">Główny panel</span>
-        <div className="switch" role="group" aria-label="Główny panel">
-          <button aria-pressed={main === "map"} onClick={() => setMain("map")}>Mapa</button>
-          <button aria-pressed={main === "video"} onClick={() => setMain("video")}>Wideo</button>
+        <span className="muted">Main panel</span>
+        <div className="switch" role="group" aria-label="Main panel">
+          <button aria-pressed={main === "map"} onClick={() => setMain("map")}>Map</button>
+          <button aria-pressed={main === "video"} onClick={() => setMain("video")}>Video</button>
         </div>
         <div className="topbar-right">
           {sid && (
@@ -145,7 +145,7 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
               <span className={drone && transmitting(drone, now) ? "dot ok" : "dot warn"} />
               {sids.length > 1 ? (
                 <label>
-                  Dron{" "}
+                  Drone{" "}
                   <select value={sid} onChange={(e) => setPicked(e.target.value)}>
                     {sids.map((s) => <option key={s}>{s}</option>)}
                   </select>
@@ -158,13 +158,13 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
           )}
           {latency !== null && (
             <span className="muted">
-              opóźnienie <span className="mono value">{(latency * 1000).toFixed(0)} ms</span>
+              latency <span className="mono value">{(latency * 1000).toFixed(0)} ms</span>
             </span>
           )}
-          <span className="mono">{new Date().toLocaleTimeString("pl-PL")}</span>
+          <span className="mono">{new Date().toLocaleTimeString("en-GB")}</span>
         </div>
       </header>
-      {closed && <p className="error banner">WebSocket zamknięty: {closed}</p>}
+      {closed && <p className="error banner">WebSocket closed: {closed}</p>}
       {replay && sit.session && <ReplayBar session={sit.session} onJump={() => clearWorld(sit)} />}
       {view === "operator"
         ? <Operator sit={sit} sid={sid} main={main} onMain={setMain} onDrone={setPicked} />

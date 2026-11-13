@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import type { MainPanel } from "./App";
 import { colorOf, EVENT_KINDS, GROUPS, nameOf } from "./classes";
 import type { Alert, Vec2, WorldObject } from "./contracts";
-import { ago, clock, pl } from "./format";
+import { ago, clock } from "./format";
 import { AlertList, EventList, ObjectList } from "./Lists";
 import { MapView, symbolUrl } from "./MapView";
 import { allAlerts, boxVisible, type Filter, shownFrame, type Situation, stageTimes, visible } from "./situation";
@@ -13,9 +13,9 @@ import { Video } from "./Video";
 
 type Tab = "alerts" | "objects" | "events";
 const TABS: [Tab, string, (s: Situation) => number][] = [
-  ["alerts", "Alerty", (s) => allAlerts(s).length],
-  ["objects", "Obiekty", (s) => s.objects.size],
-  ["events", "Zdarzenia", (s) => s.events.size],
+  ["alerts", "Alerts", (s) => allAlerts(s).length],
+  ["objects", "Objects", (s) => s.objects.size],
+  ["events", "Events", (s) => s.events.size],
 ];
 
 const MIN_CONF = 0.25; // the detector's own threshold, so every box shows at first
@@ -50,15 +50,15 @@ export function Operator({ sit, sid, main, onMain, onDrone }: Props) {
     if (a.xy) setCentre({ xy: a.xy, at: Date.now() });
   };
   const video = (
-    <section className="panel" aria-label="Wideo z drona">
+    <section className="panel" aria-label="Drone video">
       <div className="panel-head">
-        <strong>Kamera</strong>
-        <span className="mono muted">{sid}{shown.preview?.frame != null && `, klatka ${shown.preview.frame}`}</span>
+        <strong>Camera</strong>
+        <span className="mono muted">{sid}{shown.preview?.frame != null && `, frame ${shown.preview.frame}`}</span>
         {drone?.geo && (
-          <span className="muted">wysokość <span className="mono value">{drone.geo.camera[2].toFixed(0)} m</span></span>
+          <span className="muted">altitude <span className="mono value">{drone.geo.camera[2].toFixed(0)} m</span></span>
         )}
         <span className="muted push">
-          ramki <span className="mono value">{shown.dets?.dets.filter((d) => boxVisible(d, filter)).length ?? 0}</span>
+          boxes <span className="mono value">{shown.dets?.dets.filter((d) => boxVisible(d, filter)).length ?? 0}</span>
         </span>
       </div>
       {sid && (
@@ -67,7 +67,7 @@ export function Operator({ sit, sid, main, onMain, onDrone }: Props) {
     </section>
   );
   const map = (
-    <section className={main === "map" ? "panel map-main" : "panel map-panel"} aria-label="Mapa">
+    <section className={main === "map" ? "panel map-main" : "panel map-panel"} aria-label="Map">
       <MapView sit={sit} focus={sid} selected={selected} onSelect={setSelected} centre={centre} alert={alert}
         filter={filter}
         onExpand={main === "video" ? () => onMain("map") : undefined} />
@@ -78,7 +78,7 @@ export function Operator({ sit, sid, main, onMain, onDrone }: Props) {
       <div className="operator">
         <div className="main-col">
           {main === "video" ? video : map}
-          <section className="panel details" aria-label="Szczegóły obiektu">
+          <section className="panel details" aria-label="Object details">
             {object ? (
               <Details sit={sit} object={object} onCentre={() => setCentre({ xy: object.xy, at: Date.now() })}
                 onVideo={() => {
@@ -86,13 +86,13 @@ export function Operator({ sit, sid, main, onMain, onDrone }: Props) {
                   onMain("video");
                 }} />
             ) : (
-              <p className="muted hint">Wybierz obiekt na mapie albo na liście.</p>
+              <p className="muted hint">Pick an object on the map or in the list.</p>
             )}
           </section>
         </div>
         <aside className="side-col">
           {main === "video" ? map : video}
-          <section className="panel tabs" aria-label="Alerty i obiekty">
+          <section className="panel tabs" aria-label="Alerts and objects">
             <div className="tablist" role="tablist">
               {TABS.map(([key, name, count]) => (
                 <button key={key} role="tab" aria-selected={tab === key} onClick={() => setTab(key)}>
@@ -131,7 +131,7 @@ function BottomBar({ sit, sid, filter, onFilter }: BarProps) {
   const dropped = sid ? sit.diag.get("detector")?.streams[sid]?.dropped : undefined;
   return (
     <footer className="bottombar">
-      <div className="filters" role="group" aria-label="Filtr klas">
+      <div className="filters" role="group" aria-label="Class filter">
         {[...GROUPS, ...EVENT_KINDS].map((kind) => (
           <button key={kind} className="filter" aria-pressed={!filter.hidden.has(kind)} onClick={() => toggle(kind)}>
             <span className="swatch" style={{ background: colorOf(kind) }} />
@@ -140,22 +140,22 @@ function BottomBar({ sit, sid, filter, onFilter }: BarProps) {
         ))}
       </div>
       <label className="inline">
-        Pewność ramek od
+        Box confidence from
         <input type="range" min="0" max="1" step="0.05" value={filter.minConf}
           onChange={(e) => onFilter({ ...filter, minConf: Number(e.target.value) })} />
-        <span className="mono">{pl(filter.minConf, 2)}</span>
+        <span className="mono">{filter.minConf.toFixed(2)}</span>
       </label>
       <label className="inline">
         <input type="checkbox" checked={filter.stale} onChange={() => onFilter({ ...filter, stale: !filter.stale })} />
-        Nieobserwowane
+        Not seen now
       </label>
-      <div className="diag mono push" aria-label="Czas etapów">
+      <div className="diag mono push" aria-label="Stage times">
         {drone && stageTimes(drone).map(([stage, s]) => (
           <span key={stage}>
             {stage} <span className={s > SLOW_STAGE_S ? "slow" : "value"}>{(s * 1000).toFixed(0)} ms</span>
           </span>
         ))}
-        {dropped !== undefined && <span>odrzucone <span className="value">{dropped}</span></span>}
+        {dropped !== undefined && <span>dropped <span className="value">{dropped}</span></span>}
       </div>
     </footer>
   );
@@ -205,30 +205,30 @@ function Details({ sit, object: o, onCentre, onVideo }: DetailsProps) {
   return (
     <div className="details-body">
       <canvas ref={canvas} width={CROP_PX} height={CROP_PX} role="img"
-        aria-label={`Wycinek kadru z obiektem ${o.oid}`} />
+        aria-label={`Frame crop of ${o.oid}`} />
       <div className="details-main">
         <div className="details-head">
           <img src={symbolUrl(o.grp)} alt={`Symbol: ${nameOf(o.grp)}`} />
           <strong>{nameOf(o.grp)}</strong>
           <span className="mono muted">{o.oid}</span>
           <span className={o.state === "active" ? "state ok" : "state stale"}>
-            {o.state === "active" ? "aktywny" : "nieobserwowany"}
+            {o.state === "active" ? "active" : "not seen now"}
           </span>
           <div className="push details-actions">
-            <button onClick={onCentre}>Wycentruj mapę</button>
-            <button onClick={onVideo}>Pokaż w wideo</button>
+            <button onClick={onCentre}>Centre map</button>
+            <button onClick={onVideo}>Show in video</button>
           </div>
         </div>
         <dl className="fields">
-          <div><dt>Pozycja</dt><dd className="mono">{o.xy[0].toFixed(0)} E, {o.xy[1].toFixed(0)} N</dd></div>
+          <div><dt>Position</dt><dd className="mono">{o.xy[0].toFixed(0)} E, {o.xy[1].toFixed(0)} N</dd></div>
           <div>
-            <dt>Niepewność</dt>
-            <dd className="mono">{o.sigma_m === null ? "brak" : `± ${pl(o.sigma_m, 1)} m (1σ)`}</dd>
+            <dt>Uncertainty</dt>
+            <dd className="mono">{o.sigma_m === null ? "none" : `± ${o.sigma_m.toFixed(1)} m (1σ)`}</dd>
           </div>
-          <div><dt>Pewność ramki</dt><dd className="mono">{crop ? pl(crop.conf, 2) : "brak w kadrze"}</dd></div>
-          <div><dt>Ruch</dt><dd>{speed === null ? "stoi" : `${speed.toFixed(0)} km/h`}</dd></div>
-          <div><dt>Obserwacje</dt><dd className="mono">{o.n_obs}, {tracks}</dd></div>
-          <div><dt>Widziany</dt><dd className="mono">od {clock(o.first)}, ostatnio {ago(o.last, now)}</dd></div>
+          <div><dt>Box confidence</dt><dd className="mono">{crop ? crop.conf.toFixed(2) : "not in frame"}</dd></div>
+          <div><dt>Motion</dt><dd>{speed === null ? "still" : `${speed.toFixed(0)} km/h`}</dd></div>
+          <div><dt>Observations</dt><dd className="mono">{o.n_obs}, {tracks}</dd></div>
+          <div><dt>Seen</dt><dd className="mono">since {clock(o.first)}, last {ago(o.last, now)}</dd></div>
         </dl>
       </div>
     </div>

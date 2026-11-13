@@ -3,7 +3,7 @@
 The operator app (module 8 in `docs/opis_projektu.md`): React + TypeScript, built with Vite. It talks only
 to the [gateway](../services/gateway/README.md): REST for control, one WebSocket for live data.
 
-Two views, both in Polish, switched in the top bar. The layout follows the accepted mockups on the
+Two views, in English, switched in the top bar. The layout follows the accepted mockups on the
 "Blade: widoki UI" canvas.
 
 - Operator: one drone. Video with the detector's boxes, the map, the chosen object's details, the alert,
@@ -73,7 +73,7 @@ GATEWAY_URL=http://<server-ip>:8000 npm run dev
 | `src/MapView.tsx` | The map: orthophoto tiles in Arma metres (Leaflet `CRS.Simple`), APP-6 symbols (milsymbol) stacked when close, drones, camera footprints, motion, uncertainty, events, true positions |
 | `src/Replay.tsx` | The replay bar: position, pause, next frame, 10 s jumps, speed; drives every replay of the session together |
 | `src/Lists.tsx` | The alert, object and event lists (clicking an alert selects its object and rings it on the map) |
-| `src/classes.ts` | Polish names and fixed colours of the object groups and event kinds, alert colours |
-| `src/format.ts` | Numbers and times as Polish text |
+| `src/classes.ts` | Display names and fixed colours of the object groups and event kinds, alert colours |
+| `src/format.ts` | Times as text ("12 s ago", 24-hour clock) |
 | `src/index.css` | All styles, one dark theme |
 | `vite.config.ts` | The dev proxy to the gateway |
