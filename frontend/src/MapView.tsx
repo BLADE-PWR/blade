@@ -4,8 +4,8 @@ import L from "leaflet";
 import ms from "milsymbol";
 import { useEffect, useRef, useState } from "react";
 
-import { colorOf, nameOf } from "./classes";
-import type { Vec2, WorldObject } from "./contracts";
+import { colorOf, nameOf, SEVERITY_COLORS } from "./classes";
+import type { Alert, Vec2, WorldObject } from "./contracts";
 import { getJSON } from "./gateway";
 import type { Situation } from "./situation";
 
@@ -19,7 +19,8 @@ const ARROW_S = 10; // s of travel the motion arrow shows
 const CONE_K = 2; // cone and uncertainty circles in sigmas
 const HORIZON_S = 30; // prediction shown for every moving object; the selected one shows all
 const UNCERTAIN_M = 15; // others get an uncertainty circle from this sigma (decision rule uncertain_position)
-const STACK_ORDER = ["tank", "military_vehicle", "soldier"];
+const ALERT_RING_PX = 16;
+const STACK_ORDER =["tank", "military_vehicle", "soldier"];
 const SIDC: Record<string, string> = {
   soldier: "SHGPUCI--------",
   tank: "SHGPUCA--------",
@@ -184,6 +185,15 @@ function drawEvents(group: L.LayerGroup, sit: Situation, now: number): void {
   }
 }
 
+function drawAlert(group: L.LayerGroup, sit: Situation, a: Alert): void {
+  const color = SEVERITY_COLORS[a.severity];
+  const known = a.objects.map((oid) => sit.objects.get(oid)?.xy).filter((xy): xy is Vec2 => xy !== undefined);
+  const rings = known.length ? known : a.xy ? [a.xy] : [];
+  for (const xy of rings) {
+    L.circleMarker(ll(xy), { radius: ALERT_RING_PX, color, weight: 3, fill: false, interactive: false }).addTo(group);
+  }
+}
+
 type Markers = Map<string, { marker: L.Marker; key: string }>;
 
 /** Moves the object markers in place (new ones only for new stacks), so a click is not lost to a redraw. */
@@ -221,9 +231,10 @@ type Props = {
   onSelect: (oid: string) => void;
   onExpand?: () => void;
   centre?: { xy: Vec2; at: number } | null;
+  alert?: Alert | null;
 };
 
-export function MapView({ sit, focus, selected, onSelect, onExpand, centre }: Props) {
+export function MapView({ sit, focus, selected, onSelect, onExpand, centre, alert }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const markers = useRef<Markers>(new Map());
   const [map, setMap] = useState<L.Map | null>(null);
@@ -282,6 +293,7 @@ export function MapView({ sit, focus, selected, onSelect, onExpand, centre }: Pr
     drawObjects(vectors, objects, selected, layers, now);
     if (layers.truth) drawTruth(vectors, sit);
     drawEvents(vectors, sit, now);
+    if (alert) drawAlert(vectors, sit, alert);
     syncMarkers(map, markers.current, objects, selected, onSelect);
   });
 

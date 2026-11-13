@@ -4,11 +4,19 @@ import { useEffect, useRef, useState } from "react";
 
 import type { MainPanel } from "./App";
 import { nameOf } from "./classes";
-import type { Vec2, WorldObject } from "./contracts";
+import type { Alert, Vec2, WorldObject } from "./contracts";
 import { ago, clock, pl } from "./format";
+import { AlertList, EventList, ObjectList } from "./Lists";
 import { MapView, symbolUrl } from "./MapView";
-import { shownFrame, type Situation } from "./situation";
+import { allAlerts, shownFrame, type Situation } from "./situation";
 import { Video } from "./Video";
+
+type Tab = "alerts" | "objects" | "events";
+const TABS: [Tab, string, (s: Situation) => number][] = [
+  ["alerts", "Alerty", (s) => allAlerts(s).length],
+  ["objects", "Obiekty", (s) => s.objects.size],
+  ["events", "Zdarzenia", (s) => s.events.size],
+];
 
 const CROP_PX = 112;
 const CROP_MARGIN = 1.6; // crop side as a multiple of the box's longer side
@@ -25,9 +33,19 @@ type Props = {
 export function Operator({ sit, sid, main, onMain, onDrone }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
   const [centre, setCentre] = useState<{ xy: Vec2; at: number } | null>(null);
+  const [tab, setTab] = useState<Tab>("alerts");
+  const [alertId, setAlertId] = useState<string | null>(null);
+  const now = Date.now() / 1000;
   const drone = sid ? sit.drones.get(sid) : undefined;
-  const shown = drone ? shownFrame(drone, Date.now() / 1000) : { preview: null, dets: null };
+  const shown = drone ? shownFrame(drone, now) : { preview: null, dets: null };
   const object = selected ? sit.objects.get(selected) : undefined;
+  const alerts = allAlerts(sit);
+  const alert = alerts.find((a) => a.aid === alertId) ?? null;
+  const pickAlert = (a: Alert) => {
+    setAlertId(a.aid === alertId ? null : a.aid);
+    if (a.objects.length) setSelected(a.objects[0]);
+    if (a.xy) setCentre({ xy: a.xy, at: Date.now() });
+  };
   const video = (
     <section className="panel" aria-label="Wideo z drona">
       <div className="panel-head">
@@ -43,7 +61,7 @@ export function Operator({ sit, sid, main, onMain, onDrone }: Props) {
   );
   const map = (
     <section className={main === "map" ? "panel map-main" : "panel map-panel"} aria-label="Mapa">
-      <MapView sit={sit} focus={sid} selected={selected} onSelect={setSelected} centre={centre}
+      <MapView sit={sit} focus={sid} selected={selected} onSelect={setSelected} centre={centre} alert={alert}
         onExpand={main === "video" ? () => onMain("map") : undefined} />
     </section>
   );
@@ -66,7 +84,23 @@ export function Operator({ sit, sid, main, onMain, onDrone }: Props) {
         </div>
         <aside className="side-col">
           {main === "video" ? map : video}
-          <section className="panel tabs" aria-label="Alerty i obiekty" />
+          <section className="panel tabs" aria-label="Alerty i obiekty">
+            <div className="tablist" role="tablist">
+              {TABS.map(([key, name, count]) => (
+                <button key={key} role="tab" aria-selected={tab === key} onClick={() => setTab(key)}>
+                  {name} <span className="mono muted">{count(sit)}</span>
+                </button>
+              ))}
+            </div>
+            {tab === "alerts" && <AlertList alerts={alerts} picked={alert?.aid ?? null} onPick={pickAlert} now={now} />}
+            {tab === "objects" && (
+              <ObjectList objects={[...sit.objects.values()]} selected={selected} onSelect={setSelected} now={now} />
+            )}
+            {tab === "events" && (
+              <EventList events={[...sit.events.values()]} now={now}
+                onPick={(e) => setCentre({ xy: e.xy, at: Date.now() })} />
+            )}
+          </section>
         </aside>
       </div>
       <footer className="bottombar" />
