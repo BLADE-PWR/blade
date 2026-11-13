@@ -5,7 +5,7 @@ to the [gateway](../services/gateway/README.md): REST for control, one WebSocket
 
 Two views, both in Polish: the operator view (one drone: video, map, object details, alerts) and the command
 view (all drones of a session on one map). The layout follows the accepted mockups on the "Blade: widoki UI"
-canvas. Work in progress: so far the session picker, the top bar, the operator layout, the video with boxes, the map, the object details, the alert tabs and the bottom bar (filters, box threshold, stage times).
+canvas. Work in progress: so far the session picker, the top bar, the operator layout, the video with boxes, the map, the object details, the alert tabs and the bottom bar (filters, box threshold, stage times) and the replay bar.
 
 Libraries besides React: `leaflet` (the map) and `milsymbol` (APP-6 symbols), both named in module 8.
 
@@ -51,6 +51,7 @@ GATEWAY_URL=http://<server-ip>:8000 npm run dev
 | `src/Operator.tsx` | View 1: one drone; also the object details (crop from the latest box of its track) |
 | `src/Video.tsx` | One drone's video preview with the boxes of the same frame and the mark at the centre of the frame |
 | `src/MapView.tsx` | The map: orthophoto tiles in Arma metres (Leaflet `CRS.Simple`), APP-6 symbols (milsymbol) stacked when close, drones, camera footprints, motion, uncertainty, events, true positions |
+| `src/Replay.tsx` | The replay bar: position, pause, next frame, 10 s jumps, speed; drives every replay of the session together |
 | `src/Lists.tsx` | The alert, object and event lists (clicking an alert selects its object and rings it on the map) |
 | `src/classes.ts` | Polish names and fixed colours of the object groups and event kinds, alert colours |
 | `src/format.ts` | Numbers and times as Polish text |

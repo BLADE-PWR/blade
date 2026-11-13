@@ -4,7 +4,8 @@ import { type FormEvent, useEffect, useState } from "react";
 import type { Session } from "./contracts";
 import { connect, getJSON, type Target } from "./gateway";
 import { Operator } from "./Operator";
-import { addPreview, apply, dispose, emptySituation, latencyS, transmitting } from "./situation";
+import { ReplayBar } from "./Replay";
+import { addPreview, apply, clearWorld, dispose, emptySituation, latencyS, transmitting } from "./situation";
 
 const CLOCK_MS = 1000;
 
@@ -163,6 +164,7 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
         </div>
       </header>
       {closed && <p className="error banner">WebSocket zamknięty: {closed}</p>}
+      {replay && sit.session && <ReplayBar session={sit.session} onJump={() => clearWorld(sit)} />}
       {view === "operator"
         ? <Operator sit={sit} sid={sid} main={main} onMain={setMain} onDrone={setPicked} />
         : <p className="todo">Widok dowodzenia</p>}
