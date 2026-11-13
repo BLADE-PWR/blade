@@ -21,9 +21,9 @@ const PREVIEWS_KEPT = 30; // per drone, ~2 s at the gateway's 15 fps
 const ROUTE_STEP_M = 5;
 const ROUTE_POINTS = 500;
 const EVENTS_KEPT = 50;
-const DETS_FRESH_S = 1; // boxes this much older than the newest picture are not drawn (a paused replay keeps them)
-const MATCH_FRAMES = 2; // a preview this close to the boxes' frame counts as the same picture
-const SILENT_S = 3; // a drone with no frame for this long is shown as not transmitting
+const DETS_FRESH_S = 1; // s
+const MATCH_FRAMES = 2;
+const SILENT_S = 3; // s
 
 export type Preview = { frame: number | null; url: string; blob: Blob; w: number; h: number; src: [number, number] };
 
@@ -42,13 +42,12 @@ export type Situation = {
   drones: Map<string, Drone>;
   objects: Map<string, WorldObject>;
   events: Map<string, WorldEvent>;
-  alerts: Map<string, Alert>; // "wid aid" -> active alert
+  alerts: Map<string, Alert>; // key "wid aid"
   truth: TruthMatch[];
   diag: Map<string, DiagData>;
-  clocks: Map<string, number>; // wid -> world clock, s
+  clocks: Map<string, number>; // wid -> s
 };
 
-/** What the operator chose to see: hidden groups and event kinds, remembered objects, the box threshold */
 export type Filter = { hidden: Set<string>; stale: boolean; minConf: number };
 
 export const visible = (o: WorldObject, f: Filter) => !f.hidden.has(o.grp) && (f.stale || o.state === "active");
@@ -121,7 +120,7 @@ export function apply(s: Situation, m: Message): void {
       addEvents(s, (m.data as { events: WorldEvent[] }).events);
       break;
     case "alerts":
-      for (const a of (m.data as { alerts: Alert[] }).alerts) { // only the alerts raised or cleared just now
+      for (const a of (m.data as { alerts: Alert[] }).alerts) {
         if (a.state === "active") s.alerts.set(`${m.wid} ${a.aid}`, a);
         else s.alerts.delete(`${m.wid} ${a.aid}`);
       }
@@ -146,7 +145,6 @@ export function addPreview(s: Situation, f: Frame): void {
   while (d.previews.length > PREVIEWS_KEPT) URL.revokeObjectURL(d.previews.shift()!.url);
 }
 
-/** -> the time of the session's worlds (stands still while a replay is paused); the browser's until one is sent */
 export function worldNow(s: Situation): number {
   return s.clocks.size ? Math.max(...s.clocks.values()) : Date.now() / 1000;
 }
@@ -156,7 +154,6 @@ export function dispose(s: Situation): void {
   s.drones.clear();
 }
 
-/** -> the picture to show and the boxes that belong to it (none when the boxes are stale or of another frame) */
 export function shownFrame(d: Drone): { preview: Preview | null; dets: Drone["dets"] } {
   const newest = d.previews.at(-1) ?? null;
   const dets = d.dets;
@@ -177,14 +174,12 @@ export function allAlerts(s: Situation): Alert[] {
   return [...s.alerts.values()];
 }
 
-/** -> seconds from capture to the world model, from the stamps of the drone's latest world update */
 export function latencyS(d: Drone): number | null {
   const capture = d.stamps?.capture;
   const world = d.stamps?.world;
   return typeof capture === "number" && Array.isArray(world) ? world[1] - capture : null;
 }
 
-/** -> [stage, seconds] spent in each stage of the drone's latest world update */
 export function stageTimes(d: Drone): [string, number][] {
   return Object.entries(d.stamps ?? {}).flatMap(([stage, t]) => (Array.isArray(t) ? [[stage, t[1] - t[0]]] : []));
 }

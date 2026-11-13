@@ -738,7 +738,7 @@ button.primary {
   gap: 12px;
 }
 
-/* as wide as fits under the bars and the drone strip, so the page does not scroll */
+/* fits under the bars and the drone strip */
 .main-video {
   width: min(100%, calc((100vh - 350px) * 16 / 9));
 }

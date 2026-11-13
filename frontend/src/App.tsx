@@ -104,7 +104,7 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
       onMessage: (m) => {
         apply(sit, m);
         redraw();
-        if (m.type === "snapshot") { // the bus only carries alert changes: take the active ones once
+        if (m.type === "snapshot") {
           getJSON<Alert[]>(`/api/decision/${m.wid}/alerts`)
             .then((alerts) => {
               apply(sit, { type: "alerts", wid: m.wid, data: { alerts } });
@@ -143,7 +143,7 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
   const switchMode = (source: "live" | "replay") => {
     const s = latest(source);
     if (s) onPick({ session: s.id });
-    else if (source === "replay") onLeave(); // no replay session yet: pick a recording
+    else if (source === "replay") onLeave();
   };
   const fps = sid ? sit.diag.get("ingest")?.streams[sid]?.fps_in : undefined;
   const latency = drone ? latencyS(drone) : null;

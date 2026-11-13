@@ -59,7 +59,6 @@ export async function send<T>(method: "POST" | "PATCH", path: string, body: obje
   return (await r.json()) as T;
 }
 
-/** Creates and starts a session that replays the recording in a loop; -> its id */
 export async function startReplay(rec: Recording): Promise<string> {
   const maps = await getJSON<{ id: string }[]>("/api/maps");
   const map = maps.some((m) => m.id === rec.map) ? rec.map : (maps[0]?.id ?? rec.map);
@@ -81,7 +80,7 @@ export function connect(target: Target, h: Handlers): () => void {
   };
   ws.onclose = (e) => h.onClose(e.reason || `closed (${e.code})`);
   return () => {
-    ws.onclose = null; // closing on purpose is not an error to show
+    ws.onclose = null;
     ws.close();
   };
 }

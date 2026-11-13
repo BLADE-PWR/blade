@@ -1,5 +1,4 @@
-// View 1: one drone. The main panel (video or map) on the left with the object details under it, the other panel
-// and the alert tabs on the right, filters and diagnostics at the bottom.
+// View 1: one drone, with the video or the map on the main panel.
 import { useEffect, useRef, useState } from "react";
 
 import type { MainPanel } from "./App";
@@ -27,11 +26,11 @@ const TABS: [Tab, string, (s: Situation) => number][] = [
   ["events", "Events", (s) => s.events.size],
 ];
 
-const MIN_CONF = 0.25; // the detector's own threshold, so every box shows at first
-const SLOW_STAGE_S = 0.1; // stage times above this are highlighted
+const MIN_CONF = 0.25; // the detector's own threshold
+const SLOW_STAGE_S = 0.1;
 const CROP_PX = 112;
-const CROP_MARGIN = 1.6; // crop side as a multiple of the box's longer side
-const CROP_MIN_PX = 40; // in preview pixels
+const CROP_MARGIN = 1.6; // crop side / box side
+const CROP_MIN_PX = 40; // preview px
 
 type Props = {
   sit: Situation;
@@ -170,7 +169,6 @@ function BottomBar({ sit, sid, filter, onFilter }: BarProps) {
   );
 }
 
-/** -> the drone, picture and box of a track of the object that is in the frame shown now */
 function trackCrop(sit: Situation, o: WorldObject) {
   for (const [sid, tid] of [...o.tracks].reverse()) {
     const drone = sit.drones.get(sid);
@@ -188,7 +186,6 @@ function Details({ sit, object: o, onCentre, onVideo }: DetailsProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const crop = trackCrop(sit, o);
   const now = worldNow(sit);
-  // the crop square in preview pixels; the canvas keeps the last one while the object is out of the frame
   const k = crop ? crop.preview.w / crop.img[0] : 1;
   const [x0, y0, x1, y1] = crop ? crop.box.map((v) => v * k) : [0, 0, 0, 0];
   const side = Math.max(CROP_MIN_PX, CROP_MARGIN * Math.max(x1 - x0, y1 - y0));

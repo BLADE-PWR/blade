@@ -1,5 +1,4 @@
-// The map: orthophoto tiles from the terrain service in flat Arma metres (Leaflet CRS.Simple, lat = y north,
-// lng = x east), APP-6 symbols from milsymbol, drones with their camera footprints, motion and uncertainty.
+// The map in Arma metres (CRS.Simple, lat = y, lng = x): orthophoto tiles, APP-6 symbols, drones and motion.
 import L from "leaflet";
 import ms, { type Symbol as MilSymbol } from "milsymbol";
 import { useEffect, useRef, useState } from "react";
@@ -10,16 +9,16 @@ import { getJSON } from "./gateway";
 import { type Filter, type Situation, visible, worldNow } from "./situation";
 
 const TILE_PX = 256;
-const MIN_ZOOM = -5; // 32 m/px, the coarsest orthophoto level
+const MIN_ZOOM = -5; // 32 m/px
 const MAX_ZOOM = 2; // 0.25 m/px
 const START_ZOOM = 1;
 const FIT_PAD_PX = 40;
 const SYMBOL_PX = 20;
-const STACK_PX = 24; // symbols closer than this on screen are drawn as one, with a count
-const ARROW_S = 10; // s of travel the motion arrow shows
-const CONE_K = 2; // cone and uncertainty circles in sigmas
-const HORIZON_S = 30; // prediction shown for every moving object; the selected one shows all
-const UNCERTAIN_M = 15; // others get an uncertainty circle from this sigma (decision rule uncertain_position)
+const STACK_PX = 24; // closer symbols are drawn as one
+const ARROW_S = 10; // s
+const CONE_K = 2; // sigmas
+const HORIZON_S = 30; // s, the selected object shows every horizon
+const UNCERTAIN_M = 15; // m, like the uncertain_position rule
 const ALERT_RING_PX = 16;
 const STACK_ORDER = ["tank", "military_vehicle", "soldier"];
 const CIRCLE_POINTS = 24;
@@ -50,7 +49,7 @@ class OrthoTiles extends L.TileLayer {
   }
 
   getTileUrl(c: L.Coords): string {
-    const side = TILE_PX / 2 ** c.z; // metres
+    const side = TILE_PX / 2 ** c.z; // m
     const x0 = c.x * side;
     const y1 = -c.y * side;
     const q = new URLSearchParams({ x0: `${x0}`, y0: `${y1 - side}`, x1: `${x0 + side}`, y1: `${y1}`,
@@ -59,7 +58,7 @@ class OrthoTiles extends L.TileLayer {
   }
 }
 
-const symbols = new Map<string, MilSymbol>(); // drawing a symbol is slow, and the same few are drawn every frame
+const symbols = new Map<string, MilSymbol>(); // drawing one is slow
 function symbol(sidc: string): MilSymbol {
   let s = symbols.get(sidc);
   if (!s) {
@@ -94,7 +93,6 @@ function eventIcon(kind: string, age: number): L.DivIcon {
     `stroke="#000" stroke-width="1.5"/></svg><span class="sym-label">${nameOf(kind)}, ${age.toFixed(0)} s</span>` });
 }
 
-/** -> objects grouped by screen distance, the most important group first in each stack */
 function stacks(map: L.Map, objects: WorldObject[], selected: string | null): WorldObject[][] {
   const rank = (o: WorldObject) => (o.oid === selected ? -1 : STACK_ORDER.indexOf(o.grp));
   const sorted = [...objects].sort((a, b) => rank(a) - rank(b));
@@ -108,7 +106,6 @@ function stacks(map: L.Map, objects: WorldObject[], selected: string | null): Wo
   return out.map((s) => s.members);
 }
 
-/** -> convex hull (monotone chain) of points */
 function hull(pts: Vec2[]): Vec2[] {
   const p = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
   const cross = (o: Vec2, a: Vec2, b: Vec2) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
@@ -131,7 +128,7 @@ function circle(xy: Vec2, r: number): Vec2[] {
 }
 
 function drawMotion(group: L.LayerGroup, o: WorldObject, selected: boolean, now: number): void {
-  // pred is anchored at `last` and not republished while stale: hide horizons already in the past
+  // pred is not republished while stale: hide the horizons already passed
   const preds = (o.pred ?? []).filter((p) => o.last + p.dt_s > now && (selected || p.dt_s <= HORIZON_S));
   if (!o.vel || preds.length === 0) return;
   const color = colorOf(o.grp);
@@ -202,7 +199,7 @@ function drawAlert(group: L.LayerGroup, sit: Situation, a: Alert): void {
 
 type Markers = Map<string, { marker: L.Marker; key: string }>;
 
-/** Moves the object markers in place (new ones only for new stacks), so a click is not lost to a redraw. */
+// markers are moved, not redrawn, so a click is not lost
 function syncMarkers(map: L.Map, markers: Markers, objects: WorldObject[], selected: string | null,
   onSelect: (oid: string) => void): void {
   const seen = new Set<string>();
@@ -303,7 +300,6 @@ export function MapView(props: Props) {
   const fitDrones = () => fit([...sit.drones.values()]
     .flatMap((d) => (d.geo ? [d.geo.camera, ...d.geo.footprint] : [])).flatMap((p) => (p ? [ll(p)] : [])));
 
-  // nothing is drawn before the map has a view: the operator's drone, else every drone, else the objects
   useEffect(() => {
     if (!map || centred) return;
     if (!overview && focus) {

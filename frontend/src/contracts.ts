@@ -3,7 +3,6 @@
 export type Vec2 = [number, number];
 export type Vec3 = [number, number, number];
 
-/** Per-stage [t_in, t_out] epoch seconds, plus "capture" */
 export type Stamps = Record<string, number | [number, number]>;
 
 export type Det = { tid: number | null; cls: string; grp: string; conf: number; box: [number, number, number, number] };
@@ -41,8 +40,8 @@ export type WorldObject = {
 export type WorldObjectsData = {
   objects: WorldObject[];
   expired: string[];
-  forgotten?: string[]; // removed without losing contact (merged, or the replay went back)
-  t?: number; // world clock, s: stands still while a replay is paused
+  forgotten?: string[];
+  t?: number; // world clock, s
 };
 
 export type WorldEvent = { eid: string; kind: string; xy: Vec2; t: number; ttl_s: number; sid: string };

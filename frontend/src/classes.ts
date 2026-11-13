@@ -1,4 +1,4 @@
-// Object groups and event kinds: display names and the fixed colours (the same as tools/viewer); alert colours.
+// Names and colours of object groups and event kinds (the same as tools/viewer).
 
 export const GROUPS = ["soldier", "tank", "military_vehicle"] as const;
 export const EVENT_KINDS = ["explosion", "tank_fire"] as const;

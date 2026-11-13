@@ -1,5 +1,4 @@
-// The replay bar: the mission (recording) being replayed, position, pause, step, jumps and speed for every replay
-// of the session (kept in step).
+// The replay bar: recording, position, pause, step, jumps and speed, the same for every replay of the session.
 import { useEffect, useState } from "react";
 
 import type { Recording, Replay, Session } from "./contracts";
@@ -18,9 +17,9 @@ export function ReplayBar({ session, onSwitch }: Props) {
   const sids = session.streams.filter((st) => st.source === "replay").map((st) => st.sid).join(",");
   const [replays, setReplays] = useState<Replay[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [draft, setDraft] = useState<number | null>(null); // the slider position while it is being dragged
+  const [draft, setDraft] = useState<number | null>(null); // while the slider is dragged
   const [recording, setRecording] = useState<Recording | null>(null);
-  const [missions, setMissions] = useState<Recording[] | null>(null); // the open list of recordings to switch to
+  const [missions, setMissions] = useState<Recording[] | null>(null);
 
   useEffect(() => {
     let stopped = false;
@@ -53,7 +52,7 @@ export function ReplayBar({ session, onSwitch }: Props) {
   const control = (body: (r: Replay) => object) => {
     setError(null);
     Promise.all(replays.map((r) => send<Replay>("PATCH", `/sessions/${session.id}/replays/${r.sid}`, body(r))))
-      .then(setReplays) // the answer is the new state: the buttons change without waiting for the next poll
+      .then(setReplays)
       .catch((e: Error) => setError(`Replay control failed (${e.message}).`));
   };
   const jump = (delta: number) => {
@@ -73,7 +72,6 @@ export function ReplayBar({ session, onSwitch }: Props) {
         .catch((e: Error) => setError(`Cannot list the recordings (${e.message}).`));
     }
   };
-  // a new session for the chosen recording; this one is stopped so only one replay keeps the detector busy
   const switchTo = (rec: Recording) => {
     setMissions(null);
     startReplay(rec)

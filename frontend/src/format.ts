@@ -10,7 +10,6 @@ export function ago(t: number, now: number): string {
   return `${(s / 60).toFixed(0)} min ago`;
 }
 
-/** -> "tank_platoon, 2026-11-04 20:33, 119 s" */
 export const recordingName = (r: Recording) =>
   `${r.scene ?? r.id}, ${new Date(r.started * 1000).toLocaleDateString("en-CA")} ${clock(r.started).slice(0, 5)}, ` +
   `${r.duration_s.toFixed(0)} s`;

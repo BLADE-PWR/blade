@@ -5,7 +5,6 @@ import { boxVisible, type Drone, type Filter, type Preview } from "./situation";
 
 const pct = (v: number, of: number) => `${(100 * v) / of}%`;
 
-/** -> "sid:tid" of every track behind a world object, mapped to the object's id */
 function trackOids(objects: Map<string, WorldObject>): Map<string, string> {
   const oids = new Map<string, string>();
   for (const o of objects.values()) for (const [sid, tid] of o.tracks) oids.set(`${sid}:${tid}`, o.oid);

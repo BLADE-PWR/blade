@@ -1,5 +1,4 @@
-// View 2: every drone of the session. The main panel is the map (with the drone list, alerts and service state
-// beside it) or the video (drone previews and the chosen drone's video, the small map, state and settings).
+// View 2: every drone of the session, with the map or the video on the main panel.
 import { useEffect, useState } from "react";
 
 import type { MainPanel } from "./App";
