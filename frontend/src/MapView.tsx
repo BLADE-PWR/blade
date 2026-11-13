@@ -41,8 +41,10 @@ type Meta = { extent: [number, number, number, number] };
 
 const ll = (xy: Vec2 | number[]) => L.latLng(xy[1], xy[0]);
 
+export type Background = "auto" | "hillshade";
+
 class OrthoTiles extends L.TileLayer {
-  constructor(private mapId: string, bounds: L.LatLngBounds) {
+  constructor(private mapId: string, private layer: Background, bounds: L.LatLngBounds) {
     super("", { tileSize: TILE_PX, minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM, bounds });
   }
 
@@ -51,7 +53,7 @@ class OrthoTiles extends L.TileLayer {
     const x0 = c.x * side;
     const y1 = -c.y * side;
     const q = new URLSearchParams({ x0: `${x0}`, y0: `${y1 - side}`, x1: `${x0 + side}`, y1: `${y1}`,
-      mpp: `${side / TILE_PX}` });
+      mpp: `${side / TILE_PX}`, layer: this.layer });
     return `/api/maps/${this.mapId}/crop?${q}`;
   }
 }
@@ -235,9 +237,11 @@ type Props = {
   alert?: Alert | null;
   filter: Filter;
   overview?: boolean;
+  layer?: Background;
 };
 
-export function MapView({ sit, focus, selected, onSelect, onExpand, centre, alert, filter, overview }: Props) {
+export function MapView(props: Props) {
+  const { sit, focus, selected, onSelect, onExpand, centre, alert, filter, overview, layer = "auto" } = props;
   const box = useRef<HTMLDivElement>(null);
   const markers = useRef<Markers>(new Map());
   const [map, setMap] = useState<L.Map | null>(null);
@@ -259,10 +263,6 @@ export function MapView({ sit, focus, selected, onSelect, onExpand, centre, aler
     m.on("zoomend moveend", moved);
     const resize = new ResizeObserver(() => m.invalidateSize());
     resize.observe(box.current!);
-    getJSON<Meta>(`/api/maps/${mapId}/meta`)
-      .then(({ extent: [x0, y0, x1, y1] }) => new OrthoTiles(mapId, L.latLngBounds(ll([x0, y0]), ll([x1, y1])))
-        .addTo(m))
-      .catch((e: Error) => setError(`Nie udało się pobrać mapy ${mapId} (${e.message}).`));
     setMap(m);
     const kept = markers.current;
     return () => {
@@ -272,7 +272,23 @@ export function MapView({ sit, focus, selected, onSelect, onExpand, centre, aler
       vectors.remove();
       m.remove();
     };
-  }, [mapId, vectors]);
+  }, [vectors]);
+
+  useEffect(() => {
+    if (!map) return;
+    let tiles: OrthoTiles | null = null;
+    let stopped = false;
+    getJSON<Meta>(`/api/maps/${mapId}/meta`)
+      .then(({ extent: [x0, y0, x1, y1] }) => {
+        if (stopped) return;
+        tiles = new OrthoTiles(mapId, layer, L.latLngBounds(ll([x0, y0]), ll([x1, y1]))).addTo(map);
+      })
+      .catch((e: Error) => setError(`Nie udało się pobrać mapy ${mapId} (${e.message}).`));
+    return () => {
+      stopped = true;
+      tiles?.remove();
+    };
+  }, [map, mapId, layer]);
 
   const now = Date.now() / 1000;
   const focusGeo = focus ? sit.drones.get(focus)?.geo : null;

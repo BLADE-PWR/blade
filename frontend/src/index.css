@@ -703,6 +703,63 @@ button.primary {
   margin: 0 12px 10px;
 }
 
+.thumbs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.thumb-card {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  text-align: left;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #151a21;
+}
+
+.thumb-card .panel-head {
+  padding: 6px 10px;
+}
+
+.thumb-card[aria-pressed="true"] {
+  border: 2px solid #fff;
+  background: #1c232c;
+}
+
+.state-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 16px;
+  padding: 0 12px 12px;
+  font-size: 12px;
+}
+
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 12px;
+}
+
+.setting {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+}
+
+.setting > .muted:first-child {
+  flex: none;
+  width: 72px;
+}
+
+.setting-note {
+  margin: -6px 12px 0 94px;
+  font-size: 12px;
+}
+
 .service-line {
   display: flex;
   flex-wrap: wrap;

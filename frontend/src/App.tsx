@@ -168,7 +168,8 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
       {replay && sit.session && <ReplayBar session={sit.session} onJump={() => clearWorld(sit)} />}
       {view === "operator"
         ? <Operator sit={sit} sid={sid} main={main} onMain={setMain} onDrone={setPicked} />
-        : <Command sit={sit} sids={sids} sid={sid} onDrone={setPicked} onOperator={() => setView("operator")} />}
+        : <Command sit={sit} sids={sids} sid={sid} main={main} onMain={setMain} onDrone={setPicked}
+          onOperator={() => setView("operator")} />}
     </div>
   );
 }

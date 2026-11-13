@@ -5,7 +5,7 @@ to the [gateway](../services/gateway/README.md): REST for control, one WebSocket
 
 Two views, both in Polish: the operator view (one drone: video, map, object details, alerts) and the command
 view (all drones of a session on one map). The layout follows the accepted mockups on the "Blade: widoki UI"
-canvas. Work in progress: so far the session picker, the top bar, the operator layout, the video with boxes, the map, the object details, the alert tabs and the bottom bar (filters, box threshold, stage times), the replay bar and the command view with the map.
+canvas. Work in progress: so far the session picker, the top bar, the operator layout, the video with boxes, the map, the object details, the alert tabs and the bottom bar (filters, box threshold, stage times), the replay bar and the command view (map or video on the main panel, service state, settings).
 
 Libraries besides React: `leaflet` (the map) and `milsymbol` (APP-6 symbols), both named in module 8.
 
@@ -49,7 +49,7 @@ GATEWAY_URL=http://<server-ip>:8000 npm run dev
 | `src/situation.ts` | The live picture of one connection (drones, objects, events, alerts, diag), updated by each message |
 | `src/App.tsx` | Session picker, the connection (redrawn at most once per screen frame) and the top bar |
 | `src/Operator.tsx` | View 1: one drone; also the object details (crop from the latest box of its track) |
-| `src/Command.tsx` | View 2: every drone of the session; the map with a drone list (previews, fps, objects in frame), alerts and service state |
+| `src/Command.tsx` | View 2: every drone of the session; map on the main panel (drone list, alerts, state) or video (drone previews, the chosen drone, small map, state per service, settings) |
 | `src/Video.tsx` | One drone's video preview with the boxes of the same frame and the mark at the centre of the frame |
 | `src/MapView.tsx` | The map: orthophoto tiles in Arma metres (Leaflet `CRS.Simple`), APP-6 symbols (milsymbol) stacked when close, drones, camera footprints, motion, uncertainty, events, true positions |
 | `src/Replay.tsx` | The replay bar: position, pause, next frame, 10 s jumps, speed; drives every replay of the session together |

@@ -28,9 +28,10 @@ type Props = {
   objects: Map<string, WorldObject>;
   selected?: string | null;
   filter?: Filter;
+  labels?: boolean;
 };
 
-export function Video({ sid, shown, geo, objects, selected, filter }: Props) {
+export function Video({ sid, shown, geo, objects, selected, filter, labels = true }: Props) {
   const { preview, dets } = shown;
   if (!preview) return <div className="video empty">Brak obrazu z drona {sid}</div>;
   const oids = trackOids(objects);
@@ -46,9 +47,11 @@ export function Video({ sid, shown, geo, objects, selected, filter }: Props) {
         return (
           <div key={i} className="box" style={{ left: pct(x0, w), top: pct(y0, h), width: pct(x1 - x0, w),
             height: pct(y1 - y0, h), borderColor: color }}>
-            <span className="box-label" style={{ background: color }}>
-              {oid} {nameOf(d.grp)} {d.conf.toFixed(2)}
-            </span>
+            {labels && (
+              <span className="box-label" style={{ background: color }}>
+                {oid} {nameOf(d.grp)} {d.conf.toFixed(2)}
+              </span>
+            )}
           </div>
         );
       })}
