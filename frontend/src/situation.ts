@@ -1,6 +1,7 @@
 // The live picture of one gateway connection: the latest of every message type, updated in place as messages arrive.
 import type {
   Alert,
+  Det,
   DetectionsData,
   DiagData,
   EvalData,
@@ -45,6 +46,13 @@ export type Situation = {
   truth: TruthMatch[];
   diag: Map<string, DiagData>;
 };
+
+/** What the operator chose to see: hidden groups and event kinds, remembered objects, the box threshold */
+export type Filter = { hidden: Set<string>; stale: boolean; minConf: number };
+
+export const visible = (o: WorldObject, f: Filter) => !f.hidden.has(o.grp) && (f.stale || o.state === "active");
+
+export const boxVisible = (d: Det, f: Filter) => d.conf >= f.minConf && !f.hidden.has(d.grp);
 
 export function emptySituation(): Situation {
   return { session: null, drones: new Map(), objects: new Map(), events: new Map(), alerts: new Map(), truth: [],

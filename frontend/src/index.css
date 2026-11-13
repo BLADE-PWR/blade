@@ -573,6 +573,53 @@ button:disabled {
   background: #12161c;
 }
 
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 16px;
+  border-color: #3a4552;
+}
+
+.filter[aria-pressed="false"] {
+  background: transparent;
+  border-color: #27303b;
+  color: #a3aeba;
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+
+.swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+
+.diag {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 12px;
+  color: #a3aeba;
+}
+
+.slow {
+  color: #ffb86b;
+}
+
 .todo {
   padding: 20px;
 }

@@ -3,12 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { MainPanel } from "./App";
-import { nameOf } from "./classes";
+import { colorOf, EVENT_KINDS, GROUPS, nameOf } from "./classes";
 import type { Alert, Vec2, WorldObject } from "./contracts";
 import { ago, clock, pl } from "./format";
 import { AlertList, EventList, ObjectList } from "./Lists";
 import { MapView, symbolUrl } from "./MapView";
-import { allAlerts, shownFrame, type Situation } from "./situation";
+import { allAlerts, boxVisible, type Filter, shownFrame, type Situation, stageTimes, visible } from "./situation";
 import { Video } from "./Video";
 
 type Tab = "alerts" | "objects" | "events";
@@ -18,6 +18,8 @@ const TABS: [Tab, string, (s: Situation) => number][] = [
   ["events", "Zdarzenia", (s) => s.events.size],
 ];
 
+const MIN_CONF = 0.25; // the detector's own threshold, so every box shows at first
+const SLOW_STAGE_S = 0.1; // stage times above this are highlighted
 const CROP_PX = 112;
 const CROP_MARGIN = 1.6; // crop side as a multiple of the box's longer side
 const CROP_MIN_PX = 40; // in preview pixels
@@ -35,6 +37,7 @@ export function Operator({ sit, sid, main, onMain, onDrone }: Props) {
   const [centre, setCentre] = useState<{ xy: Vec2; at: number } | null>(null);
   const [tab, setTab] = useState<Tab>("alerts");
   const [alertId, setAlertId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<Filter>({ hidden: new Set(), stale: true, minConf: MIN_CONF });
   const now = Date.now() / 1000;
   const drone = sid ? sit.drones.get(sid) : undefined;
   const shown = drone ? shownFrame(drone, now) : { preview: null, dets: null };
@@ -54,14 +57,19 @@ export function Operator({ sit, sid, main, onMain, onDrone }: Props) {
         {drone?.geo && (
           <span className="muted">wysokość <span className="mono value">{drone.geo.camera[2].toFixed(0)} m</span></span>
         )}
-        <span className="muted push">ramki <span className="mono value">{shown.dets?.dets.length ?? 0}</span></span>
+        <span className="muted push">
+          ramki <span className="mono value">{shown.dets?.dets.filter((d) => boxVisible(d, filter)).length ?? 0}</span>
+        </span>
       </div>
-      {sid && <Video sid={sid} shown={shown} geo={drone?.geo} objects={sit.objects} selected={selected} />}
+      {sid && (
+        <Video sid={sid} shown={shown} geo={drone?.geo} objects={sit.objects} selected={selected} filter={filter} />
+      )}
     </section>
   );
   const map = (
     <section className={main === "map" ? "panel map-main" : "panel map-panel"} aria-label="Mapa">
       <MapView sit={sit} focus={sid} selected={selected} onSelect={setSelected} centre={centre} alert={alert}
+        filter={filter}
         onExpand={main === "video" ? () => onMain("map") : undefined} />
     </section>
   );
@@ -94,17 +102,62 @@ export function Operator({ sit, sid, main, onMain, onDrone }: Props) {
             </div>
             {tab === "alerts" && <AlertList alerts={alerts} picked={alert?.aid ?? null} onPick={pickAlert} now={now} />}
             {tab === "objects" && (
-              <ObjectList objects={[...sit.objects.values()]} selected={selected} onSelect={setSelected} now={now} />
+              <ObjectList objects={[...sit.objects.values()].filter((o) => visible(o, filter))} selected={selected}
+                onSelect={setSelected} now={now} />
             )}
             {tab === "events" && (
-              <EventList events={[...sit.events.values()]} now={now}
+              <EventList events={[...sit.events.values()].filter((e) => !filter.hidden.has(e.kind))} now={now}
                 onPick={(e) => setCentre({ xy: e.xy, at: Date.now() })} />
             )}
           </section>
         </aside>
       </div>
-      <footer className="bottombar" />
+      <BottomBar sit={sit} sid={sid} filter={filter} onFilter={setFilter} />
     </>
+  );
+}
+
+type BarProps = { sit: Situation; sid: string | null; filter: Filter; onFilter: (f: Filter) => void };
+
+function BottomBar({ sit, sid, filter, onFilter }: BarProps) {
+  const count = (kind: string) => [...sit.objects.values()].filter((o) => o.grp === kind).length +
+    [...sit.events.values()].filter((e) => e.kind === kind).length;
+  const toggle = (kind: string) => {
+    const hidden = new Set(filter.hidden);
+    if (!hidden.delete(kind)) hidden.add(kind);
+    onFilter({ ...filter, hidden });
+  };
+  const drone = sid ? sit.drones.get(sid) : undefined;
+  const dropped = sid ? sit.diag.get("detector")?.streams[sid]?.dropped : undefined;
+  return (
+    <footer className="bottombar">
+      <div className="filters" role="group" aria-label="Filtr klas">
+        {[...GROUPS, ...EVENT_KINDS].map((kind) => (
+          <button key={kind} className="filter" aria-pressed={!filter.hidden.has(kind)} onClick={() => toggle(kind)}>
+            <span className="swatch" style={{ background: colorOf(kind) }} />
+            {nameOf(kind)} <span className="mono muted">{count(kind)}</span>
+          </button>
+        ))}
+      </div>
+      <label className="inline">
+        Pewność ramek od
+        <input type="range" min="0" max="1" step="0.05" value={filter.minConf}
+          onChange={(e) => onFilter({ ...filter, minConf: Number(e.target.value) })} />
+        <span className="mono">{pl(filter.minConf, 2)}</span>
+      </label>
+      <label className="inline">
+        <input type="checkbox" checked={filter.stale} onChange={() => onFilter({ ...filter, stale: !filter.stale })} />
+        Nieobserwowane
+      </label>
+      <div className="diag mono push" aria-label="Czas etapów">
+        {drone && stageTimes(drone).map(([stage, s]) => (
+          <span key={stage}>
+            {stage} <span className={s > SLOW_STAGE_S ? "slow" : "value"}>{(s * 1000).toFixed(0)} ms</span>
+          </span>
+        ))}
+        {dropped !== undefined && <span>odrzucone <span className="value">{dropped}</span></span>}
+      </div>
+    </footer>
   );
 }
 

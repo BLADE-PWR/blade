@@ -2,7 +2,7 @@
 import { colorOf, nameOf } from "./classes";
 import type { GeoData, WorldObject } from "./contracts";
 import { pl } from "./format";
-import type { Drone, Preview } from "./situation";
+import { boxVisible, type Drone, type Filter, type Preview } from "./situation";
 
 const pct = (v: number, of: number) => `${(100 * v) / of}%`;
 
@@ -27,9 +27,10 @@ type Props = {
   geo?: GeoData | null;
   objects: Map<string, WorldObject>;
   selected?: string | null;
+  filter?: Filter;
 };
 
-export function Video({ sid, shown, geo, objects, selected }: Props) {
+export function Video({ sid, shown, geo, objects, selected, filter }: Props) {
   const { preview, dets } = shown;
   if (!preview) return <div className="video empty">Brak obrazu z drona {sid}</div>;
   const oids = trackOids(objects);
@@ -38,7 +39,7 @@ export function Video({ sid, shown, geo, objects, selected }: Props) {
   return (
     <div className="video">
       <img src={preview.url} alt={`Obraz z drona ${sid}, klatka ${preview.frame ?? "?"}`} />
-      {dets?.dets.map((d, i) => {
+      {dets?.dets.filter((d) => !filter || boxVisible(d, filter)).map((d, i) => {
         const oid = d.tid === null ? undefined : oids.get(`${sid}:${d.tid}`);
         const [x0, y0, x1, y1] = d.box;
         const color = oid && oid === selected ? "#ffffff" : colorOf(d.grp);

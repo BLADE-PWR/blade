@@ -5,7 +5,7 @@ to the [gateway](../services/gateway/README.md): REST for control, one WebSocket
 
 Two views, both in Polish: the operator view (one drone: video, map, object details, alerts) and the command
 view (all drones of a session on one map). The layout follows the accepted mockups on the "Blade: widoki UI"
-canvas. Work in progress: so far the session picker, the top bar, the operator layout, the video with boxes, the map, the object details and the alert tabs.
+canvas. Work in progress: so far the session picker, the top bar, the operator layout, the video with boxes, the map, the object details, the alert tabs and the bottom bar (filters, box threshold, stage times).
 
 Libraries besides React: `leaflet` (the map) and `milsymbol` (APP-6 symbols), both named in module 8.
 

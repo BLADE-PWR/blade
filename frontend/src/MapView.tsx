@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { colorOf, nameOf, SEVERITY_COLORS } from "./classes";
 import type { Alert, Vec2, WorldObject } from "./contracts";
 import { getJSON } from "./gateway";
-import type { Situation } from "./situation";
+import { type Filter, type Situation, visible } from "./situation";
 
 const TILE_PX = 256;
 const MIN_ZOOM = -5; // 32 m/px, the coarsest orthophoto level
@@ -176,10 +176,10 @@ function drawTruth(group: L.LayerGroup, sit: Situation): void {
   }
 }
 
-function drawEvents(group: L.LayerGroup, sit: Situation, now: number): void {
+function drawEvents(group: L.LayerGroup, sit: Situation, filter: Filter, now: number): void {
   for (const e of sit.events.values()) {
     const age = now - e.t;
-    if (age >= e.ttl_s) continue;
+    if (age >= e.ttl_s || filter.hidden.has(e.kind)) continue;
     L.marker(ll(e.xy), { interactive: false, opacity: 1 - (0.7 * age) / e.ttl_s, icon: eventIcon(e.kind, age) })
       .addTo(group);
   }
@@ -232,9 +232,10 @@ type Props = {
   onExpand?: () => void;
   centre?: { xy: Vec2; at: number } | null;
   alert?: Alert | null;
+  filter: Filter;
 };
 
-export function MapView({ sit, focus, selected, onSelect, onExpand, centre, alert }: Props) {
+export function MapView({ sit, focus, selected, onSelect, onExpand, centre, alert, filter }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const markers = useRef<Markers>(new Map());
   const [map, setMap] = useState<L.Map | null>(null);
@@ -287,12 +288,12 @@ export function MapView({ sit, focus, selected, onSelect, onExpand, centre, aler
 
   useEffect(() => {
     if (!map || !centred) return;
-    const objects = [...sit.objects.values()];
+    const objects = [...sit.objects.values()].filter((o) => visible(o, filter));
     vectors.clearLayers();
     if (layers.drones) drawDrones(vectors, sit, focus);
     drawObjects(vectors, objects, selected, layers, now);
     if (layers.truth) drawTruth(vectors, sit);
-    drawEvents(vectors, sit, now);
+    drawEvents(vectors, sit, filter, now);
     if (alert) drawAlert(vectors, sit, alert);
     syncMarkers(map, markers.current, objects, selected, onSelect);
   });
