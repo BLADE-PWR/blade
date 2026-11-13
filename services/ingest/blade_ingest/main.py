@@ -34,8 +34,7 @@ RAW_FLUSH_S = 0.1
 
 
 def frame_ts(kind: str, tel: dict, t_in: float, t_out: float) -> dict:
-    """-> a frame's stamps: capture is the uplink's grab time live and the arrival here in a replay (it measures
-    latency); a replay also carries its recording time as media, the clock the world model runs it on"""
+    """-> a frame's stamps: capture (grab time live, arrival in a replay) and, in a replay, its recording time"""
     cap = tel.get("t_capture") if kind == "live" else None
     ts = {"capture": round(cap or t_in, 6), "ingest": [round(t_in, 6), round(t_out, 6)]}
     if kind != "live" and tel.get("t_capture") is not None:

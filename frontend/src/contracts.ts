@@ -42,7 +42,7 @@ export type WorldObjectsData = {
   objects: WorldObject[];
   expired: string[];
   forgotten?: string[]; // removed without losing contact (merged, or the replay went back)
-  t?: number | null; // world clock, s: stands still while a replay is paused
+  t?: number; // world clock, s: stands still while a replay is paused
 };
 
 export type WorldEvent = { eid: string; kind: string; xy: Vec2; t: number; ttl_s: number; sid: string };

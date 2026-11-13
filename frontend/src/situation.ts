@@ -143,8 +143,7 @@ export function addPreview(s: Situation, f: Frame): void {
   while (d.previews.length > PREVIEWS_KEPT) URL.revokeObjectURL(d.previews.shift()!.url);
 }
 
-/** -> the time of the session's worlds: it stands still while a replay is paused, so "last seen" and the
- * predictions stand too; the browser's clock until a world has sent its own */
+/** -> the time of the session's worlds (stands still while a replay is paused); the browser's until one is sent */
 export function worldNow(s: Situation): number {
   return s.clocks.size ? Math.max(...s.clocks.values()) : Date.now() / 1000;
 }

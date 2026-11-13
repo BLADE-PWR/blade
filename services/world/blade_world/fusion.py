@@ -313,8 +313,7 @@ class World:
         return out
 
     def forget(self, sid: str) -> list[str]:
-        """A stream went back in its recording: drop the objects only it saw, take its tracks off the others.
-        -> the published oids dropped"""
+        """Drop the objects only this stream saw and its tracks from the others; -> the published oids dropped"""
         dropped = []
         for oid, o in list(self.objects.items()):
             if set(o.seen_by) <= {sid}:
