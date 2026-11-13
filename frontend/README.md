@@ -12,7 +12,7 @@ Two views, in English, switched in the top bar. The layout follows the accepted 
   video (previews of all drones, the chosen drone, a small map, state per service, settings).
 
 Both views can put the map or the video on the main panel. A session with replays gets the replay bar
-(pause, next frame, 10 s jumps, speed, slider).
+(recording name, pause, next frame, 10 s jumps, speed, slider).
 
 Libraries besides React: `leaflet` (the map) and `milsymbol` (APP-6 symbols), both named in module 8.
 
@@ -21,19 +21,7 @@ It is not part of the uv workspace; it has its own `package.json`. Needs Node.js
 
 ## Run
 
-Start the server (`uv run python tools/dev.py --map altis`, without an NVIDIA card add `--detect-fps 5`). For
-data, create a gateway session with a looping replay and start it (the replay bar needs a session; a replay
-started with `POST /api/replays` only shows up through "Albo strumienie i światy"):
-```bash
-curl -XPOST localhost:8000/sessions -H 'content-type: application/json' -d '{"name": "Demo", "map": "altis",
-  "streams": [{"sid": "rp-1", "source": "replay", "wid": "rp-1", "recording": "<id>", "loop": true}]}'
-```
-```bash
-curl -XPOST localhost:8000/sessions/<session id from the answer>/start
-```
-A second stream with the same `wid` (and e.g. `"offset_s": 40`) gives the command view two drones.
-
-Then:
+Start the server (`uv run python tools/dev.py --map altis`, without an NVIDIA card add `--detect-fps 5`), then:
 ```bash
 cd frontend
 ```
@@ -44,8 +32,22 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173 and pick the session. In dev, Vite forwards `/api`, `/sessions`, `/detectors`, `/streams` and the
-`/ws` WebSocket to the gateway on `127.0.0.1:8000`. For a gateway on another machine:
+Open http://localhost:5173. Pick a running session, or click Replay next to a recording: that creates and
+starts a session with a looping replay (each with a new `sid`, so it does not replace other replays). The Replay
+button in the top bar brings you back to the recordings.
+
+For the command view with two drones, create a session with two streams in one world by hand:
+```bash
+curl -XPOST localhost:8000/sessions -H 'content-type: application/json' -d '{"name": "Demo", "map": "altis",
+  "streams": [{"sid": "rp-1", "source": "replay", "wid": "rp-1", "recording": "<id>", "loop": true},
+  {"sid": "rp-2", "source": "replay", "wid": "rp-1", "recording": "<id>", "loop": true, "offset_s": 40}]}'
+```
+```bash
+curl -XPOST localhost:8000/sessions/<session id from the answer>/start
+```
+
+In dev, Vite forwards `/api`, `/sessions`, `/detectors`, `/streams` and the `/ws` WebSocket to the gateway on
+`127.0.0.1:8000`. For a gateway on another machine:
 ```bash
 GATEWAY_URL=http://<server-ip>:8000 npm run dev
 ```
@@ -66,7 +68,7 @@ GATEWAY_URL=http://<server-ip>:8000 npm run dev
 | `src/gateway.ts` | WebSocket client: JSON messages and `ZPIF` video previews (`b"ZPIF"` + uint32 BE header length + header JSON + JPEG); small REST helpers |
 | `src/contracts.ts` | Types of the message payloads the UI reads, copied by hand from `libs/common/blade_common/contracts.py` |
 | `src/situation.ts` | The live picture of one connection (drones, objects, events, alerts, diag), updated by each message |
-| `src/App.tsx` | Session picker, the connection (redrawn at most once per screen frame) and the top bar |
+| `src/App.tsx` | Session picker with the recording list (starts a replay session), the connection (redrawn at most once per screen frame) and the top bar |
 | `src/Operator.tsx` | View 1: one drone; also the object details (crop from the latest box of its track) |
 | `src/Command.tsx` | View 2: every drone of the session; map on the main panel (drone list, alerts, state) or video (drone previews, the chosen drone, small map, state per service, settings) |
 | `src/Video.tsx` | One drone's video preview with the boxes of the same frame and the mark at the centre of the frame |
