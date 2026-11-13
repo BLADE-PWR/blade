@@ -50,7 +50,8 @@ export function ReplayBar({ session, onJump }: { session: Session; onJump: () =>
 
   const control = (body: (r: Replay) => object) => {
     setError(null);
-    Promise.all(replays.map((r) => send("PATCH", `/sessions/${session.id}/replays/${r.sid}`, body(r))))
+    Promise.all(replays.map((r) => send<Replay>("PATCH", `/sessions/${session.id}/replays/${r.sid}`, body(r))))
+      .then(setReplays) // the answer is the new state: the buttons change without waiting for the next poll
       .catch((e: Error) => setError(`Replay control failed (${e.message}).`));
   };
   const jump = (delta: number) => {
