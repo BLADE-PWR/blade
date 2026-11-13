@@ -248,3 +248,16 @@ def test_paused_stream_ages_while_another_plays():
     replayed(w, clock, "s2", [(503 + k / 10, 1003 + k / 10, [tank(1, 900, 900)]) for k in range(50)])
     stale, _ = w.sweep(clock.tick(1008))
     assert [o.oid for o in stale] == ["w-0001"]
+
+
+def test_rewind_forgets_the_stream():
+    w, clock = World("w"), WorldClock(1000.0)
+    replayed(w, clock, "s1", [(500 + k / 10, 1000 + k / 10, [tank(1, 500 + 0.6 * k, 500)]) for k in range(40)])
+    replayed(w, clock, "s2", [(800 + k / 10, 1000 + k / 10, [tank(4, 700, 700)]) for k in range(40)])
+    t, rewind = clock.frame("s1", 501.0, 1004.0)  # a seek 3 s back in s1's recording
+    assert rewind and t >= 1003.9  # the world's time does not go back
+    assert w.forget("s1") == ["w-0001"] and list(w.objects) == ["w-0002"]  # s2's tank stays
+    w.observe("s1", [tank(1, 506, 500)], t)  # the same tid again: a new object, not a jump of the old one
+    replayed(w, clock, "s1", [(501.1 + k / 10, 1004.1 + k / 10, [tank(1, 506 + 0.6 * k, 500)]) for k in range(20)])
+    o = w.objects["w-0003"]
+    assert abs(o.speed - 6) < 1  # no velocity spike from the jump
