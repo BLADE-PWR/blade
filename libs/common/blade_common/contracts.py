@@ -30,7 +30,9 @@ class Envelope(BaseModel):
     delivery: str | None = Field(None, description="'all': a replay that waits for every frame (ack.<sid>)")
     ts: dict[str, float | list[float]] = Field(
         default_factory=dict,
-        description="capture: epoch s; every stage appends [t_in, t_out] under its own name, on its own clock")
+        description="capture: epoch s; every stage appends [t_in, t_out] under its own name, on its own clock; "
+                    "media (replays only): the frame's tel.t_capture in the recording, epoch s; the world model "
+                    "runs a replayed stream on this clock")
     data: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -149,15 +151,19 @@ class WorldObject(BaseModel):
     n_obs: int
     seen_by: list[str]
     tracks: list[tuple[str, int]] = Field(default_factory=list, description="(sid, tid) pairs behind this object")
-    first: float
-    last: float
+    first: float = Field(description="world clock, s: the wall clock live, the recording's time in a replay")
+    last: float = Field(description="world clock, s")
     state: str = Field(description="active | stale (not seen for a few seconds; remembered until expired)")
 
 
 class WorldObjectsData(BaseModel):
     objects: list[WorldObject] = Field(default_factory=list, description="upserts")
     expired: list[str] = Field(default_factory=list, description="oids removed from the world")
+    forgotten: list[str] = Field(default_factory=list,
+                                 description="oids removed without losing contact: merged into another object, or "
+                                             "dropped because their replay went back in time")
     counts: dict[str, float] | None = Field(None, description="active objects per group, median over ~0.5 s")
+    t: float | None = Field(None, description="world clock when published, s: stands still while a replay is paused")
 
 
 class WorldEvent(BaseModel):
