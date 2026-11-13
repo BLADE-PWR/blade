@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 from conftest import frame_image, look_at_tel, write_map
 
+from blade_common.contracts import Envelope
 from blade_detector.oracle import Oracle
 from blade_geometry import Camera, MapPackage
 from blade_georef.project import project_frame
@@ -217,3 +218,52 @@ def test_recover_removes_scraps_and_finalizes_real_streams(tmp_path, ts_bytes):
     m = json.loads((tmp_path / "crashed" / "manifest.json").read_text())
     assert m["recording"] is False and m["recovered"] and m["frames"] > 0
     assert json.loads((tmp_path / "done" / "manifest.json").read_text()) == {"id": "done", "recording": False}
+
+
+class FakeNats:
+    def __init__(self):
+        self.sent = []
+
+    async def publish(self, subject, data, headers=None):
+        self.sent.append((subject, json.loads(data)))
+
+
+class GeoMsg:
+    def __init__(self, env):
+        self.data, self.headers = env.model_dump_json().encode(), None
+
+
+def world_service(monkeypatch):
+    from blade_world import main as wm
+    nc = FakeNats()
+    for name, value in (("state", {"nc": nc}), ("worlds", {}), ("clocks", {}), ("swept", {})):
+        monkeypatch.setattr(wm, name, value)
+    return wm, nc
+
+
+def tank_geo(k, media=None):
+    ts = {"capture": time.time()} | ({"media": media} if media is not None else {})
+    pts = [{"tid": 1, "cls": "tank", "grp": "tank", "conf": 0.9, "xyz": [500.0, 500.0, 5.0], "sigma_m": 1.0}]
+    return GeoMsg(Envelope(sid="rp", wid="w1", frame=k, ts=ts, data={"pts": pts}))
+
+
+async def test_paused_replay_does_not_age_the_world(monkeypatch):
+    wm, nc = world_service(monkeypatch)
+    for k in range(30):
+        await wm.on_geo(tank_geo(k, media=500 + k / 10))
+    t_end = nc.sent[-1][1]["data"]["t"]
+    await wm.sweep_once(time.time() + 120)  # paused for two minutes
+    _, beat = nc.sent[-1]
+    assert beat["data"]["t"] == t_end and not beat["data"].get("objects")  # nothing went stale
+    sent = len(nc.sent)
+    await wm.sweep_once(time.time() + 240)
+    assert len(nc.sent) == sent  # the clock stands still: nothing to publish
+
+
+async def test_live_world_ages_and_beats(monkeypatch):
+    wm, nc = world_service(monkeypatch)
+    for k in range(30):
+        await wm.on_geo(tank_geo(k))
+    await wm.sweep_once(time.time() + 4)  # the drone stopped sending
+    _, beat = nc.sent[-1]
+    assert [o["state"] for o in beat["data"]["objects"]] == ["stale"] and beat["data"]["t"] > time.time() + 3
