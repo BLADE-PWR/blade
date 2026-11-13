@@ -173,7 +173,7 @@ function drawTruth(group: L.LayerGroup, sit: Situation): void {
   for (const t of sit.truth) {
     const match = t.oid ? sit.objects.get(t.oid) : undefined;
     if (match) L.polyline([ll(t.xy), ll(match.xy)], { color: "#ffffff", weight: 1, dashArray: "3 3" }).addTo(group);
-    const html = t.err_m === null ? "" : `<span class="sym-label">${t.err_m.toFixed(0)} m</span>`;
+    const html = t.err_m === undefined ? "" : `<span class="sym-label">${t.err_m.toFixed(0)} m</span>`;
     L.marker(ll(t.xy), { interactive: false, icon: L.divIcon({ className: "truth", iconSize: [14, 14], html }) })
       .addTo(group);
   }

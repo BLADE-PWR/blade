@@ -60,7 +60,7 @@ export type Alert = {
   state: "active" | "cleared";
 };
 
-export type TruthMatch = { truth_id: number; grp: string; xy: Vec2; oid: string | null; err_m: number | null };
+export type TruthMatch = { truth_id: number; grp: string; xy: Vec2; oid?: string; err_m?: number };
 
 export type EvalData = { truth: TruthMatch[] };
 
