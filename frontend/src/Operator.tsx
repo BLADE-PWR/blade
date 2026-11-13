@@ -8,7 +8,16 @@ import type { Alert, Vec2, WorldObject } from "./contracts";
 import { ago, clock } from "./format";
 import { AlertList, EventList, ObjectList } from "./Lists";
 import { MapView, symbolUrl } from "./MapView";
-import { allAlerts, boxVisible, type Filter, shownFrame, type Situation, stageTimes, visible } from "./situation";
+import {
+  allAlerts,
+  boxVisible,
+  type Filter,
+  shownFrame,
+  type Situation,
+  stageTimes,
+  visible,
+  worldNow,
+} from "./situation";
 import { Video } from "./Video";
 
 type Tab = "alerts" | "objects" | "events";
@@ -38,7 +47,7 @@ export function Operator({ sit, sid, main, onMain, onDrone }: Props) {
   const [tab, setTab] = useState<Tab>("alerts");
   const [alertId, setAlertId] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>({ hidden: new Set(), stale: true, minConf: MIN_CONF });
-  const now = Date.now() / 1000;
+  const now = worldNow(sit);
   const drone = sid ? sit.drones.get(sid) : undefined;
   const shown = drone ? shownFrame(drone) : { preview: null, dets: null };
   const object = selected ? sit.objects.get(selected) : undefined;
@@ -178,7 +187,7 @@ type DetailsProps = { sit: Situation; object: WorldObject; onCentre: () => void;
 function Details({ sit, object: o, onCentre, onVideo }: DetailsProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const crop = trackCrop(sit, o);
-  const now = Date.now() / 1000;
+  const now = worldNow(sit);
   // the crop square in preview pixels; the canvas keeps the last one while the object is out of the frame
   const k = crop ? crop.preview.w / crop.img[0] : 1;
   const [x0, y0, x1, y1] = crop ? crop.box.map((v) => v * k) : [0, 0, 0, 0];

@@ -16,6 +16,7 @@ import {
   type Situation,
   stageTimes,
   transmitting,
+  worldNow,
 } from "./situation";
 import { Video } from "./Video";
 
@@ -121,7 +122,7 @@ export function Command({ sit, sids, sid, main, onMain, onDrone, onOperator }: P
         </section>
         <section className="panel tabs" aria-label="Alerts">
           <div className="panel-head"><strong>Alerts</strong> <span className="mono muted">{alerts.length}</span></div>
-          <AlertList alerts={alerts} picked={alert?.aid ?? null} onPick={pickAlert} now={now} />
+          <AlertList alerts={alerts} picked={alert?.aid ?? null} onPick={pickAlert} now={worldNow(sit)} />
         </section>
         <ServiceLine sit={sit} drone={drone} onSettings={() => setSettings(!settings)} />
         {settings && <Settings sit={sit} drone={drone} layer={layer} onLayer={setLayer} />}

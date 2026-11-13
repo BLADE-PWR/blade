@@ -7,7 +7,7 @@ import { recordingName } from "./format";
 import { connect, getJSON, startReplay, type Target } from "./gateway";
 import { Operator } from "./Operator";
 import { ReplayBar } from "./Replay";
-import { addPreview, apply, clearWorld, dispose, emptySituation, latencyS, transmitting } from "./situation";
+import { addPreview, apply, dispose, emptySituation, latencyS, transmitting } from "./situation";
 
 const CLOCK_MS = 1000;
 
@@ -187,7 +187,7 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
       </header>
       {closed && <p className="error banner">WebSocket closed: {closed}</p>}
       {replay && sit.session && (
-        <ReplayBar session={sit.session} onJump={() => clearWorld(sit)} onSwitch={(id) => onPick({ session: id })} />
+        <ReplayBar session={sit.session} onSwitch={(id) => onPick({ session: id })} />
       )}
       {view === "operator"
         ? <Operator sit={sit} sid={sid} main={main} onMain={setMain} onDrone={setPicked} />

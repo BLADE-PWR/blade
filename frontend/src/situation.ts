@@ -45,6 +45,7 @@ export type Situation = {
   alerts: Map<string, Alert[]>;
   truth: TruthMatch[];
   diag: Map<string, DiagData>;
+  clocks: Map<string, number>; // wid -> world clock, s
 };
 
 /** What the operator chose to see: hidden groups and event kinds, remembered objects, the box threshold */
@@ -56,7 +57,7 @@ export const boxVisible = (d: Det, f: Filter) => d.conf >= f.minConf && !f.hidde
 
 export function emptySituation(): Situation {
   return { session: null, drones: new Map(), objects: new Map(), events: new Map(), alerts: new Map(), truth: [],
-    diag: new Map() };
+    diag: new Map(), clocks: new Map() };
 }
 
 function drone(s: Situation, sid: string): Drone {
@@ -93,6 +94,7 @@ export function apply(s: Situation, m: Message): void {
       const snap = m.data as Snapshot;
       upsert(s, snap.objects);
       addEvents(s, snap.events);
+      if (m.wid && snap.t) s.clocks.set(m.wid, snap.t);
       break;
     }
     case "detections":
@@ -110,7 +112,8 @@ export function apply(s: Situation, m: Message): void {
     case "world.objects": {
       const w = m.data as WorldObjectsData;
       upsert(s, w.objects);
-      for (const oid of w.expired) s.objects.delete(oid);
+      for (const oid of [...w.expired, ...(w.forgotten ?? [])]) s.objects.delete(oid);
+      if (m.wid && w.t) s.clocks.set(m.wid, w.t);
       if (m.sid && m.ts) drone(s, m.sid).stamps = m.ts as Stamps;
       break;
     }
@@ -140,12 +143,10 @@ export function addPreview(s: Situation, f: Frame): void {
   while (d.previews.length > PREVIEWS_KEPT) URL.revokeObjectURL(d.previews.shift()!.url);
 }
 
-/** Forget the world after a replay seek; objects come back as the world model updates them. */
-export function clearWorld(s: Situation): void {
-  s.objects.clear();
-  s.events.clear();
-  s.alerts.clear();
-  s.truth = [];
+/** -> the time of the session's worlds: it stands still while a replay is paused, so "last seen" and the
+ * predictions stand too; the browser's clock until a world has sent its own */
+export function worldNow(s: Situation): number {
+  return s.clocks.size ? Math.max(...s.clocks.values()) : Date.now() / 1000;
 }
 
 export function dispose(s: Situation): void {

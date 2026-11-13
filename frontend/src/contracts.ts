@@ -38,11 +38,16 @@ export type WorldObject = {
   state: "active" | "stale";
 };
 
-export type WorldObjectsData = { objects: WorldObject[]; expired: string[] };
+export type WorldObjectsData = {
+  objects: WorldObject[];
+  expired: string[];
+  forgotten?: string[]; // removed without losing contact (merged, or the replay went back)
+  t?: number | null; // world clock, s: stands still while a replay is paused
+};
 
 export type WorldEvent = { eid: string; kind: string; xy: Vec2; t: number; ttl_s: number; sid: string };
 
-export type Snapshot = { objects: WorldObject[]; events: WorldEvent[] };
+export type Snapshot = { objects: WorldObject[]; events: WorldEvent[]; t?: number };
 
 export type Alert = {
   aid: string;

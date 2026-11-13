@@ -9,18 +9,16 @@ import { getJSON, send, startReplay } from "./gateway";
 const POLL_MS = 1000;
 const JUMP_S = 10;
 const SPEEDS = [0.5, 1, 2, 4];
-const REBUILD_NOTE_MS = 5000; // how long the "picture rebuilds" note stays after a jump
 
 const mmss = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${(s % 60).toFixed(1).padStart(4, "0")}`;
 
-type Props = { session: Session; onJump: () => void; onSwitch: (sessionId: string) => void };
+type Props = { session: Session; onSwitch: (sessionId: string) => void };
 
-export function ReplayBar({ session, onJump, onSwitch }: Props) {
+export function ReplayBar({ session, onSwitch }: Props) {
   const sids = session.streams.filter((st) => st.source === "replay").map((st) => st.sid).join(",");
   const [replays, setReplays] = useState<Replay[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<number | null>(null); // the slider position while it is being dragged
-  const [jumpedAt, setJumpedAt] = useState(0);
   const [recording, setRecording] = useState<Recording | null>(null);
   const [missions, setMissions] = useState<Recording[] | null>(null); // the open list of recordings to switch to
 
@@ -60,8 +58,6 @@ export function ReplayBar({ session, onJump, onSwitch }: Props) {
   };
   const jump = (delta: number) => {
     control((r) => ({ seek_s: Math.max(0, r.position_s + delta) }));
-    onJump();
-    setJumpedAt(Date.now());
   };
   const commit = () => {
     if (draft === null) return;
@@ -127,11 +123,6 @@ export function ReplayBar({ session, onJump, onSwitch }: Props) {
         ))}
       </div>
       <label className="inline muted"><input type="checkbox" checked={first.loop} disabled />Loop</label>
-      {Date.now() - jumpedAt < REBUILD_NOTE_MS && (
-        <span className="note">
-          The situation picture rebuilds from this moment. Objects from before the jump were cleared.
-        </span>
-      )}
       {error && <span className="error">{error}</span>}
     </div>
   );

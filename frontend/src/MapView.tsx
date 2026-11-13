@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { colorOf, nameOf, SEVERITY_COLORS } from "./classes";
 import type { Alert, Vec2, WorldObject } from "./contracts";
 import { getJSON } from "./gateway";
-import { type Filter, type Situation, visible } from "./situation";
+import { type Filter, type Situation, visible, worldNow } from "./situation";
 
 const TILE_PX = 256;
 const MIN_ZOOM = -5; // 32 m/px, the coarsest orthophoto level
@@ -293,7 +293,7 @@ export function MapView(props: Props) {
     };
   }, [map, mapId, layer]);
 
-  const now = Date.now() / 1000;
+  const now = worldNow(sit);
   const focusGeo = focus ? sit.drones.get(focus)?.geo : null;
 
   const fitDrones = () => {
