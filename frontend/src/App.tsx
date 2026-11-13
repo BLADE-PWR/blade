@@ -163,7 +163,9 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
         </div>
       </header>
       {closed && <p className="error banner">WebSocket zamknięty: {closed}</p>}
-      {view === "operator" ? <Operator sit={sit} sid={sid} main={main} /> : <p className="todo">Widok dowodzenia</p>}
+      {view === "operator"
+        ? <Operator sit={sit} sid={sid} main={main} onMain={setMain} />
+        : <p className="todo">Widok dowodzenia</p>}
     </div>
   );
 }
