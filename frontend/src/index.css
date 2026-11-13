@@ -656,6 +656,58 @@ button.primary {
   color: #ffb86b;
 }
 
-.todo {
-  padding: 20px;
+/* command view */
+
+.command-map {
+  position: relative;
+  flex: 999 1 600px;
+  min-width: 0;
+  min-height: 680px;
+}
+
+.map-summary {
+  position: absolute;
+  z-index: 1000;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 14px;
+  padding: 6px 12px;
+  border: 1px solid #27303b;
+  border-radius: 8px;
+  background: rgba(13, 16, 21, 0.9);
+  white-space: nowrap;
+}
+
+.drone-row {
+  align-items: center;
+}
+
+.thumb {
+  flex: none;
+  width: 128px;
+  aspect-ratio: 16 / 9;
+  border-radius: 4px;
+  object-fit: cover;
+  background: #0a0c10;
+}
+
+.inline-dot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.open-operator {
+  margin: 0 12px 10px;
+}
+
+.service-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  padding: 10px 12px;
+  font-size: 12px;
 }

@@ -13,6 +13,7 @@ const TILE_PX = 256;
 const MIN_ZOOM = -5; // 32 m/px, the coarsest orthophoto level
 const MAX_ZOOM = 2; // 0.25 m/px
 const START_ZOOM = 1;
+const FIT_PAD_PX = 40;
 const SYMBOL_PX = 20;
 const STACK_PX = 24; // symbols closer than this on screen are drawn as one, with a count
 const ARROW_S = 10; // s of travel the motion arrow shows
@@ -233,9 +234,10 @@ type Props = {
   centre?: { xy: Vec2; at: number } | null;
   alert?: Alert | null;
   filter: Filter;
+  overview?: boolean;
 };
 
-export function MapView({ sit, focus, selected, onSelect, onExpand, centre, alert, filter }: Props) {
+export function MapView({ sit, focus, selected, onSelect, onExpand, centre, alert, filter, overview }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const markers = useRef<Markers>(new Map());
   const [map, setMap] = useState<L.Map | null>(null);
@@ -275,12 +277,18 @@ export function MapView({ sit, focus, selected, onSelect, onExpand, centre, aler
   const now = Date.now() / 1000;
   const focusGeo = focus ? sit.drones.get(focus)?.geo : null;
 
+  const fitDrones = () => {
+    const pts = [...sit.drones.values()].flatMap((d) => (d.geo ? [d.geo.camera, ...d.geo.footprint] : []))
+      .flatMap((p) => (p ? [ll(p)] : []));
+    if (map && pts.length) map.fitBounds(L.latLngBounds(pts), { padding: [FIT_PAD_PX, FIT_PAD_PX] });
+  };
+
   useEffect(() => {
-    if (map && !centred && focusGeo?.centre) {
-      map.setView(ll(focusGeo.centre), START_ZOOM);
-      setCentred(true);
-    }
-  }, [map, centred, focusGeo]);
+    if (!map || centred || !focusGeo?.centre) return;
+    if (overview) fitDrones();
+    else map.setView(ll(focusGeo.centre), START_ZOOM);
+    setCentred(true);
+  });
 
   useEffect(() => {
     if (map && centred && centre) map.panTo(ll(centre.xy));
@@ -298,8 +306,8 @@ export function MapView({ sit, focus, selected, onSelect, onExpand, centre, aler
     syncMarkers(map, markers.current, objects, selected, onSelect);
   });
 
-  const away = map && centred && focusGeo && layers.drones && !map.getBounds().contains(ll(focusGeo.camera))
-    ? map.getCenter() : null;
+  const away = map && centred && !overview && focusGeo && layers.drones &&
+    !map.getBounds().contains(ll(focusGeo.camera)) ? map.getCenter() : null;
 
   return (
     <div className="map">
@@ -325,6 +333,7 @@ export function MapView({ sit, focus, selected, onSelect, onExpand, centre, aler
         )}
       </div>
       {onExpand && <button className="map-expand" onClick={onExpand}>Mapa na główny panel</button>}
+      {overview && <button className="map-expand" onClick={fitDrones}>Pokaż wszystkie drony</button>}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 // Session picker, the live connection and the top bar shared by both views.
 import { type FormEvent, useEffect, useState } from "react";
 
+import { Command } from "./Command";
 import type { Session } from "./contracts";
 import { connect, getJSON, type Target } from "./gateway";
 import { Operator } from "./Operator";
@@ -167,7 +168,7 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
       {replay && sit.session && <ReplayBar session={sit.session} onJump={() => clearWorld(sit)} />}
       {view === "operator"
         ? <Operator sit={sit} sid={sid} main={main} onMain={setMain} onDrone={setPicked} />
-        : <p className="todo">Widok dowodzenia</p>}
+        : <Command sit={sit} sids={sids} sid={sid} onDrone={setPicked} onOperator={() => setView("operator")} />}
     </div>
   );
 }
