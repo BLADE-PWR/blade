@@ -2,7 +2,7 @@
 import { type FormEvent, useEffect, useState } from "react";
 
 import { Command } from "./Command";
-import type { Recording, Session } from "./contracts";
+import type { Alert, Recording, Session } from "./contracts";
 import { recordingName } from "./format";
 import { connect, getJSON, startReplay, type Target } from "./gateway";
 import { Operator } from "./Operator";
@@ -104,6 +104,14 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
       onMessage: (m) => {
         apply(sit, m);
         redraw();
+        if (m.type === "snapshot") { // the bus only carries alert changes: take the active ones once
+          getJSON<Alert[]>(`/api/decision/${m.wid}/alerts`)
+            .then((alerts) => {
+              apply(sit, { type: "alerts", wid: m.wid, data: { alerts } });
+              redraw();
+            })
+            .catch((e: Error) => setError(`Cannot read the active alerts of world ${m.wid} (${e.message}).`));
+        }
       },
       onFrame: (f) => {
         addPreview(sit, f);

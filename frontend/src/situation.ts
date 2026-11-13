@@ -42,7 +42,7 @@ export type Situation = {
   drones: Map<string, Drone>;
   objects: Map<string, WorldObject>;
   events: Map<string, WorldEvent>;
-  alerts: Map<string, Alert[]>;
+  alerts: Map<string, Alert>; // "wid aid" -> active alert
   truth: TruthMatch[];
   diag: Map<string, DiagData>;
   clocks: Map<string, number>; // wid -> world clock, s
@@ -121,7 +121,10 @@ export function apply(s: Situation, m: Message): void {
       addEvents(s, (m.data as { events: WorldEvent[] }).events);
       break;
     case "alerts":
-      if (m.wid) s.alerts.set(m.wid, (m.data as { alerts: Alert[] }).alerts);
+      for (const a of (m.data as { alerts: Alert[] }).alerts) { // only the alerts raised or cleared just now
+        if (a.state === "active") s.alerts.set(`${m.wid} ${a.aid}`, a);
+        else s.alerts.delete(`${m.wid} ${a.aid}`);
+      }
       break;
     case "eval":
       s.truth = (m.data as EvalData).truth;
@@ -171,7 +174,7 @@ export function transmitting(d: Drone, now: number): boolean {
 }
 
 export function allAlerts(s: Situation): Alert[] {
-  return [...s.alerts.values()].flat().filter((a) => a.state === "active");
+  return [...s.alerts.values()];
 }
 
 /** -> seconds from capture to the world model, from the stamps of the drone's latest world update */
