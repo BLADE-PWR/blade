@@ -40,7 +40,7 @@ export function Operator({ sit, sid, main, onMain, onDrone }: Props) {
   const [filter, setFilter] = useState<Filter>({ hidden: new Set(), stale: true, minConf: MIN_CONF });
   const now = Date.now() / 1000;
   const drone = sid ? sit.drones.get(sid) : undefined;
-  const shown = drone ? shownFrame(drone, now) : { preview: null, dets: null };
+  const shown = drone ? shownFrame(drone) : { preview: null, dets: null };
   const object = selected ? sit.objects.get(selected) : undefined;
   const alerts = allAlerts(sit);
   const alert = alerts.find((a) => a.aid === alertId) ?? null;
@@ -166,7 +166,7 @@ function trackCrop(sit: Situation, o: WorldObject) {
   for (const [sid, tid] of [...o.tracks].reverse()) {
     const drone = sit.drones.get(sid);
     if (!drone) continue;
-    const { preview, dets } = shownFrame(drone, Date.now() / 1000);
+    const { preview, dets } = shownFrame(drone);
     const det = dets?.dets.find((d) => d.tid === tid);
     if (preview && dets && det) return { preview, box: det.box, conf: det.conf, img: dets.img };
   }

@@ -132,7 +132,7 @@ export function Command({ sit, sids, sid, main, onMain, onDrone, onOperator }: P
 
 function DroneVideo({ sit, sid, thumb = false }: { sit: Situation; sid: string; thumb?: boolean }) {
   const d = sit.drones.get(sid);
-  const shown = d ? shownFrame(d, Date.now() / 1000) : { preview: null, dets: null };
+  const shown = d ? shownFrame(d) : { preview: null, dets: null };
   return <Video sid={sid} shown={shown} geo={thumb ? null : d?.geo} objects={sit.objects} labels={!thumb} />;
 }
 

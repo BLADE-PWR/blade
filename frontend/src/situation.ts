@@ -21,7 +21,7 @@ const PREVIEWS_KEPT = 30; // per drone, ~2 s at the gateway's 15 fps
 const ROUTE_STEP_M = 5;
 const ROUTE_POINTS = 500;
 const EVENTS_KEPT = 50;
-const DETS_FRESH_S = 1; // older boxes are not drawn over the video
+const DETS_FRESH_S = 1; // boxes this much older than the newest picture are not drawn (a paused replay keeps them)
 const MATCH_FRAMES = 2; // a preview this close to the boxes' frame counts as the same picture
 const SILENT_S = 3; // a drone with no frame for this long is shown as not transmitting
 
@@ -154,10 +154,10 @@ export function dispose(s: Situation): void {
 }
 
 /** -> the picture to show and the boxes that belong to it (none when the boxes are stale or of another frame) */
-export function shownFrame(d: Drone, now: number): { preview: Preview | null; dets: Drone["dets"] } {
+export function shownFrame(d: Drone): { preview: Preview | null; dets: Drone["dets"] } {
   const newest = d.previews.at(-1) ?? null;
   const dets = d.dets;
-  if (!dets || dets.frame === null || now - dets.at > DETS_FRESH_S) return { preview: newest, dets: null };
+  if (!dets || dets.frame === null || d.lastFrameAt - dets.at > DETS_FRESH_S) return { preview: newest, dets: null };
   let best: Preview | null = null;
   for (const p of d.previews) {
     if (p.frame === null || Math.abs(p.frame - dets.frame) > MATCH_FRAMES) continue;
