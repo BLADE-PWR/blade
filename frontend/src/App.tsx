@@ -138,8 +138,8 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
   const sid = picked && sids.includes(picked) ? picked : (sids[0] ?? null);
   const drone = sid ? sit.drones.get(sid) : undefined;
   const replay = sit.session?.streams.some((st) => st.source === "replay") ?? false;
-  const latest = (source: "live" | "replay") => sessions.filter((s) => s.streams.some((st) => st.source === source))
-    .at(-1);
+  const latest = (source: "live" | "replay") => sessions
+    .filter((s) => s.state === "running" && s.streams.some((st) => st.source === source)).at(-1);
   const switchMode = (source: "live" | "replay") => {
     const s = latest(source);
     if (s) onPick({ session: s.id });
