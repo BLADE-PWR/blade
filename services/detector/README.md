@@ -7,6 +7,11 @@ model and makes boxes from sim truth, to measure the rest of the pipeline alone.
 A model package is a folder `models/<name>_v<version>/` with `model.yaml`, `tracker.yaml` and
 `model.onnx`; its id is `<name>@<version>`.
 
+Optional `max_width_m` in `model.yaml` (group -> metres, e.g. `{soldier: 3, tank: 20}`) drops boxes wider on the
+ground than their group can be, before tracking. The width comes from the frame's telemetry: pixel angle times the
+distance to where the box's bottom meets flat ground through the rangefinder point. Frames without `range_m` are not
+filtered.
+
 ## Bus
 
 | | Subject |

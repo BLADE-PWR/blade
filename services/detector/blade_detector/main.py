@@ -24,6 +24,7 @@ from blade_common.service import Diag, env_float, env_int, env_str, run_app
 from blade_common.util import extract, zip_root
 
 from .cluster import Cluster
+from .ground import too_wide
 from .oracle import Oracle
 from .package import ModelPackage, detect_batch, find_packages
 from .tracking import StreamTracker
@@ -144,6 +145,8 @@ class Detector:
             tel = env.data["tel"]
             W, H = tel["image"]["w"], tel["image"]["h"]
             sx, sy = W / img.shape[1], H / img.shape[0]
+            keep = ~too_wide(pkg.max_w, tel, xyxy, cls, sx, sy)
+            xyxy, conf, cls = xyxy[keep], conf[keep], cls[keep]
             rows = self.tracker(sid, pkg).update(xyxy, conf, cls, img)
             dets, used = [], set()
             for x1, y1, x2, y2, tid, cf, c, di in rows:

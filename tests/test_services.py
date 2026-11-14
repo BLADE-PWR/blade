@@ -1,5 +1,6 @@
 import json
 import time
+import types
 
 import numpy as np
 import pytest
@@ -173,6 +174,19 @@ def test_stills_import(tmp_path, pkg):
     assert m["frames"] == 3 and m["source"] == "stills" and m["image"] == {"w": 640, "h": 360}
     kinds = [r["kind"] for r in load_truth(out)]
     assert kinds == ["spawn", "gt", "gt", "gt"]
+
+
+def test_size_filter_drops_boxes_too_wide_on_the_ground():
+    from blade_detector.ground import ground_width_m, too_wide
+
+    flat = types.SimpleNamespace(height=lambda x, y: 0.0)
+    tel = look_at_tel(flat, (0.0, 0.0), 0)
+    px_per_m = 1 / (Camera(tel).ifov_rad() * tel["range_m"])
+    box = np.array([[320 - 2 * px_per_m, 170, 320 + 2 * px_per_m, 180]])  # 4 m wide, bottom on the aim point
+    assert ground_width_m(tel, box)[0] == pytest.approx(4.0, rel=0.02)
+    max_w = np.array([3.0, 20.0])
+    assert too_wide(max_w, tel, np.repeat(box, 2, 0), np.array([0, 1]), 1.0, 1.0).tolist() == [True, False]
+    assert not too_wide(max_w, dict(tel, range_m=None), box, np.array([0]), 1.0, 1.0).any()
 
 
 def test_rendezvous_is_stable():

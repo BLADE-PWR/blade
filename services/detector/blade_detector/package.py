@@ -26,6 +26,7 @@ class ModelPackage:
     nms_iou: float
     enhance: bool
     tracker_args: types.SimpleNamespace
+    max_width_m: dict = field(default_factory=dict)  # group -> widest box on the ground [m]
     meta: dict = field(repr=False, default_factory=dict)
     _session: object = field(default=None, repr=False)
 
@@ -48,7 +49,12 @@ class ModelPackage:
                    classes=classes, group_of=group_of, events=set(m.get("events") or []),
                    conf_detect=float(conf.get("detect", 0.25)), conf_track=float(conf.get("track", 0.1)),
                    nms_iou=float(m.get("nms_iou", 0.7)), enhance=bool((m.get("preprocess") or {}).get("enhance")),
-                   tracker_args=types.SimpleNamespace(**tr), meta=m)
+                   tracker_args=types.SimpleNamespace(**tr), max_width_m=dict(m.get("max_width_m") or {}), meta=m)
+
+    @property
+    def max_w(self) -> np.ndarray:
+        """Per class: widest box on the ground its group can fill, inf without a limit."""
+        return np.array([float(self.max_width_m.get(g, np.inf)) for g in self.group_of])
 
     def session(self):
         if self._session is None:
@@ -68,7 +74,8 @@ class ModelPackage:
     def info(self) -> dict:
         return {"id": self.id, "name": self.name, "version": self.version, "imgsz": self.imgsz,
                 "classes": self.classes, "events": sorted(self.events), "conf": {"detect": self.conf_detect,
-                "track": self.conf_track}, "enhance": self.enhance, "license": self.meta.get("license"),
+                "track": self.conf_track}, "enhance": self.enhance, "max_width_m": self.max_width_m,
+                "license": self.meta.get("license"),
                 "loaded": self._session is not None}
 
 
