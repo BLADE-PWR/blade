@@ -195,6 +195,19 @@ def test_size_filter_drops_boxes_too_big_on_the_ground():
     assert not too_big(max_m, tel, *many, 1.0, 1.0).any()
 
 
+def test_ground_size_holds_at_the_frame_edge():
+    from blade_detector.ground import metres_per_px
+
+    flat = types.SimpleNamespace(height=lambda x, y: 0.0)
+    tel = look_at_tel(flat, (0.0, 0.0), 0, hfov=40.0)
+    cam = Camera(tel)
+    d = cam.rays(600, 300)[0]
+    ground = cam.o + d * (-cam.o[2] / d[2])  # flat ground at z 0, through the aim point
+    (u0, _), (u1, v) = cam.project(np.array([ground - 2 * cam.r, ground + 2 * cam.r]))  # 4 m across, near the edge
+    box = np.array([[u0, v - 5, u1, v]])
+    assert (u1 - u0) * metres_per_px(tel, box)[0] == pytest.approx(4.0, rel=0.01)
+
+
 def test_auto_imgsz_brings_small_objects_to_min_px():
     from blade_detector.ground import auto_imgsz
 
@@ -207,6 +220,7 @@ def test_auto_imgsz_brings_small_objects_to_min_px():
     assert auto_imgsz(1280, dict(auto, max=1536), tel, 1280, 720) == 1536
     assert auto_imgsz(1280, auto, dict(tel, camera=dict(tel["camera"], hfov_deg=5.0)), 1280, 720) == 1280
     assert auto_imgsz(1536, {}, tel, 1280, 720) == 1536
+    assert auto_imgsz(1280, auto, dict(tel, range_m=float("nan")), 1280, 720) == 1280
 
 
 def test_rendezvous_is_stable():

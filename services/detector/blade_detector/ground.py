@@ -14,17 +14,17 @@ MIN_STRONG = 3
 
 
 def metres_per_px(tel: dict, xyxy: np.ndarray) -> np.ndarray:
-    """Metres per tel image pixel at each box: pixel angle x distance to where the box's bottom centre meets flat
-    ground through the rangefinder point. NaN without a range or above the horizon."""
+    """Metres per tel image pixel at each box: centre pixel angle x depth along the optical axis of where the box's
+    bottom centre meets flat ground through the rangefinder point. NaN without a range or above the horizon."""
     rng = tel.get("range_m") or 0.0
-    if rng <= 0 or not len(xyxy):
+    if not rng > 0 or not len(xyxy):
         return np.full(len(xyxy), np.nan)
     cam = Camera(tel)
     d = cam.rays((xyxy[:, 0] + xyxy[:, 2]) / 2, xyxy[:, 3])
     with np.errstate(divide="ignore", invalid="ignore"):
         t = rng * cam.f[2] / d[:, 2]
     t = np.where(t > 0, np.minimum(t, 2 * rng), np.nan)  # cap: hills break the flat ground far off
-    return cam.ifov_rad() * t
+    return cam.ifov_rad() * t * (d @ cam.f)
 
 
 def too_big(max_m: np.ndarray, tel: dict, xyxy: np.ndarray, conf: np.ndarray, cls: np.ndarray, sx: float,
@@ -48,7 +48,7 @@ def auto_imgsz(base: int, auto: dict, tel: dict, img_w: int, img_h: int) -> int:
     """Model input size (multiple of 128, base..auto["max"]) at which an object of auto["object_m"] metres at the
     rangefinder point is auto["min_px"] px. base without a range."""
     rng = tel.get("range_m") or 0.0
-    if not auto or rng <= 0:
+    if not auto or not rng > 0:
         return base
     px_per_m = img_w / tel["image"]["w"] / (Camera(tel).ifov_rad() * rng)  # decoded image px per metre
     need = max(img_w, img_h) * auto["min_px"] / (auto["object_m"] * px_per_m)
