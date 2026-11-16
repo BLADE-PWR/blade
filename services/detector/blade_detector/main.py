@@ -24,7 +24,7 @@ from blade_common.service import Diag, env_float, env_int, env_str, run_app
 from blade_common.util import extract, zip_root
 
 from .cluster import Cluster
-from .ground import too_wide
+from .ground import auto_imgsz, too_big
 from .oracle import Oracle
 from .package import ModelPackage, detect_batch, find_packages
 from .tracking import StreamTracker
@@ -135,17 +135,18 @@ class Detector:
             raise RuntimeError(f"no model package {model_id} in {MODELS_DIR}")
         imgs = [cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR) for _, _, jpeg, _ in items]
         groups: dict[tuple, list[int]] = {}
-        for i, im in enumerate(imgs):
-            groups.setdefault(im.shape, []).append(i)
+        for i, (im, (_, env, _, _)) in enumerate(zip(imgs, items)):
+            size = auto_imgsz(pkg.imgsz, pkg.auto_imgsz, env.data["tel"], im.shape[1], im.shape[0])
+            groups.setdefault((im.shape, size), []).append(i)
         results: list = [None] * len(items)
-        for idx in groups.values():
-            for i, r in zip(idx, detect_batch(pkg, [imgs[i] for i in idx], pkg.conf_track)):
+        for (_, size), idx in groups.items():
+            for i, r in zip(idx, detect_batch(pkg, [imgs[i] for i in idx], pkg.conf_track, imgsz=size)):
                 results[i] = r
         for (sid, env, _jpeg, t_in), img, (xyxy, conf, cls) in zip(items, imgs, results):
             tel = env.data["tel"]
             W, H = tel["image"]["w"], tel["image"]["h"]
             sx, sy = W / img.shape[1], H / img.shape[0]
-            keep = ~too_wide(pkg.max_w, tel, xyxy, cls, sx, sy)
+            keep = ~too_big(pkg.max_m, tel, xyxy, conf, cls, sx, sy)
             xyxy, conf, cls = xyxy[keep], conf[keep], cls[keep]
             rows = self.tracker(sid, pkg).update(xyxy, conf, cls, img)
             dets, used = [], set()

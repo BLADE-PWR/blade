@@ -176,17 +176,37 @@ def test_stills_import(tmp_path, pkg):
     assert kinds == ["spawn", "gt", "gt", "gt"]
 
 
-def test_size_filter_drops_boxes_too_wide_on_the_ground():
-    from blade_detector.ground import ground_width_m, too_wide
+def test_size_filter_drops_boxes_too_big_on_the_ground():
+    from blade_detector.ground import metres_per_px, too_big
 
     flat = types.SimpleNamespace(height=lambda x, y: 0.0)
     tel = look_at_tel(flat, (0.0, 0.0), 0)
     px_per_m = 1 / (Camera(tel).ifov_rad() * tel["range_m"])
     box = np.array([[320 - 2 * px_per_m, 170, 320 + 2 * px_per_m, 180]])  # 4 m wide, bottom on the aim point
-    assert ground_width_m(tel, box)[0] == pytest.approx(4.0, rel=0.02)
-    max_w = np.array([3.0, 20.0])
-    assert too_wide(max_w, tel, np.repeat(box, 2, 0), np.array([0, 1]), 1.0, 1.0).tolist() == [True, False]
-    assert not too_wide(max_w, dict(tel, range_m=None), box, np.array([0]), 1.0, 1.0).any()
+    assert 1 / metres_per_px(tel, box)[0] == pytest.approx(px_per_m, rel=0.02)
+    tall = np.array([[318, 180 - 4 * px_per_m, 322, 180]])  # 4 m tall, narrow
+    max_m = np.array([3.0, 20.0])
+    two = np.repeat(box, 2, 0), np.array([0.9, 0.9]), np.array([0, 1])
+    assert too_big(max_m, tel, two[0], *two[1:], 1.0, 1.0).tolist() == [True, False]
+    assert too_big(max_m, tel, tall, np.array([0.9]), np.array([0]), 1.0, 1.0).tolist() == [True]
+    assert not too_big(max_m, dict(tel, range_m=None), box, np.array([0.9]), np.array([0]), 1.0, 1.0).any()
+    # most confident boxes too big: the telemetry is wrong, not the boxes
+    many = np.repeat(box, 4, 0), np.full(4, 0.9), np.zeros(4, int)
+    assert not too_big(max_m, tel, *many, 1.0, 1.0).any()
+
+
+def test_auto_imgsz_brings_small_objects_to_min_px():
+    from blade_detector.ground import auto_imgsz
+
+    flat = types.SimpleNamespace(height=lambda x, y: 0.0)
+    tel = look_at_tel(flat, (0.0, 0.0), 0, w=1280, h=720, hfov=34.0, dist_m=300.0, alt_m=120.0)
+    auto = {"max": 2304, "object_m": 7.0, "min_px": 60}
+    px_per_m = 1 / (Camera(tel).ifov_rad() * tel["range_m"])
+    size = auto_imgsz(1280, auto, tel, 1280, 720)
+    assert size % 128 == 0 and 7 * px_per_m * size / 1280 >= 60 > 7 * px_per_m * (size - 128) / 1280
+    assert auto_imgsz(1280, dict(auto, max=1536), tel, 1280, 720) == 1536
+    assert auto_imgsz(1280, auto, dict(tel, camera=dict(tel["camera"], hfov_deg=5.0)), 1280, 720) == 1280
+    assert auto_imgsz(1536, {}, tel, 1280, 720) == 1536
 
 
 def test_rendezvous_is_stable():

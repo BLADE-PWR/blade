@@ -7,10 +7,15 @@ model and makes boxes from sim truth, to measure the rest of the pipeline alone.
 A model package is a folder `models/<name>_v<version>/` with `model.yaml`, `tracker.yaml` and
 `model.onnx`; its id is `<name>@<version>`.
 
-Optional `max_width_m` in `model.yaml` (group -> metres, e.g. `{soldier: 3, tank: 20}`) drops boxes wider on the
-ground than their group can be, before tracking. The width comes from the frame's telemetry: pixel angle times the
-distance to where the box's bottom meets flat ground through the rangefinder point. Frames without `range_m` are not
-filtered.
+Optional `max_size_m` in `model.yaml` (group -> metres, e.g. `{soldier: 3, tank: 25}`) drops boxes whose longer side
+is longer on the ground than their group can be, before tracking. The size comes from the frame's telemetry: pixel angle
+times the distance to where the box's bottom meets flat ground through the rangefinder point. Frames without `range_m`
+are not filtered, and neither are frames where most confident boxes come out too big (telemetry of another scene or
+behind a zoom change).
+
+Optional `auto_imgsz: {max: 1920, object_m: 7, min_px: 60}` raises the model input above `imgsz`, up to `max`, until an
+object of `object_m` metres at the rangefinder point is `min_px` px at the input: far scenes get the object sizes the
+model was trained on, close ones stay cheap.
 
 ## Bus
 
