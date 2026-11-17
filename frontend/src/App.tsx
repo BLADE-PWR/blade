@@ -68,7 +68,7 @@ function Pick({ onPick }: { onPick: (t: Target) => void }) {
         {recordings.map((r) => (
           <li key={r.id}>
             <button onClick={() => replay(r)}>Replay</button> {recordingName(r)}, drone {r.sid}
-            {!r.has_truth && ", without true positions"}
+            {r.has_truth === false && ", without true positions"}
           </li>
         ))}
       </ul>

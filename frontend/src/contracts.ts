@@ -88,6 +88,6 @@ export type Recording = {
   map: string;
   scene: string | null;
   started: number;
-  duration_s: number;
-  has_truth: boolean;
+  duration_s?: number; // both missing while the recording is still being written
+  has_truth?: boolean;
 };

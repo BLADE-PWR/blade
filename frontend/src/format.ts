@@ -12,4 +12,4 @@ export function ago(t: number, now: number): string {
 
 export const recordingName = (r: Recording) =>
   `${r.scene ?? r.id}, ${new Date(r.started * 1000).toLocaleDateString("en-CA")} ${clock(r.started).slice(0, 5)}, ` +
-  `${r.duration_s.toFixed(0)} s`;
+  (r.duration_s == null ? "still recording" : `${r.duration_s.toFixed(0)} s`);

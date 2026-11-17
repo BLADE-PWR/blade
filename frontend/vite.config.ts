@@ -8,5 +8,5 @@ const rest = Object.fromEntries(["/api", "/sessions", "/detectors", "/streams"].
 export default defineConfig({
   plugins: [react()],
   build: { chunkSizeWarningLimit: 1500 }, // kB; milsymbol alone is about 1 MB and the app is served on the LAN
-  server: { proxy: { ...rest, "/ws": { target: gateway, ws: true } } },
+  server: { host: true, proxy: { ...rest, "/ws": { target: gateway, ws: true } } },
 });

@@ -18,8 +18,11 @@ from blade_common import klv
 
 log = logging.getLogger("ingest.source")
 # FFmpeg's H.264 parser holds each frame until the next starts (one frame of latency). The uplink
-# writes one access unit per PES, so it is off.
-DEMUX_OPTIONS = {"probesize": "1000000", "analyzeduration": "300000", "fflags": "+noparse+nofillin"}
+# writes one access unit per PES, so it is off. Without the parser nothing re-joins what the demuxer cuts,
+# so its packet limit (default 200 KiB, smaller than a 1080p keyframe) is raised: a cut frame decodes as
+# a top half over garbage. 4 MiB: each in-flight frame of unknown length gets a buffer this big.
+DEMUX_OPTIONS = {"probesize": "1000000", "analyzeduration": "300000", "fflags": "+noparse+nofillin",
+                 "max_packet_size": str(4 << 20)}
 
 
 class PipeReader(io.RawIOBase):

@@ -12,7 +12,6 @@ from blade_common import ports
 from blade_common.service import setup_logging
 
 from .encoder import TsWriter
-from .screen import DxcamScreen
 from .telemetry import Telemetry
 from .transport import TcpSink, UdpSink
 
@@ -40,7 +39,9 @@ def main(argv: list[str] | None = None) -> int:
     fps = args.fps
     bar = frame_code.Bar(0, 0, args.bar_size, args.bar_bits)
     tel = Telemetry(TEL_LISTEN, args.sid, (args.server, ports.TRUTH_UDP), wrap=bar.wrap)
-    screen = DxcamScreen()
+    import dxcam  # Windows only (DXGI desktop duplication), so imported here and not at the top
+
+    screen = dxcam.create(output_idx=0, output_color="BGR")  # monitor 0, whole screen
 
     stop = False
 
@@ -110,7 +111,7 @@ def main(argv: list[str] | None = None) -> int:
             writer.close()
         else:
             sink.close()
-        screen.close()
+        screen.release()
         tel.close()
     return 0
 
