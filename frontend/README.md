@@ -35,7 +35,8 @@ npm run dev
 
 Open http://localhost:5173. Pick a running session, or click Replay next to a recording: that creates and
 starts a session with a looping replay (each with a new `sid`, so it does not replace other replays). The Replay
-button in the top bar brings you back to the recordings.
+button in the top bar brings you back to the recordings. The dev server listens on all interfaces, so other
+devices on the LAN open http://<server-ip>:5173 (port 5173 must be open in the firewall).
 
 For the command view with two drones, create a session with two streams in one world by hand:
 ```bash
