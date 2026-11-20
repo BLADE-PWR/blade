@@ -36,9 +36,9 @@ URLS = {
 }
 PREVIEW_FPS = env_float("PREVIEW_FPS", 15.0)
 PREVIEW_W = env_int("PREVIEW_W", 960)
-PROXIES = {"models": ("detector", "/models"), "recordings": ("sessions", "/recordings"),
-           "replays": ("sessions", "/replays"), "maps": ("terrain", "/maps"), "worlds": ("world", "/worlds"),
-           "decision": ("decision", "/worlds"), "eval": ("evaluator", "/worlds")}
+PROXIES = {"models": ("detector", "/models"), "detector": ("detector", "/streams"),
+           "recordings": ("sessions", "/recordings"), "replays": ("sessions", "/replays"), "maps": ("terrain", "/maps"),
+           "worlds": ("world", "/worlds"), "decision": ("decision", "/worlds"), "eval": ("evaluator", "/worlds")}
 
 orch = Orchestrator(URLS, Path(env_str("SESSIONS_STORE", "state/gateway_sessions.json")))
 state: dict = {"nc": None, "http": None}

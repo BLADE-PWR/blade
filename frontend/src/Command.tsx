@@ -19,7 +19,7 @@ import {
 } from "./situation";
 import { Video } from "./Video";
 
-const ALL: Filter = { hidden: new Set(), stale: true, minConf: 0 };
+const ALL: Filter = { hidden: new Set(), stale: true };
 
 type Props = {
   sit: Situation;

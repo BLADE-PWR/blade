@@ -15,7 +15,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 from fastapi import FastAPI, HTTPException, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from blade_common import ports
 from blade_common.bus import close, connect, decode, forward, now, publish
@@ -55,6 +55,11 @@ class Detector:
 
     def model_for(self, sid: str) -> str:
         return self.cluster.model(sid) or DEFAULT_MODEL
+
+    def conf_for(self, sid: str) -> float:
+        """The stream's box confidence threshold; by default the model's tracker threshold (conf.track)."""
+        conf, pkg = self.cluster.conf(sid), self.packages.get(self.model_for(sid))
+        return conf if conf is not None else pkg.conf_track if pkg else 0.0
 
     def status(self) -> dict:
         t = now()
@@ -149,12 +154,13 @@ class Detector:
             keep = ~too_big(pkg.max_m, tel, xyxy, conf, cls, sx, sy)
             xyxy, conf, cls = xyxy[keep], conf[keep], cls[keep]
             rows = self.tracker(sid, pkg).update(xyxy, conf, cls, img)
-            dets, used = [], set()
+            dets, used, floor = [], set(), self.conf_for(sid)
             for x1, y1, x2, y2, tid, cf, c, di in rows:
                 used.add(int(di))
-                dets.append(_det(pkg, int(c), float(cf), (x1, y1, x2, y2), sx, sy, int(tid)))
+                if cf >= floor:  # weaker tracked boxes still keep the track alive inside the tracker
+                    dets.append(_det(pkg, int(c), float(cf), (x1, y1, x2, y2), sx, sy, int(tid)))
             for i in range(len(conf)):
-                if i not in used and conf[i] >= pkg.conf_detect:
+                if i not in used and conf[i] >= max(floor, pkg.conf_detect):
                     dets.append(_det(pkg, int(cls[i]), float(conf[i]), xyxy[i], sx, sy, None))
             data = DetectionsData(model=pkg.id, img=(W, H), dets=dets, tel=tel)
             out.append(forward(env, data.model_dump(exclude_none=True), "detector", t_in))
@@ -242,10 +248,25 @@ class StreamModel(BaseModel):
 async def set_model(sid: str, body: StreamModel):
     if body.model not in svc.packages and body.model not in ORACLE_IDS:
         _404(body.model)
-    await svc.cluster.set_model(sid, body.model)
+    await svc.cluster.set(sid, model=body.model, conf=None)  # a threshold belongs to its model
     for key in [k for k in svc.trackers if k[0] == sid]:
         del svc.trackers[key]
     return {"sid": sid, "model": body.model}
+
+
+class StreamConf(BaseModel):
+    conf: float = Field(ge=0.0, le=1.0)
+
+
+@app.get("/streams/{sid}/conf")
+async def get_conf(sid: str):
+    return {"sid": sid, "conf": svc.conf_for(sid)}
+
+
+@app.put("/streams/{sid}/conf")
+async def set_conf(sid: str, body: StreamConf):
+    await svc.cluster.set(sid, conf=body.conf)
+    return {"sid": sid, "conf": body.conf}
 
 
 @app.get("/cluster")

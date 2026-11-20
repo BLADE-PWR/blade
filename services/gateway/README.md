@@ -33,6 +33,7 @@ Session body:
 | Prefix | Service | Path there |
 |---|---|---|
 | `/api/models` | [detector](../detector/README.md) | `/models` |
+| `/api/detector` | [detector](../detector/README.md) | `/streams` (model and threshold of a stream) |
 | `/api/recordings` | [sessions](../sessions/README.md) | `/recordings` |
 | `/api/replays` | [sessions](../sessions/README.md) | `/replays` |
 | `/api/maps` | [terrain](../terrain/README.md) | `/maps` |

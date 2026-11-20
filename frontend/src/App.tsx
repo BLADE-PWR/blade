@@ -7,7 +7,7 @@ import { recordingName } from "./format";
 import { connect, getJSON, startReplay, type Target } from "./gateway";
 import { Operator } from "./Operator";
 import { ReplayBar } from "./Replay";
-import { addPreview, apply, dispose, emptySituation, latencyS, transmitting } from "./situation";
+import { addPreview, apply, dispose, emptySituation, type Filter, latencyS, transmitting } from "./situation";
 
 const CLOCK_MS = 1000;
 
@@ -91,6 +91,7 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
   const [view, setView] = useState<View>("operator");
   const [main, setMain] = useState<MainPanel>("video");
   const [picked, setPicked] = useState<string | null>(null);
+  const [filter, setFilter] = useState<Filter>({ hidden: new Set(), stale: true });
 
   useEffect(() => {
     let frame = 0;
@@ -201,7 +202,8 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
         <ReplayBar session={sit.session} onSwitch={(id) => onPick({ session: id })} />
       )}
       {view === "operator"
-        ? <Operator sit={sit} sid={sid} main={main} onMain={setMain} onDrone={setPicked} />
+        ? <Operator sit={sit} sid={sid} main={main} onMain={setMain} onDrone={setPicked} filter={filter}
+          onFilter={setFilter} />
         : <Command sit={sit} sids={sids} sid={sid} main={main} onMain={setMain} onDrone={setPicked}
           onOperator={() => setView("operator")} />}
     </div>

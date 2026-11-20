@@ -49,11 +49,11 @@ export type Situation = {
   clocks: Map<string, number>; // wid -> s
 };
 
-export type Filter = { hidden: Set<string>; stale: boolean; minConf: number };
+export type Filter = { hidden: Set<string>; stale: boolean };
 
 export const visible = (o: WorldObject, f: Filter) => !f.hidden.has(o.grp) && (f.stale || o.state === "active");
 
-export const boxVisible = (d: Det, f: Filter) => d.conf >= f.minConf && !f.hidden.has(d.grp);
+export const boxVisible = (d: Det, f: Filter) => !f.hidden.has(d.grp);
 
 export function emptySituation(): Situation {
   return { session: null, drones: new Map(), objects: new Map(), events: new Map(), alerts: new Map(), truth: [],

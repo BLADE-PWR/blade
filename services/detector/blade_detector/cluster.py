@@ -49,8 +49,13 @@ class Cluster:
     def model(self, sid: str) -> str | None:
         return (self.assign.get(sid) or {}).get("model")
 
-    async def set_model(self, sid: str, model: str) -> None:
-        self.assign[sid] = a = dict(self.assign.get(sid) or {}, model=model)
+    def conf(self, sid: str) -> float | None:
+        return (self.assign.get(sid) or {}).get("conf")
+
+    async def set(self, sid: str, **fields) -> None:
+        """Merges fields into the stream's entry as KV has it now, not as the last refresh saw it."""
+        cur = (await kv_read(self.kv_assign, sid)).get(sid) if self.kv_assign is not None else None
+        self.assign[sid] = a = dict(cur or self.assign.get(sid) or {}, **fields)
         if self.kv_assign is not None:
             await self.kv_assign.put(sid, json.dumps(a).encode())
 

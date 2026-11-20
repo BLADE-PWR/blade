@@ -5,6 +5,7 @@ import type { MainPanel } from "./App";
 import { colorOf, EVENT_KINDS, GROUPS, nameOf } from "./classes";
 import type { Alert, Vec2, WorldObject } from "./contracts";
 import { ago, clock } from "./format";
+import { getJSON, send } from "./gateway";
 import { AlertList, EventList, ObjectList } from "./Lists";
 import { MapView, symbolUrl } from "./MapView";
 import {
@@ -26,7 +27,6 @@ const TABS: [Tab, string, (s: Situation) => number][] = [
   ["events", "Events", (s) => s.events.size],
 ];
 
-const MIN_CONF = 0.25; // the detector's own threshold
 const SLOW_STAGE_S = 0.1;
 const CROP_PX = 112;
 const CROP_MARGIN = 1.6; // crop side / box side
@@ -38,14 +38,15 @@ type Props = {
   main: MainPanel;
   onMain: (p: MainPanel) => void;
   onDrone: (sid: string) => void;
+  filter: Filter;
+  onFilter: (f: Filter) => void;
 };
 
-export function Operator({ sit, sid, main, onMain, onDrone }: Props) {
+export function Operator({ sit, sid, main, onMain, onDrone, filter, onFilter }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
   const [centre, setCentre] = useState<{ xy: Vec2; at: number } | null>(null);
   const [tab, setTab] = useState<Tab>("alerts");
   const [alertId, setAlertId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<Filter>({ hidden: new Set(), stale: true, minConf: MIN_CONF });
   const now = worldNow(sit);
   const drone = sid ? sit.drones.get(sid) : undefined;
   const shown = drone ? shownFrame(drone) : { preview: null, dets: null };
@@ -120,7 +121,7 @@ export function Operator({ sit, sid, main, onMain, onDrone }: Props) {
           </section>
         </aside>
       </div>
-      <BottomBar sit={sit} sid={sid} filter={filter} onFilter={setFilter} />
+      <BottomBar sit={sit} sid={sid} filter={filter} onFilter={onFilter} />
     </>
   );
 }
@@ -147,12 +148,7 @@ function BottomBar({ sit, sid, filter, onFilter }: BarProps) {
           </button>
         ))}
       </div>
-      <label className="inline">
-        Box confidence from
-        <input type="range" min="0" max="1" step="0.05" value={filter.minConf}
-          onChange={(e) => onFilter({ ...filter, minConf: Number(e.target.value) })} />
-        <span className="mono">{filter.minConf.toFixed(2)}</span>
-      </label>
+      {sid && <ConfSlider sid={sid} />}
       <label className="inline">
         <input type="checkbox" checked={filter.stale} onChange={() => onFilter({ ...filter, stale: !filter.stale })} />
         Not seen now
@@ -166,6 +162,41 @@ function BottomBar({ sit, sid, filter, onFilter }: BarProps) {
         {dropped !== undefined && <span>dropped <span className="value">{dropped}</span></span>}
       </div>
     </footer>
+  );
+}
+
+// The detector's threshold for this stream: boxes below it reach neither the video nor the map.
+function ConfSlider({ sid }: { sid: string }) {
+  const [conf, setConf] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const path = `/api/detector/${encodeURIComponent(sid)}/conf`;
+
+  useEffect(() => {
+    let current = true; // a late answer for the previous drone must not overwrite this one
+    setConf(null);
+    setError(null);
+    getJSON<{ conf: number }>(path)
+      .then((r) => current && setConf(r.conf))
+      .catch((e: Error) => current && setError(`Cannot read the detector threshold: ${e.message}`));
+    return () => {
+      current = false;
+    };
+  }, [path]);
+
+  const save = (v: number) =>
+    send("PUT", path, { conf: v })
+      .then(() => setError(null))
+      .catch((e: Error) => setError(`Threshold not saved: ${e.message}`));
+
+  if (conf === null) return error ? <span className="error">{error}</span> : null;
+  return (
+    <label className="inline">
+      Box confidence from
+      <input type="range" min="0" max="1" step="0.05" value={conf} onChange={(e) => setConf(Number(e.target.value))}
+        onPointerUp={(e) => save(Number(e.currentTarget.value))} onKeyUp={(e) => save(Number(e.currentTarget.value))} />
+      <span className="mono">{conf.toFixed(2)}</span>
+      {error && <span className="error">{error}</span>}
+    </label>
   );
 }
 

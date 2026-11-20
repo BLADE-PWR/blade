@@ -234,6 +234,24 @@ def test_rendezvous_is_stable():
     assert all(three[s] == "c" for s in moved)  # adding a replica only takes streams, never shuffles
 
 
+async def test_stream_threshold_defaults_to_the_model_and_can_be_set(monkeypatch):
+    from pydantic import ValidationError
+
+    from blade_detector import main as det
+    from blade_detector.cluster import Cluster
+
+    monkeypatch.setattr(det.svc, "cluster", Cluster("one"))
+    monkeypatch.setattr(det.svc, "packages", {det.DEFAULT_MODEL: types.SimpleNamespace(conf_track=0.1)})
+    assert (await det.get_conf("s1"))["conf"] == 0.1
+    await det.set_conf("s1", det.StreamConf(conf=0.0))
+    assert (await det.get_conf("s1"))["conf"] == 0.0
+    assert (await det.get_conf("s2"))["conf"] == 0.1
+    with pytest.raises(ValidationError):
+        det.StreamConf(conf=1.5)
+    await det.set_model("s1", det.StreamModel(model=det.DEFAULT_MODEL))
+    assert (await det.get_conf("s1"))["conf"] == 0.1
+
+
 class _Msg:
     def __init__(self, subject, data, t):
         self.subject, self.data, self.headers = subject, data, {"t": str(t)}
