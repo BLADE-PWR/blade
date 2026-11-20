@@ -13,8 +13,6 @@ state/
 *.ts
 !frontend/**/*.ts
 
-# Model weights stay out of git (copy best.onnx into the package, or use Git LFS)
-*.onnx
 *.pt
 
 # Frontend
