@@ -4,7 +4,7 @@ import ms, { type Symbol as MilSymbol } from "milsymbol";
 import { useEffect, useRef, useState } from "react";
 
 import { colorOf, nameOf, SEVERITY_COLORS } from "./classes";
-import type { Alert, Vec2, WorldObject } from "./contracts";
+import type { Alert, Prediction, Vec2, WorldObject } from "./contracts";
 import { getJSON } from "./gateway";
 import { type Filter, type Situation, visible, worldNow } from "./situation";
 
@@ -138,7 +138,17 @@ function drawMotion(group: L.LayerGroup, o: WorldObject, selected: boolean, now:
     .addTo(group);
   const tip: Vec2 = [o.xy[0] + o.vel[0] * ARROW_S, o.xy[1] + o.vel[1] * ARROW_S];
   L.polyline([ll(o.xy), ll(tip)], { color, weight: 3 }).addTo(group);
-  for (const p of preds) L.circleMarker(ll(p.xy), { radius: 3, color, fillOpacity: 1, weight: 0 }).addTo(group);
+  L.polyline([o.xy, ...preds.map((p) => p.xy)].map(ll), { color, weight: 1, opacity: 0.6, dashArray: "2 5" })
+    .addTo(group);
+  for (const p of preds) horizonMarker(p, color, selected).addTo(group);
+}
+
+function horizonMarker(p: Prediction, color: string, labelled: boolean): L.Marker {
+  const ring = p.dt_s > HORIZON_S ? " ring" : "";
+  const label = labelled ? `<span class="horizon-label">${Math.round(p.dt_s)} s</span>` : "";
+  const icon = L.divIcon({ className: "horizon", iconSize: [12, 12],
+    html: `<span class="horizon-dot${ring}" style="--c:${color}"></span>${label}` });
+  return L.marker(ll(p.xy), { icon, interactive: false, keyboard: false });
 }
 
 function drawDrones(group: L.LayerGroup, sit: Situation, focus: string | null): void {
