@@ -66,7 +66,7 @@ export type EvalData = { truth: TruthMatch[] };
 
 export type StreamDiag = { fps_in: number; fps_out: number; dropped: number; latency_ms?: number | null };
 
-export type DiagData = { service: string; streams: Record<string, StreamDiag> };
+export type DiagData = { service: string; instance?: string | null; streams: Record<string, StreamDiag> };
 
 export type SessionStream = { sid: string; wid: string; source: "live" | "replay"; recording?: string | null };
 

@@ -44,7 +44,8 @@ export type Situation = {
   events: Map<string, WorldEvent>;
   alerts: Map<string, Alert>; // key "wid aid"
   truth: TruthMatch[];
-  diag: Map<string, DiagData>;
+  diag: Map<string, DiagData>; // service -> streams of all its replicas
+  replicas: Map<string, DiagData & { at: number }>; // "service instance" -> that replica's last report
   clocks: Map<string, number>; // wid -> s
 };
 
@@ -56,7 +57,7 @@ export const boxVisible = (d: Det, f: Filter) => d.conf >= f.minConf && !f.hidde
 
 export function emptySituation(): Situation {
   return { session: null, drones: new Map(), objects: new Map(), events: new Map(), alerts: new Map(), truth: [],
-    diag: new Map(), clocks: new Map() };
+    diag: new Map(), replicas: new Map(), clocks: new Map() };
 }
 
 function drone(s: Situation, sid: string): Drone {
@@ -130,7 +131,14 @@ export function apply(s: Situation, m: Message): void {
       break;
     case "diag": {
       const diag = m.data as DiagData;
-      s.diag.set(diag.service, diag);
+      const now = Date.now() / 1000;
+      s.replicas.set(`${diag.service} ${diag.instance ?? ""}`, { ...diag, at: now });
+      const streams = {};
+      for (const [key, r] of s.replicas) {
+        if (now - r.at >= SILENT_S) s.replicas.delete(key);
+        else if (r.service === diag.service) Object.assign(streams, r.streams);
+      }
+      s.diag.set(diag.service, { ...diag, streams });
       break;
     }
   }
@@ -158,12 +166,14 @@ export function shownFrame(d: Drone): { preview: Preview | null; dets: Drone["de
   const newest = d.previews.at(-1) ?? null;
   const dets = d.dets;
   if (!dets || dets.frame === null || d.lastFrameAt - dets.at > DETS_FRESH_S) return { preview: newest, dets: null };
-  let best: Preview | null = null;
-  for (const p of d.previews) {
-    if (p.frame === null || Math.abs(p.frame - dets.frame) > MATCH_FRAMES) continue;
-    if (!best || Math.abs(p.frame - dets.frame) < Math.abs(best.frame! - dets.frame)) best = p;
+  const framed = d.previews.filter((p) => p.frame !== null) as (Preview & { frame: number })[];
+  let best: (typeof framed)[number] | null = null;
+  let gap = MATCH_FRAMES;
+  for (const [i, p] of framed.entries()) {
+    if (i > 0) gap = Math.max(gap, p.frame - framed[i - 1].frame);
+    if (!best || Math.abs(p.frame - dets.frame) < Math.abs(best.frame - dets.frame)) best = p;
   }
-  return best ? { preview: best, dets } : { preview: newest, dets: null };
+  return best && Math.abs(best.frame - dets.frame) <= gap ? { preview: best, dets } : { preview: newest, dets: null };
 }
 
 export function transmitting(d: Drone, now: number): boolean {
