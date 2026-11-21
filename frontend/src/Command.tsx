@@ -1,4 +1,4 @@
-// View 2: every drone of the session, with the map or the video on the main panel.
+// View 2: every drone in view, with the map or the video on the main panel.
 import { useEffect, useState } from "react";
 
 import type { MainPanel } from "./App";
@@ -214,7 +214,7 @@ type SettingsProps = { sit: Situation; drone?: Drone; layer: Background; onLayer
 function Settings({ sit, drone, layer, onLayer }: SettingsProps) {
   const [rules, setRules] = useState<Rules | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const wid = sit.session?.streams[0]?.wid;
+  const wid = drone?.wid ?? sit.session?.streams[0]?.wid; // the shown drone's world
 
   useEffect(() => {
     if (!wid) return;

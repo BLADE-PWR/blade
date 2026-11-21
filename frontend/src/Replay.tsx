@@ -14,7 +14,7 @@ const mmss = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${(s
 type Props = { session: Session; onSwitch: (sessionId: string) => void };
 
 export function ReplayBar({ session, onSwitch }: Props) {
-  const sids = session.streams.filter((st) => st.source === "replay").map((st) => st.sid).join(",");
+  const sids = session.streams.map((st) => st.sid).join(",");
   const [replays, setReplays] = useState<Replay[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<number | null>(null); // while the slider is dragged
@@ -76,6 +76,7 @@ export function ReplayBar({ session, onSwitch }: Props) {
     setMissions(null);
     startReplay(rec)
       .then(async (id) => {
+        if (id === session.id) return; // already playing it
         await send("POST", `/sessions/${session.id}/stop`);
         onSwitch(id);
       })

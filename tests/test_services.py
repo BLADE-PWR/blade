@@ -353,3 +353,41 @@ def test_live_stream_joins_its_mission_and_a_replay_keeps_its_world(monkeypatch,
     assert sent == ["m1", "rp-1"] and live.wid == "m1"  # the replay ignores the mission it was recorded with
     for src in (live, replay):
         src.close()
+
+
+async def test_session_nobody_watches_is_deleted():
+    from blade_gateway.sessions import Orchestrator, SessionSpec, StreamSpec
+
+    orch = Orchestrator({"sessions": "http://127.0.0.1:9"})  # nothing listens: stopping the replay just fails
+    s = orch.create(SessionSpec(streams=[StreamSpec(sid="rp", wid="rp", recording="r")]))
+    await orch.reap(100.0, 30.0)
+    orch.viewers[s.id] += 1  # a tab opens it
+    await orch.reap(200.0, 30.0)
+    assert s.id in orch.sessions
+    orch.viewers[s.id] -= 1  # the tab closes
+    await orch.reap(201.0, 30.0)
+    await orch.reap(230.0, 30.0)
+    assert s.id in orch.sessions  # 29 s without a viewer
+    await orch.reap(231.0, 30.0)
+    assert s.id not in orch.sessions and s.id not in orch.viewers
+
+
+
+async def test_session_is_paused_when_nobody_watches_and_stays_paused(monkeypatch):
+    from blade_gateway.sessions import Orchestrator, SessionSpec, StreamSpec
+
+    orch = Orchestrator({"sessions": "http://sessions"})
+    paused = {"rp": False}  # the sessions service's replays
+
+    async def call(client, s, method, svc, path, ok404=False, **kw):
+        paused[path.rsplit("/", 1)[1]] = kw["json"]["paused"]
+
+    monkeypatch.setattr(orch, "_call", call)
+    s = orch.create(SessionSpec(streams=[StreamSpec(sid="rp", wid="rp", recording="r")]))
+    orch.viewers[s.id] += 2  # two tabs
+    await orch.unwatched(s)
+    assert not paused["rp"]  # one tab still watches
+    await orch.unwatched(s)
+    assert paused["rp"]  # nobody: paused
+    orch.viewers[s.id] += 1  # a tab opens it again
+    assert paused["rp"]  # still paused: whoever opened it presses play

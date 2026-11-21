@@ -10,7 +10,6 @@ import logging
 import struct
 import time
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
@@ -36,11 +35,12 @@ URLS = {
 }
 PREVIEW_FPS = env_float("PREVIEW_FPS", 15.0)
 PREVIEW_W = env_int("PREVIEW_W", 960)
+SESSION_IDLE_S = env_float("SESSION_IDLE_S", 30.0)  # a session nobody watches this long is deleted
 PROXIES = {"models": ("detector", "/models"), "detector": ("detector", "/streams"),
            "recordings": ("sessions", "/recordings"), "replays": ("sessions", "/replays"), "maps": ("terrain", "/maps"),
            "worlds": ("world", "/worlds"), "decision": ("decision", "/worlds"), "eval": ("evaluator", "/worlds")}
 
-orch = Orchestrator(URLS, Path(env_str("SESSIONS_STORE", "state/gateway_sessions.json")))
+orch = Orchestrator(URLS)
 state: dict = {"nc": None, "http": None}
 
 
@@ -49,9 +49,20 @@ async def lifespan(app: FastAPI):
     state["nc"] = await connect("gateway")
     orch.nc = state["nc"]
     state["http"] = httpx.AsyncClient(timeout=30)
+    reaper = asyncio.create_task(reap())
     yield
+    reaper.cancel()
     await state["http"].aclose()
     await close(state["nc"])
+
+
+async def reap() -> None:
+    while True:
+        await asyncio.sleep(1.0)
+        try:
+            await orch.reap(time.time(), SESSION_IDLE_S)
+        except Exception:
+            log.exception("reap")
 
 
 app = FastAPI(title="blade gateway", lifespan=lifespan)
@@ -92,6 +103,12 @@ async def start_session(sess_id: str):
 @app.post("/sessions/{sess_id}/stop")
 async def stop_session(sess_id: str):
     return await orch.stop(_session(sess_id))
+
+
+@app.delete("/sessions/{sess_id}", status_code=204)
+async def delete_session(sess_id: str):
+    """Stops the session's replays and forgets it."""
+    await orch.delete(_session(sess_id))
 
 
 class ReplayPatch(BaseModel):
@@ -216,12 +233,16 @@ async def ws(websocket: WebSocket, session: str | None = None, wids: str = ""):
                 await websocket.send_text(item)
 
     task = asyncio.create_task(sender())
+    if session:
+        orch.viewers[session] += 1
     try:
         while True:  # only to notice the client leaving
             await websocket.receive_text()
     except WebSocketDisconnect:
         pass
     finally:
+        if session in orch.sessions:  # no viewers left: paused, and orch.reap deletes it after SESSION_IDLE_S
+            await orch.unwatched(orch.sessions[session])
         task.cancel()
         for sub in subs:
             await sub.unsubscribe()

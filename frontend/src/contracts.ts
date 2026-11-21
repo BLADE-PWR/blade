@@ -70,7 +70,7 @@ export type StreamDiag = { fps_in: number; fps_out: number; dropped: number; lat
 
 export type DiagData = { service: string; instance?: string | null; streams: Record<string, StreamDiag> };
 
-export type SessionStream = { sid: string; wid: string; source: "live" | "replay"; recording?: string | null };
+export type SessionStream = { sid: string; wid: string; recording: string }; // a replay
 
 export type Session = { id: string; name: string; state: string; streams: SessionStream[] };
 

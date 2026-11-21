@@ -1,14 +1,17 @@
-"""Operator sessions: which streams, which model, which map and world, record or not."""
+"""Replay sessions: which recordings play, into which worlds, with which model. Live drones need no session:
+they join the world of their uplink's --mission. Sessions live in memory only: when its last viewer leaves, a
+session's replays are paused (the next viewer, maybe someone else, presses play); one nobody has watched for idle_s
+is deleted with its replays (reap), so a restart starts with none."""
 from __future__ import annotations
 
 import json
 import logging
 import time
 import uuid
-from pathlib import Path
+from collections import Counter
 
 import httpx
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from blade_common.bus import kv_read
 
@@ -16,11 +19,10 @@ log = logging.getLogger("gateway.sessions")
 
 
 class StreamSpec(BaseModel):
+    """One replay."""
     sid: str
-    source: str = Field("live", description="live | replay")
     wid: str
-    record: bool = True
-    recording: str | None = None
+    recording: str
     speed: float = 1.0
     loop: bool = False
     offset_s: float = 0.0
@@ -51,26 +53,16 @@ class Session(SessionSpec):
 
 
 class Orchestrator:
-    def __init__(self, urls: dict[str, str], store: Path | None = None):
+    def __init__(self, urls: dict[str, str]):
         self.urls = urls
         self.nc = None
         self.sessions: dict[str, Session] = {}
-        self.store = store
-        if store and store.exists():
-            for d in json.loads(store.read_text()):
-                s = Session.model_validate(d)
-                s.state = "stopped" if s.state == "running" else s.state
-                self.sessions[s.id] = s
-
-    def save(self) -> None:
-        if self.store:
-            self.store.parent.mkdir(parents=True, exist_ok=True)
-            self.store.write_text(json.dumps([s.model_dump() for s in self.sessions.values()], indent=1))
+        self.viewers: Counter[str] = Counter()  # session id -> open WebSockets
+        self.idle_since: dict[str, float] = {}  # session id -> when its last viewer left (or it was created)
 
     def create(self, spec: SessionSpec) -> Session:
         s = Session(**spec.model_dump(), id=uuid.uuid4().hex[:8], created=time.time())
         self.sessions[s.id] = s
-        self.save()
         return s
 
     async def _call(self, client: httpx.AsyncClient, s: Session, method: str, svc: str, path: str,
@@ -127,26 +119,40 @@ class Orchestrator:
                 s.errors.append(f"detector assignment: {e}")
         async with httpx.AsyncClient(timeout=10) as c:
             for st in s.streams:
-                if st.source == "live":
-                    await self._call(c, s, "PUT", "sessions", f"/recording/{st.sid}", json={"on": st.record})
-                elif st.source == "replay":
-                    if not st.recording:
-                        s.errors.append(f"{st.sid}: replay without a recording")
-                        continue
-                    await self._call(c, s, "DELETE", "sessions", f"/replays/{st.sid}", ok404=True)
-                    await self._call(c, s, "POST", "sessions", "/replays", json={
-                        "recording": st.recording, "sid": st.sid, "wid": st.wid, "speed": st.speed,
-                        "loop": st.loop, "offset_s": st.offset_s, "pacing": st.pacing,
-                        "delivery": st.delivery})
+                await self._call(c, s, "DELETE", "sessions", f"/replays/{st.sid}", ok404=True)
+                await self._call(c, s, "POST", "sessions", "/replays", json={
+                    "recording": st.recording, "sid": st.sid, "wid": st.wid, "speed": st.speed, "loop": st.loop,
+                    "offset_s": st.offset_s, "pacing": st.pacing, "delivery": st.delivery})
         s.state, s.started = "running", time.time()
-        self.save()
         return s
 
     async def stop(self, s: Session) -> Session:
         async with httpx.AsyncClient(timeout=10) as c:
             for st in s.streams:
-                if st.source == "replay":
-                    await self._call(c, s, "DELETE", "sessions", f"/replays/{st.sid}", ok404=True)
+                await self._call(c, s, "DELETE", "sessions", f"/replays/{st.sid}", ok404=True)
         s.state = "stopped"
-        self.save()
         return s
+
+    async def delete(self, s: Session) -> None:
+        await self.stop(s)
+        del self.sessions[s.id]
+        self.viewers.pop(s.id, None)
+        self.idle_since.pop(s.id, None)
+
+    async def unwatched(self, s: Session) -> None:
+        """A viewer left: if it was the last one, pause the replays; the next viewer resumes them by hand."""
+        self.viewers[s.id] -= 1
+        if self.viewers[s.id] or s.id not in self.sessions:
+            return
+        async with httpx.AsyncClient(timeout=10) as c:
+            for sid in s.sids:
+                await self._call(c, s, "PATCH", "sessions", f"/replays/{sid}", json={"paused": True})
+
+    async def reap(self, now: float, idle_s: float) -> None:
+        """Delete the sessions nobody has watched for idle_s."""
+        for s in list(self.sessions.values()):
+            if self.viewers[s.id]:
+                self.idle_since.pop(s.id, None)
+            elif now - self.idle_since.setdefault(s.id, now) >= idle_s:
+                log.info("session %s (%s): nobody watching for %.0f s, deleted", s.id, s.name, idle_s)
+                await self.delete(s)

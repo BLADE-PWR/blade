@@ -55,7 +55,7 @@ function Pick({ onPick }: { onPick: (t: Target) => void }) {
         {sessions.map((s) => (
           <li key={s.id}>
             <button onClick={() => onPick({ session: s.id })}>{s.name}</button> {s.state},{" "}
-            {s.streams.map((st) => `${st.sid} (${st.source}) in world ${st.wid}`).join(", ")}
+            {s.streams.map((st) => `${st.sid} replays ${st.recording} in world ${st.wid}`).join(", ")}
           </li>
         ))}
       </ul>
@@ -135,13 +135,11 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
   const sids = [...sit.drones.keys()]; // every drone seen so far, in the order they joined
   const sid = picked && sids.includes(picked) ? picked : (sids[0] ?? null);
   const drone = sid ? sit.drones.get(sid) : undefined;
-  const replay = sit.session?.streams.some((st) => st.source === "replay") ?? false;
-  const latest = (source: "live" | "replay") => sessions
-    .filter((s) => s.state === "running" && s.streams.some((st) => st.source === source)).at(-1);
-  const switchMode = (source: "live" | "replay") => {
-    const s = latest(source);
+  const replay = "session" in target; // sessions are replays; live is a mission
+  const toReplay = () => {
+    const s = sessions.filter((x) => x.state === "running").at(-1);
     if (s) onPick({ session: s.id });
-    else if (source === "replay") onLeave();
+    else onLeave();
   };
   const fps = sid ? sit.diag.get("ingest")?.streams[sid]?.fps_in : undefined;
   const latency = drone ? latencyS(drone) : null;
@@ -154,12 +152,15 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
           <button aria-pressed={view === "operator"} onClick={() => setView("operator")}>Operator</button>
           <button aria-pressed={view === "command"} onClick={() => setView("command")}>Command</button>
         </div>
-        <label className="muted">Session <button onClick={onLeave}>{sit.session?.name ?? "no session"}</button></label>
+        <label className="muted">
+          {replay ? "Session" : "Mission"}{" "}
+          <button onClick={onLeave}>{"wid" in target ? target.wid : (sit.session?.name ?? "…")}</button>
+        </label>
         <div className="switch" role="group" aria-label="Mode">
-          <button aria-pressed={!replay} disabled={replay && !latest("live")} onClick={() => switchMode("live")}>
+          <button aria-pressed={!replay} onClick={() => replay && onLeave()}>
             <span className="dot live-dot" />Live
           </button>
-          <button aria-pressed={replay} onClick={() => switchMode("replay")}>
+          <button aria-pressed={replay} onClick={() => replay || toReplay()}>
             Replay
           </button>
         </div>

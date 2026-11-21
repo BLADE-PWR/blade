@@ -43,7 +43,7 @@ def main() -> int:
 
     env = dict(os.environ, MAPS_DIR=str(ROOT / "maps"), MODEL=args.model,
                MODELS_DIR=str(ROOT / "models"), RECORDINGS_DIR=str(ROOT / "recordings"),
-               SESSIONS_STORE=str(ROOT / "state" / "gateway_sessions.json"), EVAL_DIR=str(ROOT / "state" / "eval"),
+               EVAL_DIR=str(ROOT / "state" / "eval"),
                RECORD_ALL="0" if args.no_record else "1", MAX_FPS=str(args.detect_fps), PYTHONUNBUFFERED="1")
     wanted = args.only.split(",") if args.only else SERVICES
     if "georef" in wanted and not any((ROOT / "maps").glob("*/meta.json")):

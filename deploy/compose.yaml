@@ -84,10 +84,8 @@ services:
   gateway:
     <<: *service
     build: {context: .., dockerfile: deploy/Dockerfile, args: {SERVICE: gateway}}
-    environment: {<<: *env, PORT: "8000", SESSIONS_STORE: /data/state/gateway_sessions.json}
-    volumes: ["gateway-state:/data/state"]
+    environment: {<<: *env, PORT: "8000"}
     ports: ["8000:8000"]
 
 volumes:
   nats-data:
-  gateway-state:

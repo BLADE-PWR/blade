@@ -59,11 +59,15 @@ export async function send<T>(method: "POST" | "PUT" | "PATCH", path: string, bo
   return (await r.json()) as T;
 }
 
+/** -> the session replaying rec: the running one that already does, else a new one. */
 export async function startReplay(rec: Recording): Promise<string> {
+  const running = (await getJSON<Session[]>("/sessions")).find((s) => s.state === "running"
+    && s.streams.length === 1 && s.streams[0].recording === rec.id);
+  if (running) return running.id;
   // a new sid each time: starting a session replaces any replay with the same sid
   const sid = `rp-${Date.now().toString(36).slice(-5)}`;
   const s = await send<Session>("POST", "/sessions", { name: `Replay ${rec.scene ?? rec.id}`,
-    streams: [{ sid, source: "replay", wid: sid, recording: rec.id, loop: true }] });
+    streams: [{ sid, wid: sid, recording: rec.id, loop: true }] });
   await send("POST", `/sessions/${s.id}/start`);
   return s.id;
 }
