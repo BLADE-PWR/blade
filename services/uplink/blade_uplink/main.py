@@ -40,7 +40,8 @@ def main(argv: list[str] | None = None) -> int:
     fps = args.fps
     bar = frame_code.Bar(0, 0, args.bar_size, args.bar_bits)
     tel = Telemetry(TEL_LISTEN, args.sid, args.mission, (args.server, ports.TRUTH_UDP), wrap=bar.wrap)
-    import dxcam  # Windows only (DXGI desktop duplication), so imported here and not at the top
+    import comtypes  # Windows only, like dxcam (DXGI desktop duplication), so imported here and not at the top
+    import dxcam
 
     screen = dxcam.create(output_idx=0, output_color="BGR")  # monitor 0, whole screen
 
@@ -81,7 +82,14 @@ def main(argv: list[str] | None = None) -> int:
             if now < next_grab:
                 time.sleep(next_grab - now)
                 continue
-            image = screen.grab()
+            try:
+                image = screen.grab()
+            except comtypes.COMError as e:  # e.g. DXGI_ERROR_INVALID_CALL, which dxcam does not recover from
+                log.warning("screen capture failed (%s); starting it again", e)
+                screen.release()
+                time.sleep(0.5)
+                screen = dxcam.create(output_idx=0, output_color="BGR")
+                continue
             if image is None:
                 time.sleep(0.001)
                 continue
