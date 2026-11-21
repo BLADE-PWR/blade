@@ -239,6 +239,11 @@
       "title": "Forgotten",
       "type": "array"
     },
+    "map": {
+      "description": "map of this world: set by its first drone; it moves when its drones are quiet",
+      "title": "Map",
+      "type": "string"
+    },
     "objects": {
       "description": "upserts",
       "items": {
@@ -261,6 +266,9 @@
       "title": "T"
     }
   },
+  "required": [
+    "map"
+  ],
   "title": "WorldObjectsData",
   "type": "object"
 }

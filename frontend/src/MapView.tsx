@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { colorOf, nameOf, SEVERITY_COLORS } from "./classes";
 import type { Alert, Prediction, Vec2, WorldObject } from "./contracts";
 import { getJSON } from "./gateway";
-import { type Filter, type Situation, visible, worldNow } from "./situation";
+import { type Drone, type Filter, type Situation, shownMap, visible, worldNow } from "./situation";
 
 const TILE_PX = 256;
 const MIN_ZOOM = -5; // 32 m/px
@@ -151,9 +151,11 @@ function horizonMarker(p: Prediction, color: string, labelled: boolean): L.Marke
   return L.marker(ll(p.xy), { icon, interactive: false, keyboard: false });
 }
 
-function drawDrones(group: L.LayerGroup, sit: Situation, focus: string | null): void {
+const onMap = (d: Drone, mapId: string | undefined) => !!d.geo && d.geo.map === mapId;
+
+function drawDrones(group: L.LayerGroup, sit: Situation, focus: string | null, mapId: string | undefined): void {
   for (const d of sit.drones.values()) {
-    if (!d.geo) continue;
+    if (!d.geo || !onMap(d, mapId)) continue;
     const own = d.sid === focus;
     const fp = d.geo.footprint.filter((p): p is Vec2 => p !== null);
     L.polygon(fp.map(ll), { color: own ? "#ffffff" : "#c9d1d9", weight: own ? 2 : 1.5,
@@ -259,9 +261,9 @@ export function MapView(props: Props) {
   const [layers, setLayers] = useState<Layers>({ drones: true, motion: true, uncertainty: true, truth: false });
   const [showLayers, setShowLayers] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [centred, setCentred] = useState(false);
+  const [centredOn, setCentredOn] = useState<string | undefined>(); // the map the view was last centred on
   const [, setMoved] = useState(0);
-  const mapId = sit.session?.map ?? "altis";
+  const mapId = shownMap(sit, focus); // none until a world has reported
 
   useEffect(() => {
     const m = L.map(box.current!, { crs: L.CRS.Simple, minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM, zoomControl: false,
@@ -285,7 +287,7 @@ export function MapView(props: Props) {
   }, [vectors]);
 
   useEffect(() => {
-    if (!map) return;
+    if (!map || !mapId) return;
     let tiles: OrthoTiles | null = null;
     let stopped = false;
     getJSON<Meta>(`/api/maps/${mapId}/meta`)
@@ -307,16 +309,17 @@ export function MapView(props: Props) {
     if (map && pts.length) map.fitBounds(L.latLngBounds(pts), { padding: [FIT_PAD_PX, FIT_PAD_PX] });
     return pts.length > 0;
   };
-  const fitDrones = () => fit([...sit.drones.values()]
+  const fitDrones = () => fit([...sit.drones.values()].filter((d) => onMap(d, mapId))
     .flatMap((d) => (d.geo ? [d.geo.camera, ...d.geo.footprint] : [])).flatMap((p) => (p ? [ll(p)] : [])));
 
+  const centred = !!mapId && centredOn === mapId;
   useEffect(() => {
-    if (!map || centred) return;
+    if (!map || !mapId || centred) return;
     if (!overview && focus) {
-      if (!focusGeo?.centre) return;
+      if (!focusGeo?.centre || focusGeo.map !== mapId) return;
       map.setView(ll(focusGeo.centre), START_ZOOM);
     } else if (!fitDrones() && !fit([...sit.objects.values()].map((o) => ll(o.xy)))) return;
-    setCentred(true);
+    setCentredOn(mapId);
   });
 
   useEffect(() => {
@@ -327,7 +330,7 @@ export function MapView(props: Props) {
     if (!map || !centred) return;
     const objects = [...sit.objects.values()].filter((o) => visible(o, filter));
     vectors.clearLayers();
-    if (layers.drones) drawDrones(vectors, sit, focus);
+    if (layers.drones) drawDrones(vectors, sit, focus, mapId);
     drawObjects(vectors, objects, selected, layers, now);
     if (layers.truth) drawTruth(vectors, sit);
     drawEvents(vectors, sit, filter, now);

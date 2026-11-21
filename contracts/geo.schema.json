@@ -155,6 +155,11 @@
       "description": "ground metres per pixel at the image centre",
       "title": "Gsd M"
     },
+    "map": {
+      "description": "map the drone is on; pts are in its metres",
+      "title": "Map",
+      "type": "string"
+    },
     "pts": {
       "items": {
         "$ref": "#/$defs/GeoPoint"
@@ -179,7 +184,8 @@
   "required": [
     "camera",
     "footprint",
-    "pts"
+    "pts",
+    "map"
   ],
   "title": "GeoData",
   "type": "object"

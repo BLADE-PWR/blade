@@ -4,6 +4,11 @@ Builds the map picture: it fuses the per-stream points into objects with stable 
 per object, and merges the same object seen by several drones of one world. An object is published
 after `CONFIRM_N` observations, becomes `stale` when unseen and expires after `EXPIRE_S`.
 
+A world is on one map: the first drone that reports into it sets it. A drone on another map is left out (both
+maps' coordinates start at 0, 0, so its objects would mix with real ones) and logged once. Once no drone on the
+world's map has reported for `MAP_IDLE_S` (30 s), the next drone on another map moves the world there and it starts
+afresh: its old objects are published as `forgotten`, and decision clears the world's alerts.
+
 A moving object (speed at least 1 m/s and over twice its velocity sigma, but below `PRED_VMAX`, above which the
 filter is still catching up with a jump) also carries `pred`: straight-line positions 30 s and 60 s after `last`,
 each with a 1-sigma radius that grows with the velocity uncertainty and with a tenth of the distance travelled
@@ -57,5 +62,5 @@ For any map client (`tools/viewer` does this):
 | GET | `/worlds/{wid}/snapshot` | All current objects and events of a world |
 | GET | `/worlds/{wid}/objects/{oid}` | One object with its position history |
 
-Config: `CONFIRM_N` (5), `STALE_S` (3), `EXPIRE_S` (600), `EVENT_TTL_S` (5), `EVENT_CLASSES`
+Config: `CONFIRM_N` (5), `STALE_S` (3), `EXPIRE_S` (600), `MAP_IDLE_S` (30), `EVENT_TTL_S` (5), `EVENT_CLASSES`
 (`explosion,tank_fire`).

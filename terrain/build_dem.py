@@ -11,8 +11,7 @@ import tifffile
 
 ap = argparse.ArgumentParser()
 ap.add_argument("grad_meh_dir", type=Path)
-ap.add_argument("--out", type=Path, default=Path("maps/altis"))
-ap.add_argument("--id", default="altis")
+ap.add_argument("--out", type=Path, required=True, help="maps/<map name>: Arma's worldName in lower case")
 args = ap.parse_args()
 
 with gzip.open(args.grad_meh_dir / "dem.asc.gz", "rt") as f:
@@ -22,6 +21,6 @@ n, cell = dem.shape[0], header["cellsize"]
 
 args.out.mkdir(parents=True, exist_ok=True)
 tifffile.imwrite(args.out / "dem.tif", dem)
-meta = {"id": args.id, "dem": {"file": "dem.tif", "cell_m": cell, "nodes": n}}
+meta = {"id": args.out.name, "dem": {"file": "dem.tif", "cell_m": cell, "nodes": n}}
 (args.out / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")
 print(f"{args.out / 'dem.tif'}: {n} x {n} nodes, {cell} m, heights {dem.min():.2f} .. {dem.max():.2f} m")

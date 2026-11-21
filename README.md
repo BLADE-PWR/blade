@@ -64,7 +64,7 @@ uv sync
 brew install nats-server
 ```
 ```bash
-uv run python tools/dev.py --map altis --model oracle
+uv run python tools/dev.py --model oracle
 ```
 
 `tools/dev.py` starts NATS and every service in one terminal. `--model oracle` makes boxes from the
@@ -76,7 +76,7 @@ Replay a recording and watch it:
 curl -XPOST localhost:8000/api/replays -H 'content-type: application/json' -d '{"recording": "<id>", "sid": "rp-1", "wid": "rp-1"}'
 ```
 ```bash
-uv run blade-viewer --sids rp-1 --wids rp-1 --map <map name>
+uv run blade-viewer --sids rp-1 --wids rp-1
 ```
 
 Or in the browser (Node.js 22+), then open http://localhost:5173:
@@ -101,7 +101,8 @@ uv run pytest
 
 ## Map package
 
-Export map with grad_meh in the game, then build `maps/<map name>` (`dem.tif`, `meta.json`, `ortho/`):
+Export map with grad_meh in the game, then build `maps/<map name>` (`dem.tif`, `meta.json`, `ortho/`). `<map name>` is
+Arma's `worldName` in lower case (`altis`, `stratis`): the `map` the mission sends in its telemetry picks the package.
 ```bash
 uv run python terrain/build_dem.py "<Arma 3>/grad_meh/<map name>" --out maps/<map name>
 ```

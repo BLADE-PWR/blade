@@ -16,7 +16,7 @@ def write_map(d: Path, dem: np.ndarray, cell: float = 7.5) -> Path:
 
 
 def look_at_tel(terrain, target_xy, frame: int, w: int = 640, h: int = 360, hfov: float = 14.0,
-                bearing_deg: float = 0.0, dist_m: float = 400.0, alt_m: float = 300.0) -> dict:
+                bearing_deg: float = 0.0, dist_m: float = 400.0, alt_m: float = 300.0, map_name: str = "tiny") -> dict:
     """A tel record for a camera dist_m away (from bearing_deg) and alt_m above target_xy, aimed at it."""
     tz = float(terrain.height(*target_xy))
     target = np.array([target_xy[0], target_xy[1], tz])
@@ -29,7 +29,7 @@ def look_at_tel(terrain, target_xy, frame: int, w: int = 640, h: int = 360, hfov
     vfov = math.degrees(2 * math.atan(math.tan(math.radians(hfov) / 2) * h / w))
     return {"frame": frame, "camera": {"pos_asl": pos.tolist(), "x_axis": r.tolist(), "y_axis": u.tolist(),
                                        "z_axis": f.tolist(), "hfov_deg": hfov, "vfov_deg": vfov},
-            "range_m": float(np.linalg.norm(target - pos)), "image": {"w": w, "h": h}}
+            "range_m": float(np.linalg.norm(target - pos)), "image": {"w": w, "h": h}, "map": map_name}
 
 
 def frame_image(k: int, w: int = 640, h: int = 360) -> np.ndarray:

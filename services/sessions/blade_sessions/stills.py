@@ -19,7 +19,7 @@ SID = "stills"
 STANCE = {"standing": "STAND", "kneeling": "CROUCH", "prone": "PRONE"}
 
 
-def tel_from_meta(m: dict, frame: int, sid: str, size: tuple[int, int]) -> dict | None:
+def tel_from_meta(m: dict, frame: int, sid: str, size: tuple[int, int], map_name: str) -> dict | None:
     c = m.get("camera") or {}
     if not (c.get("pos_asl") and c.get("forward_axis") and c.get("hfov_deg") and c.get("vfov_deg")):
         return None
@@ -29,7 +29,7 @@ def tel_from_meta(m: dict, frame: int, sid: str, size: tuple[int, int]) -> dict 
             "camera": {"pos_asl": c["pos_asl"], "x_axis": c["right_axis"], "y_axis": c["up_axis"],
                        "z_axis": c["forward_axis"], "hfov_deg": c["hfov_deg"], "vfov_deg": c["vfov_deg"]},
             "range_m": float(rng) if rng not in (None, -1) else None, "image": {"w": size[0], "h": size[1]},
-            "scene": m.get("scene"), "seed": m.get("seed"), "region": m.get("region"),
+            "scene": m.get("scene"), "map": map_name, "seed": m.get("seed"), "region": m.get("region"),
             "source_image": m.get("image"), "source_frame": m.get("frame")}
 
 
@@ -38,6 +38,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("dataset", type=Path, help="folder with meta/ and images/")
     ap.add_argument("--out", type=Path, required=True, help="new recording folder, e.g. recordings/stills_val")
     ap.add_argument("--split", help="only this split (train / val / test)")
+    ap.add_argument("--map", required=True, help="map the stills were taken on (maps/ package), e.g. altis")
     args = ap.parse_args(argv)
 
     metas = sorted((args.dataset / "meta").glob("*.json"))
@@ -66,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
                               bitrate="12M", encoder="auto")
         if im.size != size:
             im = im.resize(size, Image.Resampling.BILINEAR)
-        tel = tel_from_meta(m, 1000 + n, SID, size)
+        tel = tel_from_meta(m, 1000 + n, SID, size, args.map)
         if tel is None:
             skipped += 1
             continue

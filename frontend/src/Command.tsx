@@ -11,7 +11,9 @@ import {
   type Drone,
   type Filter,
   latencyS,
+  offMap,
   shownFrame,
+  shownMap,
   type Situation,
   stageTimes,
   transmitting,
@@ -133,7 +135,8 @@ export function Command({ sit, sids, sid, main, onMain, onDrone, onOperator }: P
 function DroneVideo({ sit, sid, thumb = false }: { sit: Situation; sid: string; thumb?: boolean }) {
   const d = sit.drones.get(sid);
   const shown = d ? shownFrame(d) : { preview: null, dets: null };
-  return <Video sid={sid} shown={shown} geo={thumb ? null : d?.geo} objects={sit.objects} labels={!thumb} />;
+  return <Video sid={sid} shown={shown} geo={thumb ? null : d?.geo} objects={sit.objects} labels={!thumb}
+    offMap={offMap(sit, d)} />;
 }
 
 function DroneThumb({ sit, sid }: { sit: Situation; sid: string }) {
@@ -209,15 +212,9 @@ type Rules = { vehicle_group?: { enabled: boolean; min_count: number; radius_m: 
 type SettingsProps = { sit: Situation; drone?: Drone; layer: Background; onLayer: (l: Background) => void };
 
 function Settings({ sit, drone, layer, onLayer }: SettingsProps) {
-  const [maps, setMaps] = useState<{ id: string }[]>([]);
   const [rules, setRules] = useState<Rules | null>(null);
   const [error, setError] = useState<string | null>(null);
   const wid = sit.session?.streams[0]?.wid;
-
-  useEffect(() => {
-    getJSON<{ id: string }[]>("/api/maps").then(setMaps)
-      .catch((e: Error) => setError(`Could not load the map list (${e.message}).`));
-  }, []);
 
   useEffect(() => {
     if (!wid) return;
@@ -230,13 +227,11 @@ function Settings({ sit, drone, layer, onLayer }: SettingsProps) {
   return (
     <section className="panel settings" aria-label="Settings">
       <div className="panel-head"><strong>Settings</strong></div>
-      <label className="setting">
+      <div className="setting">
         <span className="muted">Map</span>
-        <select disabled value={sit.session?.map ?? ""}>
-          {maps.map((m) => <option key={m.id}>{m.id}</option>)}
-        </select>
-      </label>
-      <p className="muted setting-note">Changing the map needs a server restart.</p>
+        <span className="mono">{shownMap(sit, drone?.sid ?? null) ?? "waiting for a drone"}</span>
+      </div>
+      <p className="muted setting-note">Each world is on the map its first drone reports.</p>
       <div className="setting">
         <span className="muted">Background</span>
         <div className="switch" role="group" aria-label="Map background">

@@ -61,6 +61,7 @@ class Tel(_Open):
     range_m: float | None = None
     image: ImageSize
     scene: str | None = None
+    map: str = Field(description="Arma's worldName in lower case: the maps/ package")
     seed: int | None = None
     region: int | None = None
 
@@ -130,6 +131,7 @@ class GeoData(BaseModel):
     range_check_m: float | None = Field(None, description="|axis hit distance - laser range|")
     gsd_m: float | None = Field(None, description="ground metres per pixel at the image centre")
     pts: list[GeoPoint]
+    map: str = Field(description="map the drone is on; pts are in its metres")
 
 
 class Prediction(BaseModel):
@@ -165,6 +167,7 @@ class WorldObjectsData(BaseModel):
                                              "dropped because their replay went back in time")
     counts: dict[str, float] | None = Field(None, description="active objects per group, median over ~0.5 s")
     t: float | None = Field(None, description="world clock when published, s: stands still while a replay is paused")
+    map: str = Field(description="map of this world: set by its first drone; it moves when its drones are quiet")
 
 
 class WorldEvent(BaseModel):

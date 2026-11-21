@@ -12,7 +12,7 @@ Image.MAX_IMAGE_PIXELS = None  # a grad_meh tile is 7680 x 7680 on Altis
 
 ap = argparse.ArgumentParser()
 ap.add_argument("grad_meh_dir", type=Path)
-ap.add_argument("--out", type=Path, default=Path("maps/altis"))
+ap.add_argument("--out", type=Path, required=True, help="maps/<map name>")
 ap.add_argument("--chunk", type=int, default=1280)
 ap.add_argument("--levels", type=int, default=6)
 args = ap.parse_args()

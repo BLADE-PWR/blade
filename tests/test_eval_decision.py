@@ -77,7 +77,7 @@ def test_group_alert_survives_membership_change():
 class ObjectsMsg:
     def __init__(self, wid, data):
         self.subject, self.headers = f"world.{wid}.objects", None
-        self.data = Envelope(wid=wid, data=data).model_dump_json().encode()
+        self.data = Envelope(wid=wid, data={"map": "tiny", **data}).model_dump_json().encode()
 
 
 async def test_paused_replay_raises_no_lost_contact(monkeypatch):
@@ -97,3 +97,42 @@ async def test_forgotten_objects_are_not_lost(monkeypatch):
     e = dm.engines["w1"]
     assert "t1" not in e.ws.objects and "t1" not in e.ws.gone
     assert not [a for a in e.step(e.now()) if a.rule == "lost_contact"]
+
+
+async def test_new_map_clears_the_worlds_alerts_and_objects(monkeypatch):
+    monkeypatch.setattr(dm, "engines", {})
+    sent = []
+
+    async def publish(nc, subject, env):
+        sent.append((subject, env.data["alerts"]))
+
+    monkeypatch.setattr(dm, "publish", publish)
+    await dm.on_objects(ObjectsMsg("w1", {"objects": [obj("t1", "tank", 0, 0, last=200.0)], "t": 200.0}))
+    await dm.on_objects(ObjectsMsg("w1", {"expired": ["t1"], "t": 261.0}))
+    e = dm.engines["w1"]
+    (lost,) = [a for a in e.step(e.now()) if a.rule == "lost_contact"]
+    await dm.on_objects(ObjectsMsg("w1", {"map": "other", "t": 262.0}))
+    assert not e.active and not e.ws.objects and not e.ws.gone and e.map == "other"
+    assert [(s, [(a["aid"], a["state"]) for a in alerts]) for s, alerts in sent] == [
+        ("alerts.w1", [(lost.aid, "cleared")])]
+
+
+async def test_eval_leaves_out_drones_on_another_map(monkeypatch):
+    import blade_evaluator.main as em
+
+    ev = em.Evaluator()
+    sent = []
+
+    async def publish(nc, subject, env):
+        sent.append(env.data)
+
+    monkeypatch.setattr(em, "publish", publish)
+    for sid, map_name, x in (("uav1", "altis", 5), ("uav2", "stratis", 105)):
+        st = ev.truth[sid]
+        st.spawn({"id": x, "cls": "soldier"})
+        st.gt({"frame": 10, "objs": [[x, [x, x, 0], 0, [0, 0, 0], "STAND"]]})
+        st.footprint = [[x - 5, x - 5], [x + 5, x - 5], [x + 5, x + 5], [x - 5, x + 5]]
+        ev.sid_wid[sid], ev.sid_map[sid] = "m", map_name
+    ev.world_map["m"] = "altis"
+    await ev.evaluate("m", 0.0)
+    assert [x["truth_id"] for x in sent[-1]["truth"]] == [5]  # only the altis drone's soldier

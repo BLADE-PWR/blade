@@ -35,6 +35,7 @@ class Engine:
         self.history: deque[Alert] = deque(maxlen=200)
         self.missing: dict[str, float] = {}  # alert key -> when its condition became false
         self.clock: float | None = None  # the world's time, s, from its object updates
+        self.map: str | None = None  # the world's map, from its object updates
         self._ids = itertools.count(1)
 
     def now(self) -> float:
@@ -97,9 +98,26 @@ def engine(wid: str) -> Engine:
     return engines[wid]
 
 
+async def send_alerts(wid: str, alerts: list[Alert], t0: float) -> None:
+    data = AlertsData(alerts=alerts).model_dump(exclude_none=True)
+    await publish(state["nc"], f"alerts.{wid}", Envelope(wid=wid, ts={"decision": [t0, time.time()]}, data=data))
+    for a in alerts:
+        log.info("%s %s [%s] %s", wid, a.state, a.rule, a.title)
+
+
 async def on_objects(msg) -> None:
     env, _ = decode(msg)
-    eng = engine(msg.subject.split(".")[1])
+    wid = msg.subject.split(".")[1]
+    eng = engine(wid)
+    if env.data["map"] != eng.map:  # a new map: nothing from the old one applies any more
+        if eng.map is not None:
+            cleared = list(eng.active.values())
+            for a in cleared:
+                a.state, a.t = "cleared", eng.now()
+            eng.ws, eng.active, eng.missing, eng.clock = WorldState(), {}, {}, None  # the world's clock restarts too
+            if cleared:
+                await send_alerts(wid, cleared, time.time())
+        eng.map = env.data["map"]
     if env.data.get("t") is not None:
         eng.clock = max(eng.clock or 0.0, env.data["t"])
     ws = eng.ws
@@ -123,6 +141,8 @@ async def on_geo(msg) -> None:
     wid = env.wid or "default"
     sid_wid[env.sid] = wid
     eng = engine(wid)
+    if eng.map is not None and env.data["map"] != eng.map:  # a drone the world leaves out
+        return
     eng.ws.cameras[env.sid] = {"gsd_m": env.data.get("gsd_m"), "centre": env.data.get("centre"), "t": eng.now()}
 
 
@@ -133,11 +153,7 @@ async def loop() -> None:
         for wid, eng in list(engines.items()):
             changed = eng.step(eng.now())
             if changed:
-                data = AlertsData(alerts=changed).model_dump(exclude_none=True)
-                await publish(state["nc"], f"alerts.{wid}", Envelope(wid=wid, ts={"decision": [wall, time.time()]},
-                                                                      data=data))
-                for a in changed:
-                    log.info("%s %s [%s] %s", wid, a.state, a.rule, a.title)
+                await send_alerts(wid, changed, wall)
 
 
 @asynccontextmanager

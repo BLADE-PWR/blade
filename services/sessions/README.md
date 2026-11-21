@@ -47,8 +47,8 @@ Replay body:
 
 The dataset generator's pictures can be turned into a replayable recording:
 ```bash
-uv run blade-import-stills <dataset> --split val --out recordings/stills_val
+uv run blade-import-stills <dataset> --split val --map <map name> --out recordings/stills_val
 ```
 
-Config: `RECORDINGS_DIR` (`recordings`), `RECORD_ALL` (1), `RECORD_IDLE_S`, `MAP`, `INGEST_URL`,
+Config: `RECORDINGS_DIR` (`recordings`), `RECORD_ALL` (1), `RECORD_IDLE_S`, `INGEST_URL`,
 `INGEST_TRUTH_HOST`, `INGEST_TRUTH_PORT`.

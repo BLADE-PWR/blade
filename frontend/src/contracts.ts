@@ -17,6 +17,7 @@ export type GeoData = {
   centre: Vec3 | null;
   gsd_m: number | null;
   pts: GeoPoint[];
+  map: string; // the map the drone is on
 };
 
 export type Prediction = { dt_s: number; xy: Vec2; sigma_m: number };
@@ -42,11 +43,12 @@ export type WorldObjectsData = {
   expired: string[];
   forgotten?: string[];
   t?: number; // world clock, s
+  map: string; // the world's map
 };
 
 export type WorldEvent = { eid: string; kind: string; xy: Vec2; t: number; ttl_s: number; sid: string };
 
-export type Snapshot = { objects: WorldObject[]; events: WorldEvent[]; t?: number };
+export type Snapshot = { objects: WorldObject[]; events: WorldEvent[]; t?: number; map?: string | null };
 
 export type Alert = {
   aid: string;
@@ -70,7 +72,7 @@ export type DiagData = { service: string; instance?: string | null; streams: Rec
 
 export type SessionStream = { sid: string; wid: string; source: "live" | "replay"; recording?: string | null };
 
-export type Session = { id: string; name: string; map: string; state: string; streams: SessionStream[] };
+export type Session = { id: string; name: string; state: string; streams: SessionStream[] };
 
 export type Replay = {
   sid: string;
@@ -85,7 +87,6 @@ export type Replay = {
 export type Recording = {
   id: string;
   sid: string;
-  map: string;
   scene: string | null;
   started: number;
   duration_s?: number; // both missing while the recording is still being written

@@ -52,9 +52,7 @@ class State:
     def on_text(self, m: dict) -> None:
         typ, data = m.get("type"), m.get("data") or {}
         with self.lock:
-            if typ == "session":
-                self.map_id = self.map_id or data.get("map")
-            elif typ == "detections":
+            if typ == "detections":
                 q = self.dets[m["sid"]]
                 q[m["frame"]] = (data, time.time())
                 while len(q) > 90:
@@ -62,6 +60,7 @@ class State:
             elif typ == "geo":
                 self.geo[m["sid"]] = data
             elif typ in ("world.objects", "snapshot"):
+                self.map_id = data.get("map") or self.map_id  # the world's map
                 objs = self.objects[m["wid"]]
                 for o in data.get("objects", []):
                     objs[o["oid"]] = o
@@ -343,7 +342,6 @@ def main() -> int:
     ap.add_argument("--session")
     ap.add_argument("--sids", default="")
     ap.add_argument("--wids", default="")
-    ap.add_argument("--map", help="map id for the background (default: the session's map)")
     ap.add_argument("--mpp", type=float, default=1.0, help="map metres per pixel")
     ap.add_argument("--save", help="no window: render for --seconds, write this PNG and exit")
     ap.add_argument("--seconds", type=float, default=5.0)
@@ -360,7 +358,6 @@ def main() -> int:
     q = f"session={args.session}" if args.session else f"sids={sids}&wids={wids}"
     url = args.gateway.replace("http", "ws", 1) + "/ws?" + q
     st = State()
-    st.map_id = args.map
     stop = threading.Event()
     threading.Thread(target=lambda: asyncio.run(receive(url, st, stop)), daemon=True).start()
     bg = MapBackground(args.gateway)

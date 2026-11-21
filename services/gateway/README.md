@@ -20,7 +20,7 @@ assigns its streams to detector replicas and starts recording or replays.
 
 Session body:
 ```json
-{"name": "session", "map": "altis", "model": null,
+{"name": "session", "model": null,
  "streams": [{"sid": "pc1-uav1", "source": "live", "wid": "live", "record": true},
              {"sid": "rp-1", "source": "replay", "wid": "rp-1", "recording": "<id>",
               "speed": 1.0, "loop": false, "offset_s": 0, "pacing": "realtime", "delivery": "latest"}]}

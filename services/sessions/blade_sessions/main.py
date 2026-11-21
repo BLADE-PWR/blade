@@ -27,7 +27,7 @@ ROOT = Path(env_str("RECORDINGS_DIR", "recordings"))
 INGEST_URL = env_str("INGEST_URL", f"http://127.0.0.1:{ports.INGEST}")
 INGEST_TRUTH = (env_str("INGEST_TRUTH_HOST", "127.0.0.1"), env_int("INGEST_TRUTH_PORT", ports.TRUTH_UDP))
 
-recorder = Recorder(ROOT, env_bool("RECORD_ALL", True), env_float("RECORD_IDLE_S", 5.0), env_str("MAP", "altis"))
+recorder = Recorder(ROOT, env_bool("RECORD_ALL", True), env_float("RECORD_IDLE_S", 5.0))
 replays: dict[str, Replay] = {}
 
 

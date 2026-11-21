@@ -282,3 +282,33 @@ def test_replay_carries_on_after_the_live_stream_stops():
     assert not rewind and t == clock.t == 1014.0  # at the world's time, not back at 1002
     w.observe("s1", [tank(1, 900, 900)], t)
     assert w.sweep(clock.tick(1016.5))[1] == [] and w.objects["w-0001"].state == "active"
+
+
+
+async def test_world_moves_to_another_map_once_its_drones_are_quiet(monkeypatch):
+    from blade_world import main as wm
+
+    for name in ("worlds", "clocks", "swept", "maps", "map_seen"):
+        monkeypatch.setattr(wm, name, {})
+    monkeypatch.setattr(wm, "left_out", set())
+    sent = []
+
+    async def publish(nc, subject, env):
+        sent.append((subject, env.data))
+
+    monkeypatch.setattr(wm, "publish", publish)
+    assert await wm.on_map("m", "uav1", "altis", 100.0)
+    w = wm.world("m")
+    for k in range(10):
+        w.observe("uav1", [pt(4, 300, 300, "tank", "tank")], k / 30)
+    assert w.published()  # a confirmed altis tank
+    assert not await wm.on_map("m", "uav2", "stratis", 100.0 + wm.MAP_IDLE_S / 2)  # altis drone not quiet yet
+    assert await wm.on_map("m", "uav1", "altis", 110.0)
+    assert not sent and wm.worlds["m"] is w
+
+    assert await wm.on_map("m", "uav2", "stratis", 111.0 + wm.MAP_IDLE_S)  # quiet long enough, objects or not
+    assert wm.maps["m"] == "stratis" and wm.worlds["m"] is not w and not wm.worlds["m"].objects
+    (subject, data), = sent
+    assert subject == "world.m.objects" and data["map"] == "stratis" and data["forgotten"] == [
+        o.oid for o in w.published()]
+    assert not await wm.on_map("m", "uav1", "altis", 112.0 + wm.MAP_IDLE_S)  # now altis is the other map

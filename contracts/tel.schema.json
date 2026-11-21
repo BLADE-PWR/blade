@@ -128,6 +128,11 @@
     "image": {
       "$ref": "#/$defs/ImageSize"
     },
+    "map": {
+      "description": "Arma's worldName in lower case: the maps/ package",
+      "title": "Map",
+      "type": "string"
+    },
     "range_m": {
       "anyOf": [
         {
@@ -229,7 +234,8 @@
   "required": [
     "frame",
     "camera",
-    "image"
+    "image",
+    "map"
   ],
   "title": "Tel",
   "type": "object"

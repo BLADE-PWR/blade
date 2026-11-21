@@ -274,6 +274,18 @@ button.primary {
   height: 100%;
 }
 
+.off-map {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 4px 8px;
+  background: #d97706;
+  color: #111;
+  font-weight: 600;
+}
+
 .video.empty {
   display: flex;
   align-items: center;

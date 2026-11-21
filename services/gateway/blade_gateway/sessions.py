@@ -30,7 +30,6 @@ class StreamSpec(BaseModel):
 
 class SessionSpec(BaseModel):
     name: str = "session"
-    map: str = "altis"
     model: str | None = None
     streams: list[StreamSpec] = []
 

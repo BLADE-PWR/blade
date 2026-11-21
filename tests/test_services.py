@@ -169,7 +169,7 @@ def test_stills_import(tmp_path, pkg):
             "laser_rangefinder": {"range": tel["range_m"]},
             "objects": [{"type": "soldier", "object_id": 3, "stance": "prone", "ground_pos_asl": [1.0, 2.0, 3.0]}]}))
     out = tmp_path / "rec"
-    assert import_stills([str(ds), "--out", str(out), "--split", "val"]) == 0
+    assert import_stills([str(ds), "--out", str(out), "--split", "val", "--map", "tiny"]) == 0
     m = json.loads((out / "manifest.json").read_text())
     assert m["frames"] == 3 and m["source"] == "stills" and m["image"] == {"w": 640, "h": 360}
     kinds = [r["kind"] for r in load_truth(out)]
@@ -302,7 +302,8 @@ class GeoMsg:
 def world_service(monkeypatch):
     from blade_world import main as wm
     nc = FakeNats()
-    for name, value in (("state", {"nc": nc}), ("worlds", {}), ("clocks", {}), ("swept", {})):
+    for name, value in (("state", {"nc": nc}), ("worlds", {}), ("clocks", {}), ("swept", {}), ("maps", {}),
+                        ("map_seen", {}), ("left_out", set())):
         monkeypatch.setattr(wm, name, value)
     return wm, nc
 
@@ -310,7 +311,7 @@ def world_service(monkeypatch):
 def tank_geo(k, media=None):
     ts = {"capture": time.time()} | ({"media": media} if media is not None else {})
     pts = [{"tid": 1, "cls": "tank", "grp": "tank", "conf": 0.9, "xyz": [500.0, 500.0, 5.0], "sigma_m": 1.0}]
-    return GeoMsg(Envelope(sid="rp", wid="w1", frame=k, ts=ts, data={"pts": pts}))
+    return GeoMsg(Envelope(sid="rp", wid="w1", frame=k, ts=ts, data={"pts": pts, "map": "tiny"}))
 
 
 async def test_paused_replay_does_not_age_the_world(monkeypatch):

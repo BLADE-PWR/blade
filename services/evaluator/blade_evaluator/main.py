@@ -30,6 +30,8 @@ class Evaluator:
     def __init__(self):
         self.truth: dict[str, StreamTruth] = defaultdict(StreamTruth)
         self.sid_wid: dict[str, str] = {}
+        self.sid_map: dict[str, str] = {}  # from geo
+        self.world_map: dict[str, str] = {}  # from world.<wid>.objects; drones on another map are left out
         self.objects: dict[str, dict[str, dict]] = defaultdict(dict)
         self.evals: dict[str, WorldEval] = {}
         self.writers: dict[str, tuple] = {}
@@ -62,6 +64,9 @@ class Evaluator:
         env, _ = decode(msg)
         sid, wid = env.sid, env.wid or "default"
         self.sid_wid[sid] = wid
+        self.sid_map[sid] = env.data["map"]
+        if self.world_map.get(wid, env.data["map"]) != env.data["map"]:
+            return
         st = self.truth[sid]
         fp = [p for p in env.data.get("footprint", []) if p]
         st.footprint = fp if len(fp) >= 3 else None
@@ -83,6 +88,7 @@ class Evaluator:
     async def on_world(self, msg) -> None:
         env, _ = decode(msg)
         wid = msg.subject.split(".")[1]
+        self.world_map[wid] = env.data["map"]
         objs = self.objects[wid]
         for o in env.data.get("objects", []):
             objs[o["oid"]] = o
@@ -102,7 +108,7 @@ class Evaluator:
                 f.flush()
 
     async def evaluate(self, wid: str, t: float) -> None:
-        sids = [s for s, w in self.sid_wid.items() if w == wid]
+        sids = [s for s, w in self.sid_wid.items() if w == wid and self.sid_map.get(s) == self.world_map.get(wid)]
         # streams of one world film one game: an object in view of two drones counts once
         seen: dict[int, tuple] = {}
         footprints = []

@@ -22,7 +22,7 @@ It is not part of the uv workspace; it has its own `package.json`. Needs Node.js
 
 ## Run
 
-Start the server (`uv run python tools/dev.py --map altis`, without an NVIDIA card add `--detect-fps 5`), then:
+Start the server (`uv run python tools/dev.py`, without an NVIDIA card add `--detect-fps 5`), then:
 ```bash
 cd frontend
 ```
@@ -40,7 +40,7 @@ devices on the LAN open http://<server-ip>:5173 (port 5173 must be open in the f
 
 For the command view with two drones, create a session with two streams in one world by hand:
 ```bash
-curl -XPOST localhost:8000/sessions -H 'content-type: application/json' -d '{"name": "Demo", "map": "altis",
+curl -XPOST localhost:8000/sessions -H 'content-type: application/json' -d '{"name": "Demo",
   "streams": [{"sid": "rp-1", "source": "replay", "wid": "rp-1", "recording": "<id>", "loop": true},
   {"sid": "rp-2", "source": "replay", "wid": "rp-1", "recording": "<id>", "loop": true, "offset_s": 40}]}'
 ```

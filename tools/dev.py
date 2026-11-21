@@ -34,7 +34,6 @@ def pump(name: str, color: str, stream) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--map", default="altis")
     ap.add_argument("--model", default="arma_detector_v1@1", help="model id, or 'oracle'")
     ap.add_argument("--only", help="comma-separated subset of: " + ",".join(SERVICES))
     ap.add_argument("--no-record", action="store_true", help="do not record live streams by default")
@@ -42,14 +41,13 @@ def main() -> int:
     ap.add_argument("--detect-fps", type=float, default=0, help="live streams: detect at most N frames/s (0 = all)")
     args = ap.parse_args()
 
-    env = dict(os.environ, MAPS_DIR=str(ROOT / "maps"), MAP=args.map, MODEL=args.model,
+    env = dict(os.environ, MAPS_DIR=str(ROOT / "maps"), MODEL=args.model,
                MODELS_DIR=str(ROOT / "models"), RECORDINGS_DIR=str(ROOT / "recordings"),
                SESSIONS_STORE=str(ROOT / "state" / "gateway_sessions.json"), EVAL_DIR=str(ROOT / "state" / "eval"),
                RECORD_ALL="0" if args.no_record else "1", MAX_FPS=str(args.detect_fps), PYTHONUNBUFFERED="1")
     wanted = args.only.split(",") if args.only else SERVICES
-    if "georef" in wanted and not (ROOT / "maps" / args.map / "meta.json").exists():
-        have = sorted(p.parent.name for p in (ROOT / "maps").glob("*/meta.json"))
-        print(f"no map package maps/{args.map} (georef needs it); maps here: {have or 'none'}")
+    if "georef" in wanted and not any((ROOT / "maps").glob("*/meta.json")):
+        print("no map package in maps/ (georef needs one): see the README, Map package")
         return 1
     procs: list[tuple[str, subprocess.Popen]] = []
     if not port_open(4222):

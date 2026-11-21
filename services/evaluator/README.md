@@ -2,7 +2,8 @@
 
 Compares the pipeline's output with the game's sim truth, live. It reports position error (CEP50/90),
 detection rate and false objects at two levels: `geo` (every georef point) and `world` (objects after
-fusion). Every matched sample is also written to `state/eval/eval_<wid>_<start>.csv`.
+fusion). Every matched sample is also written to `state/eval/eval_<wid>_<start>.csv`. A drone on another map than
+its world (`map` in `geo` and `world.<wid>.objects`) is left out.
 
 ## Bus
 

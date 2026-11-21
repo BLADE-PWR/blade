@@ -29,6 +29,7 @@ export type Preview = { frame: number | null; url: string; blob: Blob; w: number
 
 export type Drone = {
   sid: string;
+  wid: string | null; // from its geo messages
   previews: Preview[];
   lastFrameAt: number;
   dets: (DetectionsData & { frame: number | null; at: number }) | null;
@@ -47,6 +48,8 @@ export type Situation = {
   diag: Map<string, DiagData>; // service -> streams of all its replicas
   replicas: Map<string, DiagData & { at: number }>; // "service instance" -> that replica's last report
   clocks: Map<string, number>; // wid -> s
+  maps: Map<string, string>; // wid -> map
+  objectWids: Map<string, string>; // oid -> wid
 };
 
 export type Filter = { hidden: Set<string>; stale: boolean };
@@ -57,20 +60,38 @@ export const boxVisible = (d: Det, f: Filter) => !f.hidden.has(d.grp);
 
 export function emptySituation(): Situation {
   return { session: null, drones: new Map(), objects: new Map(), events: new Map(), alerts: new Map(), truth: [],
-    diag: new Map(), replicas: new Map(), clocks: new Map() };
+    diag: new Map(), replicas: new Map(), clocks: new Map(), maps: new Map(),
+    objectWids: new Map() };
 }
 
 function drone(s: Situation, sid: string): Drone {
   let d = s.drones.get(sid);
   if (!d) {
-    d = { sid, previews: [], lastFrameAt: 0, dets: null, geo: null, route: [], stamps: null };
+    d = { sid, wid: null, previews: [], lastFrameAt: 0, dets: null, geo: null, route: [], stamps: null };
     s.drones.set(sid, d);
   }
   return d;
 }
 
-function upsert(s: Situation, objects: WorldObject[]): void {
-  for (const o of objects) s.objects.set(o.oid, o);
+function upsert(s: Situation, wid: string, objects: WorldObject[]): void {
+  for (const o of objects) {
+    s.objects.set(o.oid, o);
+    s.objectWids.set(o.oid, wid);
+  }
+}
+
+function remove(s: Situation, oid: string): void {
+  s.objects.delete(oid);
+  s.objectWids.delete(oid);
+}
+
+/** A world on a new map: its objects and alerts were on the old one. */
+function setMap(s: Situation, wid: string, map: string): void {
+  if (s.maps.get(wid) && s.maps.get(wid) !== map) {
+    for (const [oid, w] of s.objectWids) if (w === wid) remove(s, oid);
+    for (const key of s.alerts.keys()) if (key.startsWith(`${wid} `)) s.alerts.delete(key);
+  }
+  s.maps.set(wid, map);
 }
 
 function addEvents(s: Situation, events: WorldEvent[]): void {
@@ -92,9 +113,11 @@ export function apply(s: Situation, m: Message): void {
       break;
     case "snapshot": {
       const snap = m.data as Snapshot;
-      upsert(s, snap.objects);
+      const wid = m.wid ?? "";
+      if (snap.map) setMap(s, wid, snap.map);
+      upsert(s, wid, snap.objects);
       addEvents(s, snap.events);
-      if (m.wid && snap.t) s.clocks.set(m.wid, snap.t);
+      if (snap.t) s.clocks.set(wid, snap.t);
       break;
     }
     case "detections":
@@ -106,14 +129,17 @@ export function apply(s: Situation, m: Message): void {
       if (m.sid) {
         const d = drone(s, m.sid);
         d.geo = m.data as GeoData;
+        d.wid = m.wid ?? null;
         addRoute(d, [d.geo.camera[0], d.geo.camera[1]]);
       }
       break;
     case "world.objects": {
       const w = m.data as WorldObjectsData;
-      upsert(s, w.objects);
-      for (const oid of [...w.expired, ...(w.forgotten ?? [])]) s.objects.delete(oid);
-      if (m.wid && w.t) s.clocks.set(m.wid, w.t);
+      const wid = m.wid ?? "";
+      setMap(s, wid, w.map); // first: these objects are on the new map
+      upsert(s, wid, w.objects);
+      for (const oid of [...w.expired, ...(w.forgotten ?? [])]) remove(s, oid);
+      if (w.t) s.clocks.set(wid, w.t);
       if (m.sid && m.ts) drone(s, m.sid).stamps = m.ts as Stamps;
       break;
     }
@@ -151,6 +177,18 @@ export function addPreview(s: Situation, f: Frame): void {
     h: f.header.h, src: src ? [src.w, src.h] : [f.header.w, f.header.h] });
   d.lastFrameAt = Date.now() / 1000;
   while (d.previews.length > PREVIEWS_KEPT) URL.revokeObjectURL(d.previews.shift()!.url);
+}
+
+/** The map to show: the focused drone's world's, else any world's. */
+export function shownMap(s: Situation, focus: string | null): string | undefined {
+  const wid = focus ? s.drones.get(focus)?.wid : null;
+  return (wid ? s.maps.get(wid) : undefined) ?? s.maps.values().next().value;
+}
+
+/** The drone is on another map than its world, which then leaves its detections out. */
+export function offMap(s: Situation, d: Drone | undefined): boolean {
+  const map = d?.wid ? s.maps.get(d.wid) : undefined;
+  return !!(map && d?.geo && d.geo.map !== map);
 }
 
 export function worldNow(s: Situation): number {

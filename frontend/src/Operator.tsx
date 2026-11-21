@@ -12,6 +12,7 @@ import {
   allAlerts,
   boxVisible,
   type Filter,
+  offMap,
   shownFrame,
   type Situation,
   stageTimes,
@@ -71,7 +72,8 @@ export function Operator({ sit, sid, main, onMain, onDrone, filter, onFilter }: 
         </span>
       </div>
       {sid && (
-        <Video sid={sid} shown={shown} geo={drone?.geo} objects={sit.objects} selected={selected} filter={filter} />
+        <Video sid={sid} shown={shown} geo={drone?.geo} objects={sit.objects} selected={selected} filter={filter}
+          offMap={offMap(sit, drone)} />
       )}
     </section>
   );

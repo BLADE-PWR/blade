@@ -1,4 +1,5 @@
-"""georef: detections.<sid> -> geo.<sid>. Stateless; rays through each box anchor onto the map's DEM (project.py)."""
+"""georef: detections.<sid> -> geo.<sid>. Stateless; rays through each box anchor onto the DEM (project.py) of the
+map the drone is on (tel["map"]). Every map package in MAPS_DIR is loaded at startup, keyed by folder name."""
 from __future__ import annotations
 
 import asyncio
@@ -19,9 +20,10 @@ from .project import project_frame
 
 log = logging.getLogger("georef")
 MAPS_DIR = Path(env_str("MAPS_DIR", "maps"))
-MAP = env_str("MAP", "altis")
 
-state: dict = {"pkg": None, "nc": None}
+state: dict = {"nc": None}
+packages: dict[str, MapPackage] = {}
+missing: set[str] = set()  # maps a drone reported that have no package, logged once
 diag = Diag("georef")
 
 
@@ -29,8 +31,17 @@ async def on_detections(msg) -> None:
     t_in = now()
     env, _ = decode(msg)
     data = env.data
-    geo = await asyncio.to_thread(project_frame, state["pkg"].terrain, data["tel"], data["dets"])
-    out = forward(env, GeoData.model_validate(geo).model_dump(exclude_none=True), "georef", t_in)
+    name = data["tel"]["map"]
+    pkg = packages.get(name)
+    if pkg is None:  # still published (no points), so the world sees the drone and replays get their ack
+        if name not in missing:
+            missing.add(name)
+            log.warning("%s is on map %s, which has no package in %s: its detections are not placed",
+                        env.sid, name, MAPS_DIR)
+        geo = {"camera": data["tel"]["camera"]["pos_asl"], "footprint": [], "pts": []}
+    else:
+        geo = await asyncio.to_thread(project_frame, pkg.terrain, data["tel"], data["dets"])
+    out = forward(env, GeoData.model_validate({**geo, "map": name}).model_dump(exclude_none=True), "georef", t_in)
     await publish(state["nc"], f"geo.{env.sid}", out)
     diag.got(env.sid)
     diag.sent(env.sid, latency_s=now() - env.ts.get("capture", now()))
@@ -38,9 +49,11 @@ async def on_detections(msg) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    state["pkg"] = await asyncio.to_thread(MapPackage.load, MAPS_DIR / MAP)
-    t = state["pkg"].terrain
-    log.info("map %s: %d x %d nodes, %.1f m cells, heights %.1f .. %.1f m", MAP, t.nx, t.ny, t.d, t.hmin, t.hmax)
+    for meta in sorted(MAPS_DIR.glob("*/meta.json")):
+        name = meta.parent.name
+        packages[name] = await asyncio.to_thread(MapPackage.load, meta.parent)
+        t = packages[name].terrain
+        log.info("map %s: %d x %d nodes, %.1f m cells, heights %.1f .. %.1f m", name, t.nx, t.ny, t.d, t.hmin, t.hmax)
     state["nc"] = await connect("georef")
     await state["nc"].subscribe("detections.>", cb=on_detections)
     task = asyncio.create_task(diag.run(state["nc"]))
@@ -60,17 +73,17 @@ class ProjectReq(BaseModel):
 
 @app.post("/project")
 async def project(req: ProjectReq):
-    if state["pkg"] is None:
-        raise HTTPException(503, "map not loaded")
+    pkg = packages.get(req.tel["map"])
+    if pkg is None:
+        raise HTTPException(404, f"no map package {req.tel['map']}")
     dets = list(req.dets) + [{"cls": "point", "grp": "point", "conf": 1.0, "box": [u, v, u, v]}
                              for u, v in req.pixels]
-    return project_frame(state["pkg"].terrain, req.tel, dets)
+    return project_frame(pkg.terrain, req.tel, dets)
 
 
 @app.get("/health")
 async def health():
-    pkg = state["pkg"]
-    return {"ok": pkg is not None, "map": MAP, "extent": pkg.terrain.extent if pkg else None}
+    return {"ok": bool(packages), "maps": {name: pkg.terrain.extent for name, pkg in packages.items()}}
 
 
 def main() -> None:

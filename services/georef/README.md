@@ -1,8 +1,8 @@
 # georef
 
 Turns each detected box into a map position. It casts a ray from the camera through the box's anchor
-point onto the map's elevation model and adds an uncertainty (σ) and the camera's ground footprint.
-The service is stateless.
+point onto the elevation model of the map the drone is on (`map` in its telemetry) and adds an uncertainty (σ)
+and the camera's ground footprint. The service is stateless.
 
 ## Bus
 
@@ -15,7 +15,7 @@ The service is stateless.
 
 | Method | Path | Meaning |
 |---|---|---|
-| GET | `/health` | Loaded map and its extent |
+| GET | `/health` | Loaded maps and their extents |
 | POST | `/project` | Body `{"tel", "dets", "pixels"}`: project boxes or plain pixels `[u, v]` for one telemetry record, without the bus |
 
-Config: `MAP` (`altis`), `MAPS_DIR` (`maps`).
+Config: `MAPS_DIR` (`maps`): every map package in it is loaded at startup.

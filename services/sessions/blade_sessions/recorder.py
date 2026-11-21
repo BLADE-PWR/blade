@@ -33,11 +33,10 @@ class Active:
 
 
 class Recorder:
-    def __init__(self, root: Path, record_all: bool, idle_s: float = 5.0, map_id: str | None = None):
+    def __init__(self, root: Path, record_all: bool, idle_s: float = 5.0):
         self.root = root
         self.record_all = record_all
         self.idle_s = idle_s
-        self.map_id = map_id
         self.active: dict[str, Active] = {}
         self.wanted: dict[str, bool] = {}  # per-sid override of record_all
         self.kv = None
@@ -90,7 +89,7 @@ class Recorder:
         a = Active(rid, sid, d, open(d / "stream.ts", "ab"), open(d / "index.jsonl", "a"),
                    open(d / "truth.jsonl", "a"))
         (d / "manifest.json").write_text(json.dumps({"v": 1, "id": rid, "sid": sid, "source": "live",
-                                                     "map": self.map_id, "started": t, "recording": True}, indent=2))
+                                                     "started": t, "recording": True}, indent=2))
         # spawn records came long before this stream: copy them from the registry
         if self.kv is None and self.js is not None:
             with contextlib.suppress(Exception):
@@ -134,7 +133,7 @@ class Recorder:
             f.close()
         log.info("recording %s closed: %.1f MB, %d truth records", a.id, a.bytes / 1e6, a.truth_n)
         try:
-            return await asyncio.to_thread(finalize, a.dir, {"source": "live", "sid": a.sid, "map": self.map_id,
+            return await asyncio.to_thread(finalize, a.dir, {"source": "live", "sid": a.sid,
                                                              "started": a.started, "ended": a.last,
                                                              "recording": False})
         except Exception as e:
