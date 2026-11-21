@@ -78,7 +78,7 @@ cd frontend && npm install && npm run dev
 
 On the Arma PC (Windows), see [uplink](services/uplink/README.md):
 ```bash
-uv run blade-uplink --sid pc1-uav1 --server <server-ip>
+uv run blade-uplink --sid pc1-uav1 --mission <mission> --server <server-ip>
 ```
 
 With Docker:

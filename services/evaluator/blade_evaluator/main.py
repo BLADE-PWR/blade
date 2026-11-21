@@ -62,7 +62,7 @@ class Evaluator:
 
     async def on_geo(self, msg) -> None:
         env, _ = decode(msg)
-        sid, wid = env.sid, env.wid or "default"
+        sid, wid = env.sid, env.wid
         self.sid_wid[sid] = wid
         self.sid_map[sid] = env.data["map"]
         if self.world_map.get(wid, env.data["map"]) != env.data["map"]:

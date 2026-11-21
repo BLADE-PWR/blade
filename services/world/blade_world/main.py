@@ -79,7 +79,7 @@ async def reset(wid: str, name: str) -> None:
 async def on_geo(msg) -> None:
     t_in = now()
     env, _ = decode(msg)
-    wid = env.wid or "default"
+    wid = env.wid
     if not await on_map(wid, env.sid, env.data["map"], time.time()):
         await ack(env)
         return

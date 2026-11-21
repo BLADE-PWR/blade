@@ -133,7 +133,7 @@
     },
     "Tel": {
       "additionalProperties": true,
-      "description": "Arma's tel record, as the mission emits it, plus what the uplink adds (sid, t_capture).",
+      "description": "Arma's tel record, as the mission emits it, plus what the uplink adds (sid, mission, t_capture).",
       "properties": {
         "camera": {
           "$ref": "#/$defs/Camera"
@@ -150,6 +150,19 @@
           "description": "Arma's worldName in lower case: the maps/ package",
           "title": "Map",
           "type": "string"
+        },
+        "mission": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "world a live drone joins (uplink --mission); a replay plays into its own",
+          "title": "Mission"
         },
         "range_m": {
           "anyOf": [

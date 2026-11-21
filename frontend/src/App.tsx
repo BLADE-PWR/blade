@@ -14,8 +14,6 @@ const CLOCK_MS = 1000;
 export type View = "operator" | "command";
 export type MainPanel = "video" | "map";
 
-const list = (s: string) => s.split(",").map((x) => x.trim()).filter(Boolean);
-
 export function App() {
   const [target, setTarget] = useState<Target | null>(null);
   if (!target) return <Pick onPick={setTarget} />;
@@ -26,8 +24,7 @@ function Pick({ onPick }: { onPick: (t: Target) => void }) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [sids, setSids] = useState("rp-1");
-  const [wids, setWids] = useState("rp-1");
+  const [wid, setWid] = useState("");
 
   useEffect(() => {
     Promise.all([getJSON<Session[]>("/sessions"), getJSON<Recording[]>("/api/recordings")])
@@ -40,7 +37,7 @@ function Pick({ onPick }: { onPick: (t: Target) => void }) {
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    onPick({ sids: list(sids), wids: list(wids) });
+    if (wid.trim()) onPick({ wid: wid.trim() });
   };
   const replay = (rec: Recording) => {
     setError(null);
@@ -72,10 +69,10 @@ function Pick({ onPick }: { onPick: (t: Target) => void }) {
           </li>
         ))}
       </ul>
-      <h2>Or streams and worlds</h2>
+      <h2>Or a mission</h2>
       <form onSubmit={submit}>
-        <label>sids <input value={sids} onChange={(e) => setSids(e.target.value)} /></label>
-        <label>wids <input value={wids} onChange={(e) => setWids(e.target.value)} /></label>
+        <label>mission <input value={wid} placeholder="uplink --mission" onChange={(e) => setWid(e.target.value)} />
+        </label>
         <button type="submit">Connect</button>
       </form>
     </main>
@@ -135,7 +132,7 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
   }, []);
 
   const now = Date.now() / 1000;
-  const sids = sit.session?.streams.map((st) => st.sid) ?? ("sids" in target ? target.sids : []);
+  const sids = [...sit.drones.keys()]; // every drone seen so far, in the order they joined
   const sid = picked && sids.includes(picked) ? picked : (sids[0] ?? null);
   const drone = sid ? sit.drones.get(sid) : undefined;
   const replay = sit.session?.streams.some((st) => st.source === "replay") ?? false;

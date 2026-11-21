@@ -18,7 +18,7 @@ log = logging.getLogger("gateway.sessions")
 class StreamSpec(BaseModel):
     sid: str
     source: str = Field("live", description="live | replay")
-    wid: str = "live"
+    wid: str
     record: bool = True
     recording: str | None = None
     speed: float = 1.0
@@ -127,7 +127,6 @@ class Orchestrator:
                 s.errors.append(f"detector assignment: {e}")
         async with httpx.AsyncClient(timeout=10) as c:
             for st in s.streams:
-                await self._call(c, s, "PUT", "ingest", f"/streams/{st.sid}", json={"wid": st.wid})
                 if st.source == "live":
                     await self._call(c, s, "PUT", "sessions", f"/recording/{st.sid}", json={"on": st.record})
                 elif st.source == "replay":

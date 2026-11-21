@@ -12,13 +12,12 @@ import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
-from pydantic import BaseModel
 from starlette.requests import ClientDisconnect
 
 from blade_common import ports
 from blade_common.bus import close, connect, kv_bucket, now, publish
 from blade_common.contracts import Envelope, FrameData
-from blade_common.service import Diag, env_float, env_int, env_str, run_app
+from blade_common.service import Diag, env_float, env_int, run_app
 
 from .source import Paired, PipeReader, Source
 
@@ -26,7 +25,6 @@ log = logging.getLogger("ingest")
 
 VIDEO_PORT = env_int("VIDEO_PORT", ports.VIDEO_UDP)
 TRUTH_PORT = env_int("TRUTH_PORT", ports.TRUTH_UDP)
-DEFAULT_WID = env_str("DEFAULT_WID", "live")
 IDLE_S = env_float("SOURCE_IDLE_S", 3.0)
 ACK_TIMEOUT_S = env_float("ACK_TIMEOUT_S", 10.0)
 RAW_CHUNK = 64 * 1024
@@ -45,7 +43,6 @@ def frame_ts(kind: str, tel: dict, t_in: float, t_out: float) -> dict:
 class Ingest:
     def __init__(self):
         self.sources: dict[str, Source] = {}
-        self.wids: dict[str, str] = {}  # sid -> wid, set by the gateway
         self.diag = Diag("ingest")
         self.nc = None
         self.kv = None
@@ -59,13 +56,13 @@ class Ingest:
     def _spawn(self, coro) -> None:
         asyncio.run_coroutine_threadsafe(coro, self.loop)
 
-    def wid_for(self, src: Source) -> str:
-        return self.wids.get(src.sid or "", src.wid or DEFAULT_WID)
-
     def on_frame(self, src: Source, p: Paired) -> None:
         tel = p.tel
+        if src.wid is None:  # live: the mission the uplink was started with; a replay has its own
+            src.wid = tel["mission"]
+            log.info("%s (%s) joins world %s", src.key, src.sid, src.wid)
         ts = frame_ts(src.kind, tel, p.t_in, p.t_out)
-        env = Envelope(sid=p.sid, frame=tel.get("frame"), wid=self.wid_for(src), ts=ts,
+        env = Envelope(sid=p.sid, frame=tel.get("frame"), wid=src.wid, ts=ts,
                        data=FrameData.model_validate({"tel": tel, "jpeg": {"w": p.jpeg_size[0],
                                                                          "h": p.jpeg_size[1]}}).model_dump(
                            exclude_none=True))
@@ -88,7 +85,7 @@ class Ingest:
             self._ack.notify_all()
 
     def on_sid(self, src: Source) -> None:
-        log.info("%s is stream %s (%s, wid %s)", src.key, src.sid, src.kind, self.wid_for(src))
+        log.info("%s is stream %s (%s)", src.key, src.sid, src.kind)
         if src.kind == "live":
             self._flush_raw(src, force=True)
 
@@ -212,10 +209,9 @@ class Ingest:
             self._spawn(self.publish_truth(msg))
 
     async def publish_truth(self, msg: dict) -> None:
-        sid, kind, rec = msg.get("sid"), msg.get("kind"), msg.get("rec") or {}
-        if not sid or kind not in ("gt", "spawn", "evt"):
+        sid, wid, kind, rec = msg.get("sid"), msg.get("wid"), msg.get("kind"), msg.get("rec") or {}
+        if not sid or not wid or kind not in ("gt", "spawn", "evt"):
             return
-        wid = self.wids.get(sid, msg.get("wid") or DEFAULT_WID)
         env = Envelope(sid=sid, frame=rec.get("frame"), wid=wid, ts={"truth_recv": round(now(), 6)}, data=rec)
         subject = {"gt": "truth", "spawn": "registry", "evt": "events"}[kind]
         await publish(self.nc, f"{subject}.{sid}", env)
@@ -251,10 +247,6 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="blade ingest", lifespan=lifespan)
 
 
-class StreamPatch(BaseModel):
-    wid: str
-
-
 @app.get("/health")
 async def health():
     return {"ok": True, "nats": bool(svc.nc and svc.nc.is_connected), "kv": svc.kv is not None}
@@ -262,27 +254,16 @@ async def health():
 
 @app.get("/streams")
 async def streams(all: bool = False):
-    out = [s.info() for s in svc.sources.values() if all or not s.done.is_set()]
-    for s in out:
-        s["wid"] = svc.wids.get(s["sid"] or "", s["wid"] or DEFAULT_WID)
-    return out
-
-
-@app.put("/streams/{sid}")
-async def set_stream(sid: str, body: StreamPatch):
-    svc.wids[sid] = body.wid
-    return {"sid": sid, "wid": body.wid}
+    return [s.info() for s in svc.sources.values() if all or not s.done.is_set()]
 
 
 @app.post("/push/{sid}")
-async def push(sid: str, request: Request, wid: str | None = None, delivery: str = "latest"):
+async def push(sid: str, request: Request, wid: str, delivery: str = "latest"):
     """Stream an MPEG-TS body in. Backpressure: the body is read only as fast as it is decoded."""
     key = f"push:{sid}"
     old = svc.sources.get(key)
     if old and not old.done.is_set():
         raise HTTPException(409, f"{sid} is already being pushed")
-    if wid:
-        svc.wids[sid] = wid
     if delivery == "all":
         svc.acked.pop(sid, None)
     src = svc.new_source(key, "replay", sid=sid, wid=wid, delivery=delivery)

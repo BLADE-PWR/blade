@@ -27,7 +27,7 @@ class Replay:
     dir: Path
     ingest_url: str
     truth_addr: tuple[str, int]
-    wid: str | None = None
+    wid: str
     speed: float = 1.0
     loop: bool = False
     offset_s: float = 0.0
@@ -188,7 +188,7 @@ class Replay:
 
     async def _run(self) -> None:
         url = f"{self.ingest_url}/push/{self.sid}"
-        params = {k: v for k, v in (("wid", self.wid), ("delivery", self.delivery)) if v}
+        params = {"wid": self.wid, "delivery": self.delivery}
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(None, connect=5)) as client:
                 r = await client.post(url, params=params, content=self._body())

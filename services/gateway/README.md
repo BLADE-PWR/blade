@@ -21,10 +21,12 @@ assigns its streams to detector replicas and starts recording or replays.
 Session body:
 ```json
 {"name": "session", "model": null,
- "streams": [{"sid": "pc1-uav1", "source": "live", "wid": "live", "record": true},
+ "streams": [{"sid": "pc1-uav1", "source": "live", "wid": "arma-live1", "record": true},
              {"sid": "rp-1", "source": "replay", "wid": "rp-1", "recording": "<id>",
               "speed": 1.0, "loop": false, "offset_s": 0, "pacing": "realtime", "delivery": "latest"}]}
 ```
+A live drone's world is its uplink's `--mission`; a live stream's `wid` here only says which world the session
+shows, so it must match the mission.
 
 ## Proxy
 
@@ -43,7 +45,7 @@ Session body:
 
 ## WebSocket
 
-`/ws?session=<id>` or `/ws?sids=a,b&wids=x,y`. The server only sends.
+`/ws?session=<id>` or `/ws?wids=x,y`: every drone in those worlds, also ones that join later. The server only sends.
 
 Text messages are JSON: `{"type", "sid", "wid", "frame", "ts", "data"}`.
 

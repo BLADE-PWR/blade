@@ -26,7 +26,9 @@ pairs it with its telemetry and publishes it as a JPEG; sim truth is passed on t
 |---|---|---|
 | GET | `/health` | Service state |
 | GET | `/streams?all=` | Streams being received: sid, kind, wid, size, frames, fps. `all=true` includes ended ones |
-| PUT | `/streams/{sid}` | Body `{"wid"}`: put the stream into a world |
-| POST | `/push/{sid}?wid=&delivery=` | Stream an MPEG-TS body in (used by replays). `delivery=all` holds each frame until the world model has acked the previous one |
+| POST | `/push/{sid}?wid=&delivery=` | Stream an MPEG-TS body into world `wid` (required; used by replays). `delivery=all` holds each frame until the world model has acked the previous one |
 
-Config: `VIDEO_PORT`, `TRUTH_PORT`, `DEFAULT_WID` (`live`), `SOURCE_IDLE_S`, `ACK_TIMEOUT_S`.
+A live stream's world (`wid`) is the `mission` in its telemetry (uplink `--mission`); a replay plays into the world
+it is pushed with, whatever mission it was recorded with. Sim truth carries its world too.
+
+Config: `VIDEO_PORT`, `TRUTH_PORT`, `SOURCE_IDLE_S`, `ACK_TIMEOUT_S`.

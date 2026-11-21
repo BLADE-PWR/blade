@@ -138,7 +138,7 @@ async def on_events(msg) -> None:
 
 async def on_geo(msg) -> None:
     env, _ = decode(msg)
-    wid = env.wid or "default"
+    wid = env.wid
     sid_wid[env.sid] = wid
     eng = engine(wid)
     if eng.map is not None and env.data["map"] != eng.map:  # a drone the world leaves out

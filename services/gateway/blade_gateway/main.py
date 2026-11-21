@@ -1,6 +1,6 @@
 """gateway: operator sessions, /api/<area>/... proxied to the services (PROXIES), and a WebSocket per
-session (/ws?session=<id> or ?sids=a,b&wids=x,y): JSON text messages, plus binary frames
-(b"ZPIF" + uint32 header length + header JSON + JPEG)."""
+session or world (/ws?session=<id> or ?wids=x,y; every drone in those worlds, also ones that join later): JSON text
+messages, plus binary frames (b"ZPIF" + uint32 header length + header JSON + JPEG)."""
 from __future__ import annotations
 
 import asyncio
@@ -146,20 +146,19 @@ def _preview(jpeg: bytes, width: int) -> tuple[bytes, int, int]:
 
 
 @app.websocket("/ws")
-async def ws(websocket: WebSocket, session: str | None = None, sids: str = "", wids: str = ""):
+async def ws(websocket: WebSocket, session: str | None = None, wids: str = ""):
     await websocket.accept()
     if session:
         s = orch.sessions.get(session)
         if s is None:
             await websocket.close(code=4404, reason=f"no session {session}")
             return
-        sid_list, wid_list = s.sids, s.wids
+        wid_list = s.wids
         await websocket.send_text(json.dumps({"type": "session", "data": s.model_dump()}))
     else:
-        sid_list = [x for x in sids.split(",") if x]
         wid_list = [x for x in wids.split(",") if x]
-    if not sid_list and not wid_list:
-        await websocket.close(code=4400, reason="give ?session= or ?sids=&wids=")
+    if not wid_list:
+        await websocket.close(code=4400, reason="give ?session= or ?wids=")
         return
 
     out: asyncio.Queue = asyncio.Queue(maxsize=256)
@@ -176,6 +175,8 @@ async def ws(websocket: WebSocket, session: str | None = None, sids: str = "", w
     async def on_msg(msg):
         kind = msg.subject.split(".")[0]
         env, blob = decode(msg)
+        if kind in ("frames", "detections", "geo") and env.wid not in wid_list:
+            return
         if kind == "frames":
             t = time.time()
             if t - last_preview.get(env.sid, 0) < 1.0 / PREVIEW_FPS or out.qsize() > 64:
@@ -183,7 +184,7 @@ async def ws(websocket: WebSocket, session: str | None = None, sids: str = "", w
             last_preview[env.sid] = t
             jpeg, w, h = await asyncio.to_thread(_preview, blob, PREVIEW_W)
             head = json.dumps({"type": "frame", "sid": env.sid, "frame": env.frame, "w": w, "h": h,
-                               "src": env.data.get("tel", {}).get("image")}).encode()
+                               "src": env.data.get("tel", {}).get("image"), "ts": env.ts}).encode()
             put(b"ZPIF" + struct.pack(">I", len(head)) + head + jpeg)
             return
         typ = "world." + msg.subject.split(".")[-1] if kind == "world" else kind
@@ -192,9 +193,8 @@ async def ws(websocket: WebSocket, session: str | None = None, sids: str = "", w
         put(json.dumps({"type": typ, "sid": env.sid, "wid": env.wid, "frame": env.frame, "ts": env.ts,
                         "data": env.data}, separators=(",", ":")))
 
-    for sid in sid_list:
-        for subj in ("frames", "detections", "geo"):
-            subs.append(await nc.subscribe(f"{subj}.{sid}", cb=on_msg))
+    for subj in ("frames", "detections", "geo"):  # every drone; on_msg keeps the ones in wid_list
+        subs.append(await nc.subscribe(f"{subj}.>", cb=on_msg))
     for wid in wid_list:
         subs.append(await nc.subscribe(f"world.{wid}.>", cb=on_msg))
         subs.append(await nc.subscribe(f"alerts.{wid}", cb=on_msg))

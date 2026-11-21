@@ -334,3 +334,22 @@ async def test_live_world_ages_and_beats(monkeypatch):
     await wm.sweep_once(time.time() + 4)  # the drone stopped sending
     _, beat = nc.sent[-1]
     assert [o["state"] for o in beat["data"]["objects"]] == ["stale"] and beat["data"]["t"] > time.time() + 3
+
+
+def test_live_stream_joins_its_mission_and_a_replay_keeps_its_world(monkeypatch, pkg):
+    from blade_ingest import main as im
+    from blade_ingest.source import Paired, PipeReader
+
+    ing, sent = im.Ingest(), []
+    monkeypatch.setattr(im, "publish", lambda nc, subject, env, blob=None: sent.append(env.wid))
+    monkeypatch.setattr(ing, "_spawn", lambda coro: None)
+    tel = dict(look_at_tel(pkg.terrain, CENTRE, 1), sid="uav1", mission="m1",
+               t_capture=time.time())
+    live = Source(key="udp:x", kind="live", pipe=PipeReader(4))
+    replay = Source(key="push:rp", kind="replay", wid="rp-1", pipe=PipeReader(4))
+    for src in (live, replay):
+        src.sid = "uav1"
+        ing.on_frame(src, Paired("uav1", tel, b"", (320, 180), time.time(), time.time()))
+    assert sent == ["m1", "rp-1"] and live.wid == "m1"  # the replay ignores the mission it was recorded with
+    for src in (live, replay):
+        src.close()

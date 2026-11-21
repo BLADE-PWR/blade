@@ -51,11 +51,13 @@ class ImageSize(_Open):
 
 
 class Tel(_Open):
-    """Arma's tel record, as the mission emits it, plus what the uplink adds (sid, t_capture)."""
+    """Arma's tel record, as the mission emits it, plus what the uplink adds (sid, mission, t_capture)."""
     frame: int = Field(description="full diag_frameNo")
     t_game: float | None = None
     t_tick: float | None = None
     sid: str | None = None
+    mission: str | None = Field(None, description="world a live drone joins (uplink --mission); a replay plays "
+                                                  "into its own")
     t_capture: float | None = Field(None, description="epoch s when the uplink grabbed the frame")
     camera: Camera
     range_m: float | None = None

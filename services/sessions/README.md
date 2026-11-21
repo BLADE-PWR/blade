@@ -37,7 +37,7 @@ Replay body:
 |---|---|---|
 | `recording` | required | Recording id |
 | `sid` | required | Stream id the replay appears under |
-| `wid` | | World to put it in |
+| `wid` | required | World it plays into (not the mission it was recorded with) |
 | `speed` | 1.0 | Playback speed |
 | `loop` | false | Start again at the end |
 | `offset_s` | 0 | Start position |

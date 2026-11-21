@@ -8,7 +8,7 @@ Two views, in English, switched in the top bar. The layout follows the accepted 
 
 - Operator: one drone. Video with the detector's boxes, the map, the chosen object's details, the alert,
   object and event tabs, class filters and the time of each pipeline stage.
-- Command: every drone of the session. Either the map on the main panel (drone list, alerts, state) or the
+- Command: every drone in the world, also ones that join later. Either the map on the main panel (drone list, alerts, state) or the
   video (previews of all drones, the chosen drone, a small map, state per service, settings).
 
 Both views can put the map or the video on the main panel. A session with replays gets the replay bar
@@ -33,7 +33,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173. Pick a running session, or click Replay next to a recording: that creates and
+Open http://localhost:5173. Type a mission (the uplinks' `--mission`) to watch every drone in it, or pick a running session, or click Replay next to a recording: that creates and
 starts a session with a looping replay (each with a new `sid`, so it does not replace other replays). The Replay
 button in the top bar brings you back to the recordings. The dev server listens on all interfaces, so other
 devices on the LAN open http://<server-ip>:5173 (port 5173 must be open in the firewall).

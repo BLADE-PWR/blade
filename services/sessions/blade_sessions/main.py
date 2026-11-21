@@ -131,7 +131,7 @@ async def toggle(sid: str, body: RecordToggle):
 class ReplayReq(BaseModel):
     recording: str
     sid: str
-    wid: str | None = None
+    wid: str
     speed: float = 1.0
     loop: bool = False
     offset_s: float = 0.0

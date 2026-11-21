@@ -18,11 +18,12 @@ export type FrameHeader = {
   w: number;
   h: number;
   src: { w: number; h: number } | null;
+  ts: Record<string, unknown>;
 };
 
 export type Frame = { header: FrameHeader; jpeg: Blob };
 
-export type Target = { session: string } | { sids: string[]; wids: string[] };
+export type Target = { session: string } | { wid: string }; // a world: every drone in it, also ones joining later
 
 export function parseFrame(buf: ArrayBuffer): Frame {
   const magic = new TextDecoder().decode(new Uint8Array(buf, 0, 4));
@@ -35,7 +36,7 @@ export function parseFrame(buf: ArrayBuffer): Frame {
 function wsUrl(target: Target): string {
   const q = "session" in target
     ? new URLSearchParams({ session: target.session })
-    : new URLSearchParams({ sids: target.sids.join(","), wids: target.wids.join(",") });
+    : new URLSearchParams({ wids: target.wid });
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   return `${proto}//${location.host}/ws?${q}`;
 }
