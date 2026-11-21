@@ -3,7 +3,7 @@ name = "blade-uplink"
 version = "0.1.0"
 description = "Runs on the Arma PC: capture, pair, encode H.264 + telemetry into MPEG-TS"
 requires-python = ">=3.12,<3.13"
-dependencies = ["blade-common", "blade-geometry", "frame-code", "av>=14", "numpy>=1.26", "dxcam>=0.0.5; sys_platform == 'win32'"]
+dependencies = ["blade-common", "blade-geometry", "frame-code", "av>=14", "numpy>=1.26", "dxcam[cv2]>=0.0.5; sys_platform == 'win32'", "comtypes; sys_platform == 'win32'"]
 
 [project.scripts]
 blade-uplink = "blade_uplink.main:main"
