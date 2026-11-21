@@ -43,6 +43,7 @@ class Detector:
     def __init__(self):
         self.packages: dict[str, ModelPackage] = {}
         self.trackers: dict[tuple[str, str], StreamTracker] = {}
+        self.top_tid: dict[str, int] = {}  # sid -> highest track id sent, where its next tracker continues
         self.slots: dict[str, tuple] = {}  # sid -> (env, jpeg, t_in), newest wins
         self.fifo: dict[str, list] = {}  # sid -> frames of delivery "all" streams, in order
         self.ready = asyncio.Event()
@@ -69,7 +70,7 @@ class Detector:
     def tracker(self, sid: str, pkg: ModelPackage) -> StreamTracker:
         key = (sid, pkg.id)
         if key not in self.trackers:
-            self.trackers[key] = StreamTracker(pkg.tracker_args)
+            self.trackers[key] = StreamTracker(pkg.tracker_args, self.top_tid.get(sid, 0))
         return self.trackers[key]
 
     async def on_frame(self, msg) -> None:
@@ -154,6 +155,8 @@ class Detector:
             keep = ~too_big(pkg.max_m, tel, xyxy, conf, cls, sx, sy)
             xyxy, conf, cls = xyxy[keep], conf[keep], cls[keep]
             rows = self.tracker(sid, pkg).update(xyxy, conf, cls, img)
+            if len(rows):
+                self.top_tid[sid] = max(self.top_tid.get(sid, 0), int(rows[:, 4].max()))
             dets, used, floor = [], set(), self.conf_for(sid)
             for x1, y1, x2, y2, tid, cf, c, di in rows:
                 used.add(int(di))
@@ -242,6 +245,11 @@ async def upload_model(file: UploadFile):
 
 class StreamModel(BaseModel):
     model: str
+
+
+@app.get("/streams/{sid}/model")
+async def get_model(sid: str):
+    return {"sid": sid, "model": svc.model_for(sid)}
 
 
 @app.put("/streams/{sid}/model")

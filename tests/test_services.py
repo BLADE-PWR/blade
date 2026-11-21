@@ -252,6 +252,41 @@ async def test_stream_threshold_defaults_to_the_model_and_can_be_set(monkeypatch
     assert (await det.get_conf("s1"))["conf"] == 0.1
 
 
+async def test_model_switch_does_not_reuse_track_ids(monkeypatch):
+    import cv2
+    import yaml
+    from ultralytics.utils.checks import check_yaml
+
+    from blade_detector import main as det
+    from blade_detector.cluster import Cluster
+
+    args = dict(yaml.safe_load(open(check_yaml("botsort.yaml"))), gmc_method="none", with_reid=False)
+    pkg = {m: types.SimpleNamespace(id=m, imgsz=640, auto_imgsz={}, conf_track=0.1, conf_detect=0.5,
+                                    classes=["soldier"], group_of=["soldier"], max_m=np.array([np.inf]),
+                                    tracker_args=types.SimpleNamespace(**args)) for m in ("a@1", "b@1")}
+    boxes = (np.array([[10, 10, 50, 90], [200, 10, 240, 90]], np.float32), np.array([0.9, 0.9], np.float32),
+             np.array([0, 0]))
+    monkeypatch.setattr(det, "detect_batch", lambda p, imgs, conf, imgsz: [boxes] * len(imgs))
+    monkeypatch.setattr(det, "too_big", lambda *a: np.zeros(2, bool))
+    monkeypatch.setattr(det.svc, "cluster", Cluster("one"))
+    monkeypatch.setattr(det.svc, "packages", pkg)
+    monkeypatch.setattr(det.svc, "trackers", {})
+    monkeypatch.setattr(det.svc, "top_tid", {})
+    jpeg = cv2.imencode(".jpg", np.zeros((480, 640, 3), np.uint8))[1].tobytes()
+    tel = look_at_tel(types.SimpleNamespace(height=lambda x, y: 0.0), (0, 0), 1, w=640, h=480)
+    env = Envelope(sid="s1", wid="w", data={"tel": tel})
+
+    def tids(model):
+        (out,) = det.svc.process(model, [("s1", env, jpeg, 0.0)])
+        return {d["tid"] for d in out.data["dets"]} - {None}
+
+    await det.set_model("s1", det.StreamModel(model="a@1"))
+    before = set().union(*(tids("a@1") for _ in range(3)))
+    await det.set_model("s1", det.StreamModel(model="b@1"))
+    after = set().union(*(tids("b@1") for _ in range(3)))
+    assert before and after and min(after) > max(before)  # the world would glue a reused id to an old object
+
+
 class _Msg:
     def __init__(self, subject, data, t):
         self.subject, self.data, self.headers = subject, data, {"t": str(t)}

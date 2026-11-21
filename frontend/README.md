@@ -9,7 +9,7 @@ Two views, in English, switched in the top bar. The layout follows the accepted 
 - Operator: one drone. Video with the detector's boxes, the map, the chosen object's details, the alert,
   object and event tabs, class filters and the time of each pipeline stage.
 - Command: every drone in the world, also ones that join later. Either the map on the main panel (drone list, alerts, state) or the
-  video (previews of all drones, the chosen drone, a small map, state per service, settings).
+  video (previews of all drones, the chosen drone, a small map, state per service, settings: map background, the chosen drone's detector model, alert rules).
 
 Both views can put the map or the video on the main panel. A session with replays gets the replay bar
 (the mission: a button that lists the recordings and switches to another one, stopping the current replay; pause,

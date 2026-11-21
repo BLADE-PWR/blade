@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 
 import type { MainPanel } from "./App";
 import type { Alert, Vec2 } from "./contracts";
-import { getJSON } from "./gateway";
+import { getJSON, send } from "./gateway";
 import { AlertList } from "./Lists";
 import { type Background, MapView } from "./MapView";
 import {
@@ -207,6 +207,48 @@ function StatePanel({ sit, sid }: { sit: Situation; sid: string | null }) {
   );
 }
 
+// The detector model of one drone; switching takes effect on its next frame and resets its box threshold.
+function ModelPicker({ sid }: { sid: string }) {
+  const [models, setModels] = useState<string[]>([]);
+  const [model, setModel] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const path = `/api/detector/${encodeURIComponent(sid)}/model`;
+
+  useEffect(() => {
+    let current = true; // a late answer for the previous drone must not overwrite this one
+    setModel(null);
+    setError(null);
+    Promise.all([getJSON<{ id: string }[]>("/api/models"), getJSON<{ model: string }>(path)])
+      .then(([all, mine]) => {
+        if (!current) return;
+        setModels(all.map((m) => m.id));
+        setModel(mine.model);
+      })
+      .catch((e: Error) => current && setError(`Cannot read the models: ${e.message}`));
+    return () => {
+      current = false;
+    };
+  }, [path]);
+
+  const choose = (id: string) =>
+    send<{ model: string }>("PUT", path, { model: id })
+      .then((r) => {
+        setModel(r.model);
+        setError(null);
+      })
+      .catch((e: Error) => setError(`Model not switched: ${e.message}`));
+
+  if (model === null) return error ? <span className="error">{error}</span> : null;
+  return (
+    <>
+      <select value={model} onChange={(e) => choose(e.target.value)} aria-label="Detector model">
+        {models.map((m) => <option key={m}>{m}</option>)}
+      </select>
+      {error && <span className="error">{error}</span>}
+    </>
+  );
+}
+
 type Rules = { vehicle_group?: { enabled: boolean; min_count: number; radius_m: number } };
 
 type SettingsProps = { sit: Situation; drone?: Drone; layer: Background; onLayer: (l: Background) => void };
@@ -241,7 +283,7 @@ function Settings({ sit, drone, layer, onLayer }: SettingsProps) {
       </div>
       <div className="setting">
         <span className="muted">Model</span>
-        <span className="mono">{drone?.dets?.model ?? "no boxes yet"}</span>
+        {drone ? <ModelPicker sid={drone.sid} /> : <span className="muted">choose a drone</span>}
       </div>
       <div className="setting">
         <span className="muted">Alerts</span>

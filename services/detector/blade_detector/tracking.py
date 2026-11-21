@@ -20,12 +20,16 @@ class Dets:
 
 
 class StreamTracker:
-    def __init__(self, tracker_args):
+    def __init__(self, tracker_args, first_tid: int = 0):
+        """first_tid: ids start after it. BOTSORT numbers from 1, and the world takes a known (sid, tid) to be
+        the same object, so a stream's next tracker (after a model switch) must not reuse its ids."""
         from ultralytics.trackers.bot_sort import BOTSORT  # imports torch; only the tracker code runs
 
         self.t = BOTSORT(tracker_args)
+        self.first_tid = first_tid
 
     def update(self, xyxy: np.ndarray, conf: np.ndarray, cls: np.ndarray, img: np.ndarray):
         """-> rows (x1, y1, x2, y2, tid, conf, cls, det_index) in the input's pixel space."""
-        out = self.t.update(Dets(xyxy, conf, cls), img)
-        return np.asarray(out, dtype=np.float64).reshape(-1, 8)
+        out = np.asarray(self.t.update(Dets(xyxy, conf, cls), img), dtype=np.float64).reshape(-1, 8)
+        out[:, 4] += self.first_tid
+        return out

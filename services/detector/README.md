@@ -35,7 +35,8 @@ Replica heartbeats and stream assignments are kept in the JetStream KV buckets `
 | GET | `/models` | List model packages |
 | GET | `/models/{id}` | One package: classes, image size, thresholds |
 | POST | `/models` | Upload a model package as a zip (must contain `model.yaml`) |
-| PUT | `/streams/{sid}/model` | Body `{"model"}`: choose the model for a stream |
+| GET | `/streams/{sid}/model` | The stream's model (default: `MODEL`) |
+| PUT | `/streams/{sid}/model` | Body `{"model"}`: choose the model for a stream, also mid-flight: it starts a new tracker whose track ids continue after the old one's, so the world does not take a new track for an old object |
 | GET | `/streams/{sid}/conf` | The stream's box confidence threshold (default: the model's `conf.track`) |
 | PUT | `/streams/{sid}/conf` | Body `{"conf"}` (0-1): boxes below it are not published. Untracked boxes also need `conf.detect`; below `conf.track` it changes nothing. Choosing a model resets it |
 | GET | `/cluster` | Live replicas and which one owns each stream |
