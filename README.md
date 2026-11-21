@@ -55,7 +55,7 @@ with the video, boxes and the map. How to draw object motion (arrows, prediction
 
 ## Run
 
-Needs a map package in `maps/altis` and, for replays, a recording in `recordings/`.
+Needs a map package in `maps/<map name>` and, for replays, a recording in `recordings/`.
 
 ```bash
 uv sync
@@ -76,7 +76,7 @@ Replay a recording and watch it:
 curl -XPOST localhost:8000/api/replays -H 'content-type: application/json' -d '{"recording": "<id>", "sid": "rp-1", "wid": "rp-1"}'
 ```
 ```bash
-uv run blade-viewer --sids rp-1 --wids rp-1 --map altis
+uv run blade-viewer --sids rp-1 --wids rp-1 --map <map name>
 ```
 
 Or in the browser (Node.js 22+), then open http://localhost:5173:
@@ -101,12 +101,12 @@ uv run pytest
 
 ## Map package
 
-Export Altis with grad_meh in the game, then build `maps/altis` (`dem.tif`, `meta.json`, `ortho/`):
+Export map with grad_meh in the game, then build `maps/<map name>` (`dem.tif`, `meta.json`, `ortho/`):
 ```bash
-uv run python terrain/build_dem.py "<Arma 3>/grad_meh/altis" --out maps/altis
+uv run python terrain/build_dem.py "<Arma 3>/grad_meh/<map name>" --out maps/<map name>
 ```
 ```bash
-uv run python terrain/build_ortho.py "<Arma 3>/grad_meh/altis" --out maps/altis
+uv run python terrain/build_ortho.py "<Arma 3>/grad_meh/<map name>" --out maps/<map name>
 ```
 
 ## Repository
