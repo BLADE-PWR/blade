@@ -1,6 +1,6 @@
 # gateway
 
-The one entry point for clients (the viewer now, the React frontend later). It keeps operator sessions,
+The one entry point for clients (the React frontend). It keeps operator sessions,
 proxies `/api/...` to the other services and sends live data over one WebSocket. Starting a session
 assigns its streams to detector replicas and starts recording or replays.
 
@@ -59,7 +59,7 @@ Text messages are JSON: `{"type", "sid", "wid", "frame", "ts", "data"}`.
 | `diag` | Per-service fps, latency, drops |
 
 Binary messages are video previews: `"ZPIF"` + uint32 big-endian header length + header JSON
-(`{"type": "frame", "sid", "frame", "w", "h", "src", "ts"}`) + JPEG. Previews are limited to
+(`{"type": "frame", "sid", "frame", "w", "h", "src"}`) + JPEG. Previews are limited to
 `PREVIEW_FPS` and scaled to `PREVIEW_W` wide. A slow client loses messages instead of slowing the bus.
 
 Config: `PREVIEW_FPS` (15), `PREVIEW_W` (960), `SESSIONS_STORE`, and `<SERVICE>_URL` for each service.

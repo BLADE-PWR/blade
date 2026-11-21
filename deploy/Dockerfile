@@ -17,7 +17,6 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 COPY libs libs
 COPY services services
-COPY tools/viewer tools/viewer
 RUN test -n "$SERVICE" && uv sync --frozen --no-dev --package blade-${SERVICE}
 
 CMD ["sh", "-c", "exec blade-${SERVICE}"]

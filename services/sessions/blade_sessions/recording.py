@@ -62,13 +62,13 @@ def _pes_key(pkt: bytes) -> bytes | None:
 
 
 def frame_ends(ts: Path) -> list[int]:
-    """Byte offset where each frame is complete (after its pad packet, or its tel in older recordings)."""
+    """Byte offset where each frame is complete: after its pad packet (TsWriter writes tel, video, pad)."""
     with av.open(str(ts)) as c:
         pids = [s.id for s in c.streams if s.type == "data"]
     if not pids:
         raise ValueError(f"{ts}: no telemetry stream")
     pid = pids[0]
-    ends: dict[bytes, list[int]] = {klv.TEL_KEY: [], klv.PAD_KEY: []}
+    ends: list[int] = []
     key, last = None, None
     with open(ts, "rb") as f:
         off = 0
@@ -78,14 +78,14 @@ def frame_ends(ts: Path) -> list[int]:
                 break
             if pkt[0] == 0x47 and ((pkt[1] & 0x1F) << 8 | pkt[2]) == pid:
                 if pkt[1] & 0x40:  # a new PES: the previous one ended at last
-                    if key in ends:
-                        ends[key].append(last)
+                    if key == klv.PAD_KEY:
+                        ends.append(last)
                     key = _pes_key(pkt)
                 last = off + 188
             off += 188
-    if key in ends:
-        ends[key].append(last)
-    return ends[klv.PAD_KEY] or ends[klv.TEL_KEY]
+    if key == klv.PAD_KEY:
+        ends.append(last)
+    return ends
 
 
 def write_index_from_pts(rec_dir: Path, index: list[tuple[int, float]], size: int) -> None:

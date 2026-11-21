@@ -18,7 +18,6 @@ export type FrameHeader = {
   w: number;
   h: number;
   src: { w: number; h: number } | null;
-  ts: Record<string, unknown>;
 };
 
 export type Frame = { header: FrameHeader; jpeg: Blob };

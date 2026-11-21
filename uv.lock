@@ -10,7 +10,6 @@ resolution-markers = [
 [manifest]
 members = [
     "blade",
-    "frame-code",
     "blade-common",
     "blade-decision",
     "blade-detector",
@@ -23,8 +22,8 @@ members = [
     "blade-sessions",
     "blade-terrain",
     "blade-uplink",
-    "blade-viewer",
     "blade-world",
+    "frame-code",
 ]
 
 [[package]]
@@ -80,7 +79,6 @@ name = "blade"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "frame-code" },
     { name = "blade-common" },
     { name = "blade-decision" },
     { name = "blade-detector" },
@@ -93,8 +91,8 @@ dependencies = [
     { name = "blade-sessions" },
     { name = "blade-terrain" },
     { name = "blade-uplink" },
-    { name = "blade-viewer" },
     { name = "blade-world" },
+    { name = "frame-code" },
 ]
 
 [package.dev-dependencies]
@@ -106,7 +104,6 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "frame-code", editable = "libs/frame_code" },
     { name = "blade-common", editable = "libs/common" },
     { name = "blade-decision", editable = "services/decision" },
     { name = "blade-detector", editable = "services/detector" },
@@ -119,8 +116,8 @@ requires-dist = [
     { name = "blade-sessions", editable = "services/sessions" },
     { name = "blade-terrain", editable = "services/terrain" },
     { name = "blade-uplink", editable = "services/uplink" },
-    { name = "blade-viewer", editable = "tools/viewer" },
     { name = "blade-world", editable = "services/world" },
+    { name = "frame-code", editable = "libs/frame_code" },
 ]
 
 [package.metadata.requires-dev]
@@ -128,6 +125,257 @@ dev = [
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-asyncio", specifier = ">=0.24" },
     { name = "ruff", specifier = ">=0.6" },
+]
+
+[[package]]
+name = "blade-common"
+version = "0.1.0"
+source = { editable = "libs/common" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "nats-py" },
+    { name = "pydantic" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "nats-py", specifier = ">=2.9" },
+    { name = "pydantic", specifier = ">=2.8" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
+]
+
+[[package]]
+name = "blade-decision"
+version = "0.1.0"
+source = { editable = "services/decision" }
+dependencies = [
+    { name = "blade-common" },
+    { name = "numpy" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "blade-common", editable = "libs/common" },
+    { name = "numpy", specifier = ">=1.26" },
+]
+
+[[package]]
+name = "blade-detector"
+version = "0.1.0"
+source = { editable = "services/detector" }
+dependencies = [
+    { name = "blade-common" },
+    { name = "blade-enhance" },
+    { name = "blade-geometry" },
+    { name = "lap" },
+    { name = "numpy" },
+    { name = "onnxruntime", marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "onnxruntime-gpu", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
+    { name = "onnxruntime-gpu", extra = ["cuda", "cudnn"], marker = "platform_machine == 'AMD64' and sys_platform == 'win32'" },
+    { name = "opencv-python" },
+    { name = "python-multipart" },
+    { name = "pyyaml" },
+    { name = "ultralytics" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "blade-common", editable = "libs/common" },
+    { name = "blade-enhance", editable = "libs/enhance" },
+    { name = "blade-geometry", editable = "libs/geometry" },
+    { name = "lap", specifier = ">=0.5.12" },
+    { name = "numpy", specifier = ">=1.26" },
+    { name = "onnxruntime", marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')", specifier = ">=1.17" },
+    { name = "onnxruntime-gpu", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'", specifier = ">=1.20" },
+    { name = "onnxruntime-gpu", extras = ["cuda", "cudnn"], marker = "platform_machine == 'AMD64' and sys_platform == 'win32'", specifier = ">=1.31" },
+    { name = "opencv-python", specifier = ">=4.8" },
+    { name = "python-multipart", specifier = ">=0.0.9" },
+    { name = "pyyaml", specifier = ">=6" },
+    { name = "ultralytics", specifier = "==8.4.183" },
+]
+
+[[package]]
+name = "blade-enhance"
+version = "0.1.0"
+source = { editable = "libs/enhance" }
+dependencies = [
+    { name = "numpy" },
+    { name = "pillow" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "numpy", specifier = ">=1.26" },
+    { name = "pillow", specifier = ">=10" },
+]
+
+[[package]]
+name = "blade-evaluator"
+version = "0.1.0"
+source = { editable = "services/evaluator" }
+dependencies = [
+    { name = "blade-common" },
+    { name = "numpy" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "blade-common", editable = "libs/common" },
+    { name = "numpy", specifier = ">=1.26" },
+]
+
+[[package]]
+name = "blade-gateway"
+version = "0.1.0"
+source = { editable = "services/gateway" }
+dependencies = [
+    { name = "blade-common" },
+    { name = "httpx" },
+    { name = "numpy" },
+    { name = "pillow" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "blade-common", editable = "libs/common" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "numpy", specifier = ">=1.26" },
+    { name = "pillow", specifier = ">=10" },
+]
+
+[[package]]
+name = "blade-geometry"
+version = "0.1.0"
+source = { editable = "libs/geometry" }
+dependencies = [
+    { name = "numpy" },
+    { name = "tifffile" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "numpy", specifier = ">=1.26" },
+    { name = "tifffile", specifier = ">=2024.1" },
+]
+
+[[package]]
+name = "blade-georef"
+version = "0.1.0"
+source = { editable = "services/georef" }
+dependencies = [
+    { name = "blade-common" },
+    { name = "blade-geometry" },
+    { name = "numpy" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "blade-common", editable = "libs/common" },
+    { name = "blade-geometry", editable = "libs/geometry" },
+    { name = "numpy", specifier = ">=1.26" },
+]
+
+[[package]]
+name = "blade-ingest"
+version = "0.1.0"
+source = { editable = "services/ingest" }
+dependencies = [
+    { name = "av" },
+    { name = "blade-common" },
+    { name = "numpy" },
+    { name = "pillow" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "av", specifier = ">=14" },
+    { name = "blade-common", editable = "libs/common" },
+    { name = "numpy", specifier = ">=1.26" },
+    { name = "pillow", specifier = ">=10" },
+]
+
+[[package]]
+name = "blade-sessions"
+version = "0.1.0"
+source = { editable = "services/sessions" }
+dependencies = [
+    { name = "av" },
+    { name = "blade-common" },
+    { name = "blade-uplink" },
+    { name = "httpx" },
+    { name = "numpy" },
+    { name = "pillow" },
+    { name = "python-multipart" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "av", specifier = ">=14" },
+    { name = "blade-common", editable = "libs/common" },
+    { name = "blade-uplink", editable = "services/uplink" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "numpy", specifier = ">=1.26" },
+    { name = "pillow", specifier = ">=10" },
+    { name = "python-multipart", specifier = ">=0.0.9" },
+]
+
+[[package]]
+name = "blade-terrain"
+version = "0.1.0"
+source = { editable = "services/terrain" }
+dependencies = [
+    { name = "blade-common" },
+    { name = "blade-geometry" },
+    { name = "numpy" },
+    { name = "pillow" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "blade-common", editable = "libs/common" },
+    { name = "blade-geometry", editable = "libs/geometry" },
+    { name = "numpy", specifier = ">=1.26" },
+    { name = "pillow", specifier = ">=10" },
+]
+
+[[package]]
+name = "blade-uplink"
+version = "0.1.0"
+source = { editable = "services/uplink" }
+dependencies = [
+    { name = "av" },
+    { name = "blade-common" },
+    { name = "blade-geometry" },
+    { name = "dxcam", marker = "sys_platform == 'win32'" },
+    { name = "frame-code" },
+    { name = "numpy" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "av", specifier = ">=14" },
+    { name = "blade-common", editable = "libs/common" },
+    { name = "blade-geometry", editable = "libs/geometry" },
+    { name = "dxcam", marker = "sys_platform == 'win32'", specifier = ">=0.0.5" },
+    { name = "frame-code", editable = "libs/frame_code" },
+    { name = "numpy", specifier = ">=1.26" },
+]
+
+[[package]]
+name = "blade-world"
+version = "0.1.0"
+source = { editable = "services/world" }
+dependencies = [
+    { name = "blade-common" },
+    { name = "numpy" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "blade-common", editable = "libs/common" },
+    { name = "numpy", specifier = ">=1.26" },
 ]
 
 [[package]]
@@ -1430,274 +1678,4 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/29/3a/a05bc57eadcd7e8e072d917888128e6d22e1203984afb21a8da3198982fe/websockets-17.4-pp312-pypy312_pp80-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:868744c68e9342768888c7326604da2228c19bb6946aa46b5f9e1ac32ea8d40b", size = 218356, upload-time = "2026-10-30T15:10:31.432Z" },
     { url = "https://files.pythonhosted.org/packages/b2/49/eed86bfb8863093a82cbaa52c9159be1ce2374d5ace6fe1f8e8031567e7d/websockets-17.4-pp312-pypy312_pp80-win_amd64.whl", hash = "sha256:829bcaa90be8737c132d9515d6a466e8528e3b3d050d3f3466f36ea94d3beb48", size = 306838, upload-time = "2026-10-30T15:10:32.954Z" },
     { url = "https://files.pythonhosted.org/packages/eb/27/9db924cb0dbf22eade78d98fbae77790f9bf6bc729e6ab29aef9d68e4156/websockets-17.4-py3-none-any.whl", hash = "sha256:c6bd2c9781915592b209160d0f017d4c7c82ad53075e6b0c24d2a89299e7f9e9", size = 212900, upload-time = "2026-10-30T15:10:34.482Z" },
-]
-
-[[package]]
-name = "blade-common"
-version = "0.1.0"
-source = { editable = "libs/common" }
-dependencies = [
-    { name = "fastapi" },
-    { name = "nats-py" },
-    { name = "pydantic" },
-    { name = "uvicorn", extra = ["standard"] },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "fastapi", specifier = ">=0.115" },
-    { name = "nats-py", specifier = ">=2.9" },
-    { name = "pydantic", specifier = ">=2.8" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
-]
-
-[[package]]
-name = "blade-decision"
-version = "0.1.0"
-source = { editable = "services/decision" }
-dependencies = [
-    { name = "numpy" },
-    { name = "blade-common" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "numpy", specifier = ">=1.26" },
-    { name = "blade-common", editable = "libs/common" },
-]
-
-[[package]]
-name = "blade-detector"
-version = "0.1.0"
-source = { editable = "services/detector" }
-dependencies = [
-    { name = "lap" },
-    { name = "numpy" },
-    { name = "onnxruntime", marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')" },
-    { name = "onnxruntime-gpu", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
-    { name = "onnxruntime-gpu", extra = ["cuda", "cudnn"], marker = "platform_machine == 'AMD64' and sys_platform == 'win32'" },
-    { name = "opencv-python" },
-    { name = "python-multipart" },
-    { name = "pyyaml" },
-    { name = "ultralytics" },
-    { name = "blade-common" },
-    { name = "blade-enhance" },
-    { name = "blade-geometry" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "lap", specifier = ">=0.5.12" },
-    { name = "numpy", specifier = ">=1.26" },
-    { name = "onnxruntime", marker = "(platform_machine != 'AMD64' and platform_machine != 'x86_64') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'win32') or (sys_platform != 'linux' and sys_platform != 'win32')", specifier = ">=1.17" },
-    { name = "onnxruntime-gpu", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'", specifier = ">=1.20" },
-    { name = "onnxruntime-gpu", extras = ["cuda", "cudnn"], marker = "platform_machine == 'AMD64' and sys_platform == 'win32'", specifier = ">=1.31" },
-    { name = "opencv-python", specifier = ">=4.8" },
-    { name = "python-multipart", specifier = ">=0.0.9" },
-    { name = "pyyaml", specifier = ">=6" },
-    { name = "ultralytics", specifier = "==8.4.183" },
-    { name = "blade-common", editable = "libs/common" },
-    { name = "blade-enhance", editable = "libs/enhance" },
-    { name = "blade-geometry", editable = "libs/geometry" },
-]
-
-[[package]]
-name = "blade-enhance"
-version = "0.1.0"
-source = { editable = "libs/enhance" }
-dependencies = [
-    { name = "numpy" },
-    { name = "pillow" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "numpy", specifier = ">=1.26" },
-    { name = "pillow", specifier = ">=10" },
-]
-
-[[package]]
-name = "blade-evaluator"
-version = "0.1.0"
-source = { editable = "services/evaluator" }
-dependencies = [
-    { name = "numpy" },
-    { name = "blade-common" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "numpy", specifier = ">=1.26" },
-    { name = "blade-common", editable = "libs/common" },
-]
-
-[[package]]
-name = "blade-gateway"
-version = "0.1.0"
-source = { editable = "services/gateway" }
-dependencies = [
-    { name = "httpx" },
-    { name = "numpy" },
-    { name = "pillow" },
-    { name = "blade-common" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "numpy", specifier = ">=1.26" },
-    { name = "pillow", specifier = ">=10" },
-    { name = "blade-common", editable = "libs/common" },
-]
-
-[[package]]
-name = "blade-geometry"
-version = "0.1.0"
-source = { editable = "libs/geometry" }
-dependencies = [
-    { name = "numpy" },
-    { name = "tifffile" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "numpy", specifier = ">=1.26" },
-    { name = "tifffile", specifier = ">=2024.1" },
-]
-
-[[package]]
-name = "blade-georef"
-version = "0.1.0"
-source = { editable = "services/georef" }
-dependencies = [
-    { name = "numpy" },
-    { name = "blade-common" },
-    { name = "blade-geometry" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "numpy", specifier = ">=1.26" },
-    { name = "blade-common", editable = "libs/common" },
-    { name = "blade-geometry", editable = "libs/geometry" },
-]
-
-[[package]]
-name = "blade-ingest"
-version = "0.1.0"
-source = { editable = "services/ingest" }
-dependencies = [
-    { name = "av" },
-    { name = "numpy" },
-    { name = "pillow" },
-    { name = "blade-common" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "av", specifier = ">=14" },
-    { name = "numpy", specifier = ">=1.26" },
-    { name = "pillow", specifier = ">=10" },
-    { name = "blade-common", editable = "libs/common" },
-]
-
-[[package]]
-name = "blade-sessions"
-version = "0.1.0"
-source = { editable = "services/sessions" }
-dependencies = [
-    { name = "av" },
-    { name = "httpx" },
-    { name = "numpy" },
-    { name = "pillow" },
-    { name = "python-multipart" },
-    { name = "blade-common" },
-    { name = "blade-uplink" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "av", specifier = ">=14" },
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "numpy", specifier = ">=1.26" },
-    { name = "pillow", specifier = ">=10" },
-    { name = "python-multipart", specifier = ">=0.0.9" },
-    { name = "blade-common", editable = "libs/common" },
-    { name = "blade-uplink", editable = "services/uplink" },
-]
-
-[[package]]
-name = "blade-terrain"
-version = "0.1.0"
-source = { editable = "services/terrain" }
-dependencies = [
-    { name = "numpy" },
-    { name = "pillow" },
-    { name = "blade-common" },
-    { name = "blade-geometry" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "numpy", specifier = ">=1.26" },
-    { name = "pillow", specifier = ">=10" },
-    { name = "blade-common", editable = "libs/common" },
-    { name = "blade-geometry", editable = "libs/geometry" },
-]
-
-[[package]]
-name = "blade-uplink"
-version = "0.1.0"
-source = { editable = "services/uplink" }
-dependencies = [
-    { name = "av" },
-    { name = "dxcam", marker = "sys_platform == 'win32'" },
-    { name = "frame-code" },
-    { name = "numpy" },
-    { name = "blade-common" },
-    { name = "blade-geometry" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "av", specifier = ">=14" },
-    { name = "dxcam", marker = "sys_platform == 'win32'", specifier = ">=0.0.5" },
-    { name = "frame-code", editable = "libs/frame_code" },
-    { name = "numpy", specifier = ">=1.26" },
-    { name = "blade-common", editable = "libs/common" },
-    { name = "blade-geometry", editable = "libs/geometry" },
-]
-
-[[package]]
-name = "blade-viewer"
-version = "0.1.0"
-source = { editable = "tools/viewer" }
-dependencies = [
-    { name = "httpx" },
-    { name = "numpy" },
-    { name = "opencv-python" },
-    { name = "websockets" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "numpy", specifier = ">=1.26" },
-    { name = "opencv-python", specifier = ">=4.8" },
-    { name = "websockets", specifier = ">=13" },
-]
-
-[[package]]
-name = "blade-world"
-version = "0.1.0"
-source = { editable = "services/world" }
-dependencies = [
-    { name = "numpy" },
-    { name = "blade-common" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "numpy", specifier = ">=1.26" },
-    { name = "blade-common", editable = "libs/common" },
 ]

@@ -183,7 +183,7 @@ async def ws(websocket: WebSocket, session: str | None = None, sids: str = "", w
             last_preview[env.sid] = t
             jpeg, w, h = await asyncio.to_thread(_preview, blob, PREVIEW_W)
             head = json.dumps({"type": "frame", "sid": env.sid, "frame": env.frame, "w": w, "h": h,
-                               "src": env.data.get("tel", {}).get("image"), "ts": env.ts}).encode()
+                               "src": env.data.get("tel", {}).get("image")}).encode()
             put(b"ZPIF" + struct.pack(">I", len(head)) + head + jpeg)
             return
         typ = "world." + msg.subject.split(".")[-1] if kind == "world" else kind

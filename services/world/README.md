@@ -33,11 +33,11 @@ while it moves, so clients and decision see time pass; while a replay is paused 
 
 ## Drawing motion on the map
 
-For any map client (`tools/viewer` does this):
+For any map client (the frontend does this, `frontend/src/MapView.tsx`):
 
 - Draw an arrow and a cone only for objects that have `pred`; the rest stand still within the noise.
 - Arrow: from `xy` to `xy + vel * N s`, so its length scales with speed the same way for every class
-  (the viewer uses 10 s).
+  (the frontend uses 10 s).
 - Cone: the hull of the circles of radius `k * sigma_m` around `xy` and around each `pred[].xy`. With k = 2
   a circle holds the object ~86 % of the time in 2-D; k = 1 holds only ~39 %, which looks more certain than it is.
 - `pred` is anchored at `last` and not republished while the object is `stale`, so the client must hide a
