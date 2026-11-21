@@ -29,7 +29,8 @@ Session body:
  "streams": [{"sid": "rp-1", "wid": "rp-1", "recording": "<id>",
               "speed": 1.0, "loop": false, "offset_s": 0, "pacing": "realtime", "delivery": "latest"}]}
 ```
-Each stream is one replay: `sid`, `wid` and `recording` are required.
+Each stream is one replay: `sid`, `wid` and `recording` are required. `sid` must be new (a live drone or another
+replay may use the recorded one, and so may `wid`); `drone` and `mission`, the recorded ones, are what the UI shows.
 
 ## Proxy
 

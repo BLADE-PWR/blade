@@ -41,6 +41,16 @@ class Engine:
     def now(self) -> float:
         return time.time() if self.clock is None else self.clock
 
+    def clear_now(self, keys: list[str]) -> list[Alert]:
+        """Clear these alerts at once, without waiting CLEAR_AFTER_S."""
+        out = []
+        for key in keys:
+            a = self.active.pop(key)
+            self.missing.pop(key, None)
+            a.state, a.t = "cleared", self.now()
+            out.append(a)
+        return out
+
     def step(self, t: float) -> list[Alert]:
         """Run every enabled rule; -> alerts raised or cleared now."""
         self.ws.events = [e for e in self.ws.events if t - e["t"] < 30]
@@ -111,10 +121,8 @@ async def on_objects(msg) -> None:
     eng = engine(wid)
     if env.data["map"] != eng.map:  # a new map: nothing from the old one applies any more
         if eng.map is not None:
-            cleared = list(eng.active.values())
-            for a in cleared:
-                a.state, a.t = "cleared", eng.now()
-            eng.ws, eng.active, eng.missing, eng.clock = WorldState(), {}, {}, None  # the world's clock restarts too
+            cleared = eng.clear_now(list(eng.active))
+            eng.ws, eng.clock = WorldState(), None  # the world's clock restarts too
             if cleared:
                 await send_alerts(wid, cleared, time.time())
         eng.map = env.data["map"]
@@ -127,8 +135,14 @@ async def on_objects(msg) -> None:
         o = ws.objects.pop(oid, None)
         if o:
             ws.gone[oid] = o
-    for oid in env.data.get("forgotten", []):  # merged, or its replay went back: not a lost contact
+    forgotten = env.data.get("forgotten", [])
+    for oid in forgotten:  # merged, or its replay went back: not a lost contact
         ws.objects.pop(oid, None)
+    if forgotten:  # an alert about objects that are all forgotten now (a rewind) goes with them
+        known = ws.objects.keys() | ws.gone.keys()
+        cleared = eng.clear_now([k for k, a in eng.active.items() if a.objects and not known & set(a.objects)])
+        if cleared:
+            await send_alerts(wid, cleared, time.time())
 
 
 async def on_events(msg) -> None:

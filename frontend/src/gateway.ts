@@ -64,10 +64,10 @@ export async function startReplay(rec: Recording): Promise<string> {
   const running = (await getJSON<Session[]>("/sessions")).find((s) => s.state === "running"
     && s.streams.length === 1 && s.streams[0].recording === rec.id);
   if (running) return running.id;
-  // a new sid each time: starting a session replaces any replay with the same sid
+  // a new sid each time (a live drone or another replay may use the recorded one); the UI shows the drone's
   const sid = `rp-${Date.now().toString(36).slice(-5)}`;
   const s = await send<Session>("POST", "/sessions", { name: `Replay ${rec.scene ?? rec.id}`,
-    streams: [{ sid, wid: sid, recording: rec.id, loop: true }] });
+    streams: [{ sid, wid: sid, drone: rec.sid, mission: rec.mission, recording: rec.id, loop: true }] });
   await send("POST", `/sessions/${s.id}/start`);
   return s.id;
 }

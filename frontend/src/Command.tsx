@@ -9,6 +9,7 @@ import { type Background, MapView } from "./MapView";
 import {
   allAlerts,
   type Drone,
+  droneName,
   type Filter,
   latencyS,
   offMap,
@@ -79,7 +80,7 @@ export function Command({ sit, sids, sid, main, onMain, onDrone, onOperator }: P
           {sid && (
             <section className="panel main-video" aria-label="Video of the chosen drone">
               <div className="panel-head">
-                <strong>Drone {sid}</strong>
+                <strong>Drone {droneName(sit, sid)}</strong>
                 {drone?.geo && (
                   <span className="muted">
                     altitude <span className="mono value">{drone.geo.camera[2].toFixed(0)} m</span>
@@ -142,7 +143,7 @@ function DroneVideo({ sit, sid, thumb = false }: { sit: Situation; sid: string; 
 function DroneThumb({ sit, sid }: { sit: Situation; sid: string }) {
   const preview = sit.drones.get(sid)?.previews.at(-1);
   if (!preview) return <span className="thumb empty" />;
-  return <img className="thumb" src={preview.url} alt={`Preview from drone ${sid}`} />;
+  return <img className="thumb" src={preview.url} alt={`Preview from drone ${droneName(sit, sid)}`} />;
 }
 
 function DroneName({ sit, sid, now }: { sit: Situation; sid: string; now: number }) {
@@ -152,7 +153,7 @@ function DroneName({ sit, sid, now }: { sit: Situation; sid: string; now: number
   const silent = d?.lastFrameAt ? ` for ${(now - d.lastFrameAt).toFixed(0)} s` : "";
   return (
     <>
-      <span className="inline-dot"><strong>Drone {sid}</strong><span className={on ? "dot ok" : "dot warn"} /></span>
+      <span className="inline-dot"><strong>Drone {droneName(sit, sid)}</strong><span className={on ? "dot ok" : "dot warn"} /></span>
       {on ? <span className="mono muted">{fps === undefined ? "" : `${fps.toFixed(0)} fps`}</span>
         : <span className="slow">no frames{silent}</span>}
       {on && <span className="muted">objects in frame: {d.geo?.pts.length ?? 0}</span>}

@@ -191,6 +191,11 @@ export function offMap(s: Situation, d: Drone | undefined): boolean {
   return !!(map && d?.geo && d.geo.map !== map);
 }
 
+/** What to call a drone: a replay's recorded drone, else its sid. */
+export function droneName(s: Situation, sid: string): string {
+  return s.session?.streams.find((st) => st.sid === sid)?.drone ?? sid;
+}
+
 export function worldNow(s: Situation): number {
   return s.clocks.size ? Math.max(...s.clocks.values()) : Date.now() / 1000;
 }

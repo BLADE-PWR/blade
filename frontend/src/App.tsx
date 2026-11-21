@@ -7,7 +7,9 @@ import { recordingName } from "./format";
 import { connect, getJSON, startReplay, type Target } from "./gateway";
 import { Operator } from "./Operator";
 import { ReplayBar } from "./Replay";
-import { addPreview, apply, dispose, emptySituation, type Filter, latencyS, transmitting } from "./situation";
+import {
+  addPreview, apply, dispose, droneName, emptySituation, type Filter, latencyS, transmitting,
+} from "./situation";
 
 const CLOCK_MS = 1000;
 
@@ -64,7 +66,7 @@ function Pick({ onPick }: { onPick: (t: Target) => void }) {
       <ul>
         {recordings.map((r) => (
           <li key={r.id}>
-            <button onClick={() => replay(r)}>Replay</button> {recordingName(r)}, drone {r.sid}
+            <button onClick={() => replay(r)}>Replay</button> {recordingName(r)}
             {r.has_truth === false && ", without true positions"}
           </li>
         ))}
@@ -153,8 +155,10 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
           <button aria-pressed={view === "command"} onClick={() => setView("command")}>Command</button>
         </div>
         <label className="muted">
-          {replay ? "Session" : "Mission"}{" "}
-          <button onClick={onLeave}>{"wid" in target ? target.wid : (sit.session?.name ?? "…")}</button>
+          Mission{" "}
+          <button onClick={onLeave}>
+            {"wid" in target ? target.wid : (sit.session?.streams[0]?.mission ?? sit.session?.name ?? "…")}
+          </button>
         </label>
         <div className="switch" role="group" aria-label="Mode">
           <button aria-pressed={!replay} onClick={() => replay && onLeave()}>
@@ -177,11 +181,11 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
                 <label>
                   Drone{" "}
                   <select value={sid} onChange={(e) => setPicked(e.target.value)}>
-                    {sids.map((s) => <option key={s}>{s}</option>)}
+                    {sids.map((s) => <option key={s} value={s}>{droneName(sit, s)}</option>)}
                   </select>
                 </label>
               ) : (
-                <span className="mono">{sid}</span>
+                <span className="mono">{droneName(sit, sid)}</span>
               )}
               {fps !== undefined && <span className="muted">{fps.toFixed(0)} fps</span>}
             </span>

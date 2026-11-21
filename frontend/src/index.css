@@ -164,36 +164,6 @@ button:disabled {
   background: #151a21;
 }
 
-.missions {
-  position: relative;
-}
-
-.mission-list {
-  position: absolute;
-  z-index: 1100;
-  top: calc(100% + 4px);
-  left: 0;
-  min-width: 100%;
-  margin: 0;
-  padding: 4px;
-  list-style: none;
-  border: 1px solid #3a4552;
-  border-radius: 8px;
-  background: #151a21;
-}
-
-.mission-list button {
-  width: 100%;
-  text-align: left;
-  white-space: nowrap;
-  border: 0;
-  background: transparent;
-}
-
-.mission-list button:not(:disabled):hover {
-  background: #1c232c;
-}
-
 .replay-buttons {
   display: flex;
   gap: 4px;

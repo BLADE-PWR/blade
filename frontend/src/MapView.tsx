@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { colorOf, nameOf, SEVERITY_COLORS } from "./classes";
 import type { Alert, Prediction, Vec2, WorldObject } from "./contracts";
 import { getJSON } from "./gateway";
-import { type Drone, type Filter, type Situation, shownMap, visible, worldNow } from "./situation";
+import { type Drone, droneName, type Filter, type Situation, shownMap, visible, worldNow } from "./situation";
 
 const TILE_PX = 256;
 const MIN_ZOOM = -5; // 32 m/px
@@ -80,9 +80,9 @@ function objectIcon(o: WorldObject, count: number, selected: boolean): L.DivIcon
     iconSize: [SYMBOL_PX * 1.5, SYMBOL_PX * 1.5] });
 }
 
-function droneIcon(sid: string, focus: boolean): L.DivIcon {
+function droneIcon(name: string, focus: boolean): L.DivIcon {
   return L.divIcon({ className: `sym drone${focus ? " focus" : ""}`, iconSize: [SYMBOL_PX * 1.5, SYMBOL_PX * 1.5],
-    html: symbolSvg(DRONE_SIDC) + `<span class="sym-label">${sid}</span>` });
+    html: symbolSvg(DRONE_SIDC) + `<span class="sym-label">${name}</span>` });
 }
 
 function eventIcon(kind: string, age: number): L.DivIcon {
@@ -165,7 +165,7 @@ function drawDrones(group: L.LayerGroup, sit: Situation, focus: string | null, m
       L.polyline([ll(d.geo.camera), ll(d.geo.centre)], { color: "#ffffff", weight: 1.2, opacity: 0.5,
         dashArray: "4 5" }).addTo(group);
     }
-    L.marker(ll(d.geo.camera), { interactive: false, icon: droneIcon(d.sid, own) }).addTo(group);
+    L.marker(ll(d.geo.camera), { interactive: false, icon: droneIcon(droneName(sit, d.sid), own) }).addTo(group);
   }
 }
 

@@ -17,9 +17,10 @@ SCHEMA_V = 1
 
 
 def scan_ts(ts: Path) -> dict:
-    """Read a .ts without decoding: frame range, image size, scene, fps, duration, and a PTS index."""
+    """Read a .ts without decoding: frame range, image size, scene, map, mission, drone, fps, duration, and a PTS
+    index."""
     info: dict = {"frames": 0, "frame_first": None, "frame_last": None, "image": None, "scene": None,
-                  "map": None, "seed": None, "sid": None}
+                  "map": None, "mission": None, "seed": None, "sid": None}
     index, pts0, pts_last = [], None, None
     with av.open(str(ts)) as c:
         v = next((s for s in c.streams if s.type == "video"), None)
@@ -37,6 +38,7 @@ def scan_ts(ts: Path) -> dict:
                     info["image"] = info["image"] or tel.get("image")
                     info["scene"] = info["scene"] or tel.get("scene")
                     info["map"] = info["map"] or tel["map"]
+                    info["mission"] = info["mission"] or tel.get("mission")  # stills have none
                     info["seed"] = info["seed"] if info["seed"] is not None else tel.get("seed")
                     info["sid"] = info["sid"] or tel.get("sid")
             elif pkt.stream.index == v.index:

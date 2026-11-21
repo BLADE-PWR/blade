@@ -72,9 +72,9 @@ export function ObjectList({ objects, selected, onSelect, now }: ObjectProps) {
   );
 }
 
-type EventProps = { events: WorldEvent[]; onPick: (e: WorldEvent) => void; now: number };
+type EventProps = { events: WorldEvent[]; onPick: (e: WorldEvent) => void; now: number; name: (sid: string) => string };
 
-export function EventList({ events, onPick, now }: EventProps) {
+export function EventList({ events, onPick, now, name }: EventProps) {
   if (events.length === 0) return <p className="muted hint">No events.</p>;
   return (
     <ul className="rows">
@@ -83,7 +83,7 @@ export function EventList({ events, onPick, now }: EventProps) {
           <button className="row" onClick={() => onPick(e)}>
             <span className="row-text">
               <strong>{nameOf(e.kind)}</strong>
-              <span className="muted">{clock(e.t)}, {ago(e.t, now)}, drone {e.sid}</span>
+              <span className="muted">{clock(e.t)}, {ago(e.t, now)}, drone {name(e.sid)}</span>
             </span>
           </button>
         </li>

@@ -18,8 +18,7 @@ export function ReplayBar({ session, onSwitch }: Props) {
   const [replays, setReplays] = useState<Replay[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<number | null>(null); // while the slider is dragged
-  const [recording, setRecording] = useState<Recording | null>(null);
-  const [missions, setMissions] = useState<Recording[] | null>(null);
+  const [recordings, setRecordings] = useState<Recording[]>([]);
 
   useEffect(() => {
     let stopped = false;
@@ -37,12 +36,10 @@ export function ReplayBar({ session, onSwitch }: Props) {
     };
   }, [sids]);
 
-  const recordingId = replays[0]?.recording;
   useEffect(() => {
-    if (!recordingId) return;
-    getJSON<Recording>(`/api/recordings/${recordingId}`).then(setRecording)
-      .catch((e: Error) => setError(`Cannot read the recording ${recordingId} (${e.message}).`));
-  }, [recordingId]);
+    getJSON<Recording[]>("/api/recordings").then(setRecordings)
+      .catch((e: Error) => setError(`Cannot list the recordings (${e.message}).`));
+  }, []);
 
   const first = replays[0];
   if (!first) {
@@ -64,16 +61,7 @@ export function ReplayBar({ session, onSwitch }: Props) {
     setDraft(null);
   };
   const position = draft ?? first.position_s;
-  const toggleMissions = () => {
-    if (missions) {
-      setMissions(null);
-    } else {
-      getJSON<Recording[]>("/api/recordings").then(setMissions)
-        .catch((e: Error) => setError(`Cannot list the recordings (${e.message}).`));
-    }
-  };
   const switchTo = (rec: Recording) => {
-    setMissions(null);
     startReplay(rec)
       .then(async (id) => {
         if (id === session.id) return; // already playing it
@@ -85,23 +73,15 @@ export function ReplayBar({ session, onSwitch }: Props) {
 
   return (
     <div className="replaybar">
-      <div className="missions">
+      <label>
         <span className="muted">Recording </span>
-        <button aria-expanded={missions !== null} onClick={toggleMissions}>
-          {recording ? recordingName(recording) : first.recording}
-        </button>
-        {missions && (
-          <ul className="mission-list" aria-label="Recordings">
-            {missions.map((r) => (
-              <li key={r.id}>
-                <button disabled={r.id === first.recording} onClick={() => switchTo(r)}>
-                  {recordingName(r)}, drone {r.sid}{r.id === first.recording && " (playing)"}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+        <select value={first.recording} onChange={(e) => switchTo(recordings.find((r) => r.id === e.target.value)!)}>
+          {!recordings.some((r) => r.id === first.recording) && (
+            <option value={first.recording}>{first.recording}</option>
+          )}
+          {recordings.map((r) => <option key={r.id} value={r.id}>{recordingName(r)}</option>)}
+        </select>
+      </label>
       <div className="replay-buttons">
         <button onClick={() => jump(-JUMP_S)}>Back {JUMP_S} s</button>
         <button className="primary" onClick={() => control(() => ({ paused: !first.paused }))}>

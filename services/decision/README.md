@@ -1,7 +1,8 @@
 # decision
 
 Runs rules over the world state and raises alerts that tell the operator where to look and why. No
-rule ranks targets or suggests an action. An alert clears after its condition has been false for 5 s.
+rule ranks targets or suggests an action. An alert clears after its condition has been false for 5 s, or at once
+when all its objects are `forgotten` (a replay looped or went back: they have not happened yet).
 
 Rules run on the world's clock (`t` in `world.<wid>.objects`, see the world README, "Time"), so a paused
 replay raises no lost contact; objects in `forgotten` (merged, or their replay went back) are not lost.

@@ -70,7 +70,8 @@ export type StreamDiag = { fps_in: number; fps_out: number; dropped: number; lat
 
 export type DiagData = { service: string; instance?: string | null; streams: Record<string, StreamDiag> };
 
-export type SessionStream = { sid: string; wid: string; recording: string }; // a replay
+export type SessionStream = { sid: string; wid: string; recording: string; drone?: string | null;
+  mission?: string | null }; // a replay
 
 export type Session = { id: string; name: string; state: string; streams: SessionStream[] };
 
@@ -86,7 +87,8 @@ export type Replay = {
 
 export type Recording = {
   id: string;
-  sid: string;
+  sid: string; // the drone
+  mission?: string | null; // its uplink --mission; none for stills, or while still recording
   scene: string | null;
   started: number;
   duration_s?: number; // both missing while the recording is still being written

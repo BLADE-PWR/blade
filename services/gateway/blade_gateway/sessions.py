@@ -20,9 +20,11 @@ log = logging.getLogger("gateway.sessions")
 
 class StreamSpec(BaseModel):
     """One replay."""
-    sid: str
+    sid: str  # new for every replay: a live drone or another replay may use the recorded one
     wid: str
     recording: str
+    drone: str | None = None  # the recorded drone's sid, which the UI shows
+    mission: str | None = None  # the recorded mission (its uplink --mission), which the UI shows
     speed: float = 1.0
     loop: bool = False
     offset_s: float = 0.0

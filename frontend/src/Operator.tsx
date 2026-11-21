@@ -11,6 +11,7 @@ import { MapView, symbolUrl } from "./MapView";
 import {
   allAlerts,
   boxVisible,
+  droneName,
   type Filter,
   offMap,
   shownFrame,
@@ -63,7 +64,7 @@ export function Operator({ sit, sid, main, onMain, onDrone, filter, onFilter }: 
     <section className="panel" aria-label="Drone video">
       <div className="panel-head">
         <strong>Camera</strong>
-        <span className="mono muted">{sid}{shown.preview?.frame != null && `, frame ${shown.preview.frame}`}</span>
+        <span className="mono muted">{sid && droneName(sit, sid)}{shown.preview?.frame != null && `, frame ${shown.preview.frame}`}</span>
         {drone?.geo && (
           <span className="muted">altitude <span className="mono value">{drone.geo.camera[2].toFixed(0)} m</span></span>
         )}
@@ -118,6 +119,7 @@ export function Operator({ sit, sid, main, onMain, onDrone, filter, onFilter }: 
             )}
             {tab === "events" && (
               <EventList events={[...sit.events.values()].filter((e) => !filter.hidden.has(e.kind))} now={now}
+                name={(s) => droneName(sit, s)}
                 onPick={(e) => setCentre({ xy: e.xy, at: Date.now() })} />
             )}
           </section>
@@ -240,7 +242,7 @@ function Details({ sit, object: o, onCentre, onVideo }: DetailsProps) {
   }, [url, sx, sy, side]);
 
   const speed = o.vel && o.pred?.length ? Math.hypot(o.vel[0], o.vel[1]) * 3.6 : null;
-  const tracks = o.tracks.map(([sid, tid]) => `${sid} #${tid}`).join(", ");
+  const tracks = o.tracks.map(([sid, tid]) => `${droneName(sit, sid)} #${tid}`).join(", ");
   return (
     <div className="details-body">
       <canvas ref={canvas} width={CROP_PX} height={CROP_PX} role="img"

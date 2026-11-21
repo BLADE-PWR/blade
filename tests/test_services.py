@@ -54,7 +54,8 @@ def ts_bytes(pkg):
     t0 = time.time()
     for k in range(45):
         t = k / 30
-        tel = dict(look_at_tel(pkg.terrain, CENTRE, 1000 + k, bearing_deg=k), sid="t-uav1", t_capture=t0 + t)
+        tel = dict(look_at_tel(pkg.terrain, CENTRE, 1000 + k, bearing_deg=k), sid="t-uav1", mission="t-mission",
+                   t_capture=t0 + t)
         w.write(frame_image(k), tel, t0 + t)
     w.close()
     return bytes(sink.data)
@@ -86,7 +87,7 @@ def test_recording_scan_builds_index(tmp_path, ts_bytes):
     (tmp_path / "stream.ts").write_bytes(ts_bytes)
     m = finalize(tmp_path)
     assert m["frames"] == 45 and m["frame_first"] == 1000 and m["frame_last"] == 1044
-    assert m["sid"] == "t-uav1" and m["image"] == {"w": 640, "h": 360}
+    assert m["sid"] == "t-uav1" and m["mission"] == "t-mission" and m["image"] == {"w": 640, "h": 360}
     idx = load_index(tmp_path)
     assert sum(e["n"] for e in idx) == len(ts_bytes)
     assert idx[-1]["t"] == pytest.approx(44 / 30, abs=0.01)

@@ -136,3 +136,21 @@ async def test_eval_leaves_out_drones_on_another_map(monkeypatch):
     ev.world_map["m"] = "altis"
     await ev.evaluate("m", 0.0)
     assert [x["truth_id"] for x in sent[-1]["truth"]] == [5]  # only the altis drone's soldier
+
+
+async def test_rewind_clears_the_alerts_of_forgotten_objects_at_once(monkeypatch):
+    monkeypatch.setattr(dm, "engines", {})
+    sent = []
+
+    async def publish(nc, subject, env):
+        sent.append(env.data["alerts"])
+
+    monkeypatch.setattr(dm, "publish", publish)
+    tanks = [obj("t1", "tank", 0, 0, last=200.0), obj("t2", "tank", 500, 0, last=200.0)]
+    await dm.on_objects(ObjectsMsg("w1", {"objects": tanks, "t": 261.0}))
+    e = dm.engines["w1"]
+    lost = {a.objects[0]: a for a in e.step(e.now()) if a.rule == "lost_contact"}
+    assert sorted(lost) == ["t1", "t2"]
+    await dm.on_objects(ObjectsMsg("w1", {"forgotten": ["t1"], "t": 261.0}))  # its replay looped
+    assert sent == [[{**lost["t1"].model_dump(exclude_none=True), "state": "cleared", "t": 261.0}]]
+    assert [a.objects for a in e.active.values()] == [["t2"]]  # seen by a stream that did not go back
