@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 
 from blade_common.util import inside
 
+from .clusters import link
+
 VEHICLES = {"tank", "military_vehicle"}
 
 DEFAULTS: dict[str, dict] = {
@@ -51,19 +53,8 @@ def _conf(objs: list[dict]) -> float:
 
 def vehicle_group(ws: WorldState, p: dict, t: float) -> list[Cue]:
     veh = [o for o in ws.objects.values() if o["grp"] in VEHICLES and o.get("state") == "active"]
-    seen, out = set(), []
-    for o in veh:  # single-linkage clusters
-        if o["oid"] in seen:
-            continue
-        cluster, todo = [], [o]
-        seen.add(o["oid"])
-        while todo:
-            a = todo.pop()
-            cluster.append(a)
-            for b in veh:
-                if b["oid"] not in seen and math.dist(a["xy"], b["xy"]) <= p["radius_m"]:
-                    seen.add(b["oid"])
-                    todo.append(b)
+    out = []
+    for cluster in link(veh, p["radius_m"]):
         if len(cluster) >= p["min_count"]:
             ids = sorted(c["oid"] for c in cluster)
             cx = sum(c["xy"][0] for c in cluster) / len(cluster)

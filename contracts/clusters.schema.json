@@ -1,0 +1,126 @@
+{
+  "$defs": {
+    "Cluster": {
+      "description": "Objects close to each other, whatever their class. Not an alert: it says what is where, nothing more.",
+      "properties": {
+        "area_m2": {
+          "title": "Area M2",
+          "type": "number"
+        },
+        "centre": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Centre",
+          "type": "array"
+        },
+        "cid": {
+          "description": "stays the same while the members change a little",
+          "title": "Cid",
+          "type": "string"
+        },
+        "composition": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "description": "objects per group",
+          "title": "Composition",
+          "type": "object"
+        },
+        "hull": {
+          "description": "convex outline, map metres, counter-clockwise",
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Hull",
+          "type": "array"
+        },
+        "objects": {
+          "description": "oids",
+          "items": {
+            "type": "string"
+          },
+          "title": "Objects",
+          "type": "array"
+        },
+        "vel": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "mean m/s of the members that have one, map east / north",
+          "title": "Vel"
+        }
+      },
+      "required": [
+        "cid",
+        "objects",
+        "composition",
+        "centre",
+        "hull",
+        "area_m2"
+      ],
+      "title": "Cluster",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "clusters": {
+      "items": {
+        "$ref": "#/$defs/Cluster"
+      },
+      "title": "Clusters",
+      "type": "array"
+    },
+    "t": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "world clock, s",
+      "title": "T"
+    }
+  },
+  "required": [
+    "clusters"
+  ],
+  "title": "ClustersData",
+  "type": "object"
+}

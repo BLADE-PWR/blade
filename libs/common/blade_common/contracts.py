@@ -1,5 +1,5 @@
 """Message contract v1: one envelope for every bus message, one payload model per subject
-(frames.<sid>, detections.<sid>, geo.<sid>, world.<wid>.objects, alerts.<wid>, ...).
+(frames.<sid>, detections.<sid>, geo.<sid>, world.<wid>.objects, alerts.<wid>, clusters.<wid>, ...).
 `python -m blade_common.contracts` writes contracts/*.schema.json."""
 from __future__ import annotations
 
@@ -204,6 +204,22 @@ class AlertsData(BaseModel):
     alerts: list[Alert]
 
 
+class Cluster(BaseModel):
+    """Objects close to each other, whatever their class. Not an alert: it says what is where, nothing more."""
+    cid: str = Field(description="stays the same while the members change a little")
+    objects: list[str] = Field(description="oids")
+    composition: dict[str, int] = Field(description="objects per group")
+    centre: Vec2
+    hull: list[Vec2] = Field(description="convex outline, map metres, counter-clockwise")
+    area_m2: float
+    vel: Vec2 | None = Field(None, description="mean m/s of the members that have one, map east / north")
+
+
+class ClustersData(BaseModel):
+    clusters: list[Cluster]
+    t: float | None = Field(None, description="world clock, s")
+
+
 class TruthMatch(BaseModel):
     truth_id: int
     grp: str
@@ -258,6 +274,7 @@ SUBJECTS: dict[str, type[BaseModel]] = {
     "world.objects": WorldObjectsData,
     "world.events": WorldEventsData,
     "alerts": AlertsData,
+    "clusters": ClustersData,
     "eval": EvalData,
     "ack": AckData,
     "diag": DiagData,

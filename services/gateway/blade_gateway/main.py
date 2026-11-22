@@ -216,6 +216,7 @@ async def ws(websocket: WebSocket, session: str | None = None, wids: str = ""):
     for wid in wid_list:
         subs.append(await nc.subscribe(f"world.{wid}.>", cb=on_msg))
         subs.append(await nc.subscribe(f"alerts.{wid}", cb=on_msg))
+        subs.append(await nc.subscribe(f"clusters.{wid}", cb=on_msg))
         subs.append(await nc.subscribe(f"eval.{wid}", cb=on_msg))
         try:
             r = await state["http"].get(f"{URLS['world']}/worlds/{wid}/snapshot")

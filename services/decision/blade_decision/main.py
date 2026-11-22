@@ -1,5 +1,6 @@
 """decision-support: world.<wid>.objects / .events + geo.<sid> -> alerts.<wid> (rules.py), published when
-an alert appears and when it clears. Rules run on the world's clock (WorldObjectsData.t), so a paused replay raises
+an alert appears and when it clears, and clusters.<wid> (clusters.py), published every second.
+Rules run on the world's clock (WorldObjectsData.t), so a paused replay raises
 no lost contact; a world that sends no clock runs on the wall clock."""
 from __future__ import annotations
 
@@ -15,15 +16,18 @@ from fastapi import FastAPI, HTTPException
 
 from blade_common import ports
 from blade_common.bus import close, connect, decode, publish
-from blade_common.contracts import Alert, AlertsData, Envelope
+from blade_common.contracts import Alert, AlertsData, ClustersData, Envelope
 from blade_common.service import env_float, run_app
 
+from .clusters import Grouper, Params, same_group
 from .rules import DEFAULTS, RULES, WorldState
 
 log = logging.getLogger("decision")
 PERIOD_S = env_float("PERIOD_S", 1.0)
 CLEAR_AFTER_S = env_float("CLEAR_AFTER_S", 5.0)
 GONE_KEEP_S = env_float("GONE_KEEP_S", 600.0)
+CLUSTER_PARAMS = Params(env_float("CLUSTER_RADIUS_M", 150.0), int(env_float("CLUSTER_MIN_COUNT", 2)),
+                        env_float("CLUSTER_MAX_AGE_S", 60.0))
 
 
 class Engine:
@@ -36,6 +40,8 @@ class Engine:
         self.missing: dict[str, float] = {}  # alert key -> when its condition became false
         self.clock: float | None = None  # the world's time, s, from its object updates
         self.map: str | None = None  # the world's map, from its object updates
+        self.grouper = Grouper(CLUSTER_PARAMS)
+        self.clusters: list[dict] = []
         self._ids = itertools.count(1)
 
     def now(self) -> float:
@@ -69,8 +75,7 @@ class Engine:
             if key in self.active or not c.objects:
                 continue
             for old_key, a in list(self.active.items()):
-                if a.rule == c.rule and old_key not in cues and \
-                        len(set(a.objects) & set(c.objects)) * 2 >= max(len(a.objects), len(c.objects)):
+                if a.rule == c.rule and old_key not in cues and same_group(set(a.objects), set(c.objects)):
                     self.active[key] = self.active.pop(old_key)
                     break
         changed = []
@@ -115,6 +120,11 @@ async def send_alerts(wid: str, alerts: list[Alert], t0: float) -> None:
         log.info("%s %s [%s] %s", wid, a.state, a.rule, a.title)
 
 
+async def send_clusters(wid: str, eng: Engine, t0: float) -> None:
+    data = ClustersData(clusters=eng.clusters, t=eng.clock).model_dump(exclude_none=True)
+    await publish(state["nc"], f"clusters.{wid}", Envelope(wid=wid, ts={"decision": [t0, time.time()]}, data=data))
+
+
 async def on_objects(msg) -> None:
     env, _ = decode(msg)
     wid = msg.subject.split(".")[1]
@@ -123,6 +133,7 @@ async def on_objects(msg) -> None:
         if eng.map is not None:
             cleared = eng.clear_now(list(eng.active))
             eng.ws, eng.clock = WorldState(), None  # the world's clock restarts too
+            eng.grouper, eng.clusters = Grouper(CLUSTER_PARAMS), []
             if cleared:
                 await send_alerts(wid, cleared, time.time())
         eng.map = env.data["map"]
@@ -168,6 +179,10 @@ async def loop() -> None:
             changed = eng.step(eng.now())
             if changed:
                 await send_alerts(wid, changed, wall)
+            had = bool(eng.clusters)
+            eng.clusters = eng.grouper.update(eng.ws.objects, eng.now())
+            if eng.clusters or had:  # an empty list tells the clients the last group is gone
+                await send_clusters(wid, eng, wall)
 
 
 @asynccontextmanager
@@ -205,6 +220,12 @@ async def put_rules(wid: str, body: dict):
             raise HTTPException(400, f"{name}: expected an object of parameters")
         eng.rules[name] = {**eng.rules.get(name, {}), **params}
     return eng.rules
+
+
+@app.get("/worlds/{wid}/clusters")
+async def clusters(wid: str):
+    eng = engines.get(wid)
+    return [] if eng is None else eng.clusters
 
 
 @app.get("/worlds/{wid}/alerts")

@@ -1,5 +1,6 @@
 import blade_decision.main as dm
 from blade_common.contracts import Envelope
+from blade_decision.clusters import Grouper, Params, area, outline
 from blade_decision.main import Engine
 from blade_evaluator.evaluate import StreamTruth, WorldEval, cep, inside, match
 
@@ -72,6 +73,59 @@ def test_group_alert_survives_membership_change():
     assert [x for x in e.step(2.0) if x.rule == "vehicle_group"] == []  # updated in place, no raise/clear
     (live,) = [x for x in e.active.values() if x.rule == "vehicle_group"]
     assert live.aid == a.aid and live.objects == ["v2", "v3", "v4", "v5"]
+
+
+def test_clusters_group_every_class_and_describe_them():
+    g = Grouper(Params(radius_m=100.0, min_count=2, max_age_s=60.0))
+    objs = {o["oid"]: o for o in [obj("t1", "tank", 0, 0, vel=(4.0, 0.0)), obj("s1", "soldier", 80, 0, vel=(0.0, 2.0)),
+                                  obj("s2", "soldier", 160, 0), obj("far", "soldier", 900, 900)]}
+    (c,) = g.update(objs, 100.0)  # t1 - s1 - s2 are linked through s1; the far one is alone
+    assert c["objects"] == ["s1", "s2", "t1"] and c["composition"] == {"tank": 1, "soldier": 2}
+    assert c["centre"] == (80.0, 0.0) and c["vel"] == (1.33, 0.67)  # mean of three, the third stands still
+    assert c["area_m2"] > area(outline([(0.0, 0.0)]))  # more than one object's outline
+
+
+def test_clusters_keep_stale_objects_for_a_while_and_one_object_has_an_outline():
+    g = Grouper(Params(radius_m=100.0, min_count=2, max_age_s=30.0))
+    objs = {"a": obj("a", "tank", 0, 0, last=100.0), "b": obj("b", "tank", 50, 0, state="stale", last=90.0)}
+    assert len(g.update(objs, 100.0)) == 1  # b was seen 10 s ago
+    assert g.update(objs, 125.0) == []  # 35 s ago: out
+    assert len(outline([(5.0, 5.0)])) >= 3 and area(outline([(5.0, 5.0)])) > 1000
+
+
+def test_cluster_id_survives_membership_change_and_a_split_gets_a_new_one():
+    g = Grouper(Params(radius_m=100.0, min_count=2))
+    objs = {o["oid"]: o for o in [obj("v1", "tank", 0, 0), obj("v2", "tank", 50, 0), obj("v3", "tank", 90, 0)]}
+    (a,) = g.update(objs, 1.0)
+    objs.pop("v1")
+    objs.update({o["oid"]: o for o in [obj("v4", "tank", 120, 0), obj("v5", "tank", 140, 0)]})
+    (b,) = g.update(objs, 2.0)
+    assert b["cid"] == a["cid"] and b["objects"] == ["v2", "v3", "v4", "v5"]
+    objs.pop("v3")  # v2 | v4 v5 are 70 m apart: still one; move v2 away to split off
+    objs["v2"]["xy"] = [-500.0, 0.0]
+    (c,) = g.update(objs, 3.0)
+    assert c["objects"] == ["v4", "v5"] and c["cid"] == a["cid"]
+
+
+async def test_clusters_are_published_and_cleared_when_the_last_goes(monkeypatch):
+    sent = []
+
+    async def publish(nc, subject, env):
+        sent.append((subject, env.data))
+
+    monkeypatch.setattr(dm, "publish", publish)
+    dm.state["nc"] = object()
+    dm.engines.pop("w", None)
+    eng = dm.engine("w")
+    eng.ws.objects = {o["oid"]: o for o in [obj("a", "tank", 0, 0), obj("b", "soldier", 40, 0)]}
+    eng.clusters = eng.grouper.update(eng.ws.objects, 1.0)
+    await dm.send_clusters("w", eng, 1.0)
+    subject, data = sent[-1]
+    assert subject == "clusters.w" and data["clusters"][0]["objects"] == ["a", "b"]
+    eng.ws.objects.clear()
+    eng.clusters = eng.grouper.update(eng.ws.objects, 2.0)
+    await dm.send_clusters("w", eng, 2.0)
+    assert sent[-1][1]["clusters"] == []
 
 
 class ObjectsMsg:
