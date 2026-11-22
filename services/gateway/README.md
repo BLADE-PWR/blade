@@ -27,11 +27,11 @@ Session body:
 ```json
 {"name": "session", "model": null,
  "replays": [{"recording": "<id>", "wid": "rw-1", "sids": {"uav1": "rp-1", "uav2": "rp-2"},
-              "mission": "arma-live1", "speed": 1.0, "loop": false, "offset_s": 0}]}
+              "speed": 1.0, "loop": false, "offset_s": 0}]}
 ```
 Each replay plays one recording, every drone of it (`drones` in `GET /api/recordings`), into a world of its own:
-`recording`, `wid` and a new stream id per drone (`sids`) are required. `mission`, the recorded one, is what the UI
-shows.
+`recording`, `wid` and a new stream id per drone (`sids`) are required. The names the UI shows (mission, drones) come
+from the recording itself, through `worlds.<wid>` and each frame's telemetry.
 
 ## Proxy
 
@@ -40,7 +40,7 @@ shows.
 | Prefix | Service | Path there |
 |---|---|---|
 | `/api/models` | [detector](../detector/README.md) | `/models` |
-| `/api/missions` | [ingest](../ingest/README.md) | `/missions` (stop a mission) |
+| `/api/missions` | [ingest](../ingest/README.md) | `/missions` (the live missions; stop one) |
 | `/api/detector` | [detector](../detector/README.md) | `/streams` (model and threshold of a stream) |
 | `/api/recordings` | [sessions](../sessions/README.md) | `/recordings` |
 | `/api/replays` | [sessions](../sessions/README.md) | `/replays` |

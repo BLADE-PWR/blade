@@ -129,6 +129,14 @@ class Worlds:
             w.ended = time.time()
             return w
 
+    def missions(self) -> list[dict]:
+        """The live missions: each with its worlds (one per map) and their drones, for picking one to watch."""
+        with self.lock:
+            out: dict[str, list[dict]] = {}
+            for w in self.live.values():
+                out.setdefault(w.mission, []).append(w.info())
+        return [{"mission": m, "worlds": ws} for m, ws in sorted(out.items())]
+
     def of_mission(self, mission: str) -> list[dict]:
         """The live worlds of a mission (one per map), for a viewer that starts following it."""
         with self.lock:

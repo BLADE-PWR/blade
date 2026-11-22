@@ -730,3 +730,16 @@ async def test_a_replay_going_back_forgets_what_every_drone_saw(monkeypatch):
     assert len(forgotten) == 2  # both tanks, d2's too
     _, rewind = wm.clocks["w1"].frame("d2", 540.0, time.time())  # d2 joins at 40 s again: not a rewind of its own
     assert not rewind
+
+
+def test_the_live_missions_list_their_maps_and_drones():
+    from blade_ingest.worlds import Worlds
+
+    ws = Worlds(alive=lambda key: True)
+    ws.join_live("m1", "altis", "uav1", "udp:a")
+    ws.join_live("m1", "stratis", "uav2", "udp:b")
+    ws.join_live("m2", "altis", "uav1", "udp:c")
+    ws.join_replay("rw", "rp-1", "m1", "altis", "uav1")  # a replay is no live mission
+    (m1, m2) = ws.missions()
+    assert m1["mission"] == "m1" and sorted(w["map"] for w in m1["worlds"]) == ["altis", "stratis"]
+    assert m2["mission"] == "m2" and list(m2["worlds"][0]["drones"].values()) == ["uav1"]

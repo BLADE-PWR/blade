@@ -33,7 +33,8 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173. Type a mission (the uplinks' `--mission`) to watch every drone in it, on every map,
+Open http://localhost:5173. Pick a live mission (or type one, the uplinks' `--mission`, also before it starts) to
+watch every drone in it, on every map,
 including ones that join later. Drones are shown by their names (`--drone`). In the Command view, Stop mission
 ends it now instead of after 10 minutes without frames: its map, objects and alerts are cleared and its recordings
 closed; drones still flying start it afresh. Or click Replay next to a recording: that opens the running session already replaying it, or

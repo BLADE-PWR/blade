@@ -2,16 +2,17 @@
 import { type FormEvent, useEffect, useState } from "react";
 
 import { Command } from "./Command";
-import type { Alert, Recording, Replay, Session } from "./contracts";
+import type { Alert, LiveMission, Recording, Replay, Session } from "./contracts";
 import { recordingName } from "./format";
 import { connect, getJSON, send, startReplay, type Target } from "./gateway";
 import { Operator } from "./Operator";
 import { ReplayBar } from "./Replay";
 import {
-  addPreview, apply, dispose, droneName, emptySituation, type Filter, latencyS, seek, transmitting,
+  addPreview, apply, dispose, droneName, emptySituation, type Filter, latencyS, seek, type Situation, transmitting,
 } from "./situation";
 
 const CLOCK_MS = 1000;
+const MISSIONS_POLL_MS = 3000;
 
 export type View = "operator" | "command";
 export type MainPanel = "video" | "map";
@@ -25,6 +26,7 @@ export function App() {
 function Pick({ onPick }: { onPick: (t: Target) => void }) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [recordings, setRecordings] = useState<Recording[]>([]);
+  const [missions, setMissions] = useState<LiveMission[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [mission, setMission] = useState("");
 
@@ -35,6 +37,10 @@ function Pick({ onPick }: { onPick: (t: Target) => void }) {
         setRecordings(r);
       })
       .catch((e: Error) => setError(`Gateway unreachable (${e.message}). Is tools/dev.py running?`));
+    const live = () => getJSON<LiveMission[]>("/api/missions").then(setMissions).catch(() => setMissions([]));
+    live();
+    const timer = setInterval(live, MISSIONS_POLL_MS); // missions start and end while the picker is open
+    return () => clearInterval(timer);
   }, []);
 
   const submit = (e: FormEvent) => {
@@ -51,13 +57,30 @@ function Pick({ onPick }: { onPick: (t: Target) => void }) {
     <main className="pick">
       <h1>Blade</h1>
       {error && <p className="error">{error}</p>}
+      <h2>Live missions</h2>
+      {missions.length === 0 && !error && <p>No drone is flying now.</p>}
+      <ul>
+        {missions.map((m) => (
+          <li key={m.mission}>
+            <button onClick={() => onPick({ mission: m.mission })}>Watch</button> {m.mission}:{" "}
+            {m.worlds.map((w) => `${w.map} (${Object.values(w.drones).join(", ")})`).join("; ")}
+          </li>
+        ))}
+      </ul>
+      <form onSubmit={submit}>
+        <label>or a mission by name <input value={mission} placeholder="uplink --mission"
+          onChange={(e) => setMission(e.target.value)} />
+        </label>
+        <button type="submit">Connect</button>{" "}
+        <span className="muted">(also before its first drone flies)</span>
+      </form>
       <h2>Sessions</h2>
       {sessions.length === 0 && !error && <p>No sessions on the gateway yet.</p>}
       <ul>
         {sessions.map((s) => (
           <li key={s.id}>
             <button onClick={() => onPick({ session: s.id })}>{s.name}</button> {s.state},{" "}
-            {s.replays.map((r) => `${r.recording} (${Object.keys(r.sids).join(", ")}) in world ${r.wid}`).join("; ")}
+            {s.replays.map((r) => `${r.recording}: ${Object.keys(r.sids).join(", ")}`).join("; ")}
           </li>
         ))}
       </ul>
@@ -75,16 +98,13 @@ function Pick({ onPick }: { onPick: (t: Target) => void }) {
           </li>
         ))}
       </ul>
-      <h2>Or a mission</h2>
-      <form onSubmit={submit}>
-        <label>mission <input value={mission} placeholder="uplink --mission"
-          onChange={(e) => setMission(e.target.value)} />
-        </label>
-        <button type="submit">Connect</button>
-      </form>
     </main>
   );
 }
+
+/** A replay's mission: the recorded one, as its world's info names it. */
+const replayMission = (sit: Situation) =>
+  [...sit.worlds.values()].find((w) => w.info)?.info?.mission;
 
 function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target) => void; onLeave: () => void }) {
   const [sit] = useState(emptySituation);
@@ -173,7 +193,7 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
         <label className="muted">
           Mission{" "}
           <button onClick={onLeave}>
-            {"mission" in target ? target.mission : (sit.session?.replays[0]?.mission ?? sit.session?.name ?? "…")}
+            {"mission" in target ? target.mission : replayMission(sit) ?? sit.session?.name ?? "…"}
           </button>
         </label>
         {view === "command" && "mission" in target && (

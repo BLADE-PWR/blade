@@ -70,7 +70,7 @@ export async function startReplay(rec: Recording): Promise<string> {
   const id = () => Math.random().toString(16).slice(2, 8);
   const sids = Object.fromEntries(rec.drones.map((d) => [d.name, `rp-${id()}`]));
   const s = await send<Session>("POST", "/sessions", { name: `Replay ${rec.scene ?? rec.id}`,
-    replays: [{ recording: rec.id, wid: `rw-${id()}`, sids, mission: rec.mission, loop: true }] });
+    replays: [{ recording: rec.id, wid: `rw-${id()}`, sids, loop: true }] });
   await send("POST", `/sessions/${s.id}/start`);
   return s.id;
 }

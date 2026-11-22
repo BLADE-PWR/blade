@@ -75,8 +75,9 @@ export type StreamDiag = { fps_in: number; fps_out: number; dropped: number; lat
 export type DiagData = { service: string; instance?: string | null; streams: Record<string, StreamDiag> };
 
 // one mission recording played into its own world, every drone of it under a stream id of its own
-export type SessionReplay = { recording: string; wid: string; sids: Record<string, string>; // drone name -> sid
-  mission?: string | null };
+export type SessionReplay = { recording: string; wid: string; sids: Record<string, string> }; // drone name -> sid
+
+export type LiveMission = { mission: string; worlds: WorldInfo[] }; // from ingest: one world per map
 
 export type Session = { id: string; name: string; state: string; replays: SessionReplay[] };
 

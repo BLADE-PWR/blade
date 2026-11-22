@@ -28,6 +28,7 @@ drone its world and stream id (`worlds.py`).
 | GET | `/health` | Service state |
 | GET | `/streams?all=` | Streams being received: sid, drone, mission, kind, wid, size, frames, fps. `all=true` includes ended ones |
 | GET | `/worlds?mission=` | The live worlds of a mission now (one per map), as in `worlds.<wid>` |
+| GET | `/missions` | The live missions, each with its worlds (`{"mission", "worlds"}`), for the frontend's picker |
 | POST | `/missions/{mission}/stop` | End every live world of the mission now; drones still sending start it afresh |
 | POST | `/push/{sid}?wid=` | Stream an MPEG-TS body into world `wid` (required; used by replays) |
 

@@ -23,7 +23,6 @@ class ReplaySpec(BaseModel):
     recording: str
     wid: str  # new for every replay, so it never mixes with the live mission or another replay
     sids: dict[str, str]  # drone name in the recording -> stream id; new for every replay too
-    mission: str | None = None  # the recorded mission (its uplink --mission), which the UI shows
     speed: float = 1.0
     loop: bool = False
     offset_s: float = 0.0

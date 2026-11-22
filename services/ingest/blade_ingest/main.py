@@ -308,6 +308,11 @@ async def worlds(mission: str):
     return svc.worlds.of_mission(mission)
 
 
+@app.get("/missions")
+async def missions():
+    return svc.worlds.missions()
+
+
 @app.post("/missions/{mission}/stop")
 async def stop_mission(mission: str):
     """End every live world of the mission now, instead of after EXPIRE_S: services drop its objects and alerts, and
