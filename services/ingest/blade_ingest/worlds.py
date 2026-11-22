@@ -8,7 +8,7 @@ uplink already flies under gets a suffix: uav1-2, uav1-3, ...
 A live world ends when none of its drones has sent a frame for EXPIRE_S (by then all its objects have expired), or
 when the operator stops the mission; the next drone of that mission and map starts a new one, with new ids.
 A replay brings its own ids (sessions picks them); it is only registered here, so its names are known too, and it
-ends when its pushes stop."""
+ends a few seconds after its last push closed (the session stopped)."""
 from __future__ import annotations
 
 import secrets
@@ -109,10 +109,14 @@ class Worlds:
         if w is not None:
             w.last = t
 
-    def idle(self, now: float, after_s: float) -> list[str]:
-        """Live worlds none of whose drones has sent a frame for after_s."""
+    def idle(self, now: float, live_s: float, pushed: set[str], replay_s: float) -> list[str]:
+        """Worlds to end: live ones none of whose drones has sent a frame for live_s, replay ones with no push open
+        (pushed: the replay worlds that have one) for replay_s."""
         with self.lock:
-            return [w.wid for w in self.by_wid.values() if w.kind == "live" and now - w.last > after_s]
+            for wid in pushed:
+                if wid in self.by_wid:
+                    self.by_wid[wid].last = now
+            return [w.wid for w in self.by_wid.values() if now - w.last > (live_s if w.kind == "live" else replay_s)]
 
     def end(self, wid: str) -> World | None:
         """-> the world, ended and forgotten (None if it had ended already)."""

@@ -21,7 +21,9 @@ Each world runs on its own clock (`clock.py`), and `first`, `last`, event and al
   paused replay stands still (nothing goes stale, no lost contact), a replay at x2 runs twice as fast
   (speeds come out the same as at x1), a seek ahead is time passing.
 - A replay that goes back in its recording (a seek back, a loop) joins again at the world's current time, and
-  what that stream saw is dropped and published in `forgotten`.
+  what every stream of the world saw is dropped and published in `forgotten`: the drones of a replay share one
+  clock, so all of them went back, also one that sends nothing at the new time (not joined yet, or gone by then)
+  and so could not tell. The other streams join again at the world's time with their next frame.
 - A world with a live stream follows the wall clock for all its streams (ahead of it by as much as a fast
   replay had taken the world before). Replays in one world should play together: the clock is the furthest of
   them, so a stream paused on its own ages, and joins at the world's time when it plays on.

@@ -67,7 +67,10 @@ async def on_geo(msg) -> None:
     w = world(wid)
     maps.setdefault(wid, env.data["map"])
     t, rewind = clocks[wid].frame(env.sid, env.ts.get("media"), t_in)
-    forgotten = w.forget(env.sid) if rewind else []
+    forgotten = []
+    if rewind:  # the replay went back (a seek, a loop): every drone of it did, also ones that send nothing there
+        forgotten = w.forget_all()
+        clocks[wid].rejoin_all(env.sid)
     changed, events = w.observe(env.sid, env.data.get("pts", []), t)
     forgotten += w.take_merged()
     diag.got(env.sid)

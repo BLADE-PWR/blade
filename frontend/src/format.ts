@@ -13,4 +13,5 @@ export function ago(t: number, now: number): string {
 export const recordingName = (r: Recording) =>
   `${r.scene ?? r.id}, ${new Date(r.started * 1000).toLocaleDateString("en-CA")} ${clock(r.started).slice(0, 5)}, ` +
   (r.duration_s == null ? "still recording" : `${r.duration_s.toFixed(0)} s`) +
-  (r.mission ? `, mission ${r.mission}` : "") + `, drone ${r.sid}`;
+  (r.mission ? `, mission ${r.mission}` : "") + (r.map ? ` on ${r.map}` : "") +
+  (r.drones.length === 1 ? `, drone ${r.drones[0].name}` : `, drones ${r.drones.map((d) => d.name).join(", ")}`);

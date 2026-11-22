@@ -1,6 +1,6 @@
 // The replay bar: recording, position, pause, step, jumps and speed. One replay plays every drone of a mission
 // recording on one clock; the bar drives every replay of the session together.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { Recording, Replay, Session } from "./contracts";
 import { recordingName } from "./format";
@@ -9,24 +9,51 @@ import { getJSON, send, startReplay } from "./gateway";
 const POLL_MS = 1000;
 const JUMP_S = 10;
 const SPEEDS = [0.5, 1, 2, 4];
+const JOIN_SLACK_S = 0.5; // a drone starting this soon after a jump's target counts as playing there
+
+/** The drones of r with a segment at t (or starting just after it). */
+const playingAt = (r: Replay, t: number) =>
+  r.drones.filter((d) => d.segments.some(([a, b]) => t >= a - JOIN_SLACK_S && t <= b)).map((d) => d.sid);
 
 const mmss = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${(s % 60).toFixed(1).padStart(4, "0")}`;
 
-type Props = { session: Session; onSwitch: (sessionId: string) => void; onSeek: (deltaS: number) => void };
+type Props = {
+  session: Session;
+  onSwitch: (sessionId: string) => void;
+  onSeek: (deltaS: number, playing: Set<string>) => void; // playing: the drones with a segment at the target
+  onState: (replays: Replay[]) => void;
+};
 
-export function ReplayBar({ session, onSwitch, onSeek }: Props) {
+export function ReplayBar({ session, onSwitch, onSeek, onState }: Props) {
+  /** Note how the replays are now; a jump this tab did not see coming (a loop, a seek from another tab, Play at the
+   * end starting over) clears what the drones show, like a jump made here. */
+  const update = (rs: Replay[], ownJump = false) => {
+    for (const r of rs) {
+      const last = seen.current.get(r.wid);
+      if (!ownJump && last && last.generation !== r.generation) {
+        seekRef.current(r.position_s - last.position, new Set(r.paused ? [] : playingAt(r, r.position_s)));
+      }
+      seen.current.set(r.wid, { generation: r.generation, position: r.position_s });
+    }
+  };
   const wids = session.replays.map((r) => r.wid).join(",");
   const [replays, setReplays] = useState<Replay[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<number | null>(null); // while the slider is dragged
   const [recordings, setRecordings] = useState<Recording[]>([]);
+  const seen = useRef(new Map<string, { generation: number; position: number }>()); // wid -> as last read
+  const seekRef = useRef(onSeek);
+  seekRef.current = onSeek; // the latest: it knows every drone shown now
 
   useEffect(() => {
     let stopped = false;
     const mine = wids.split(",");
     const poll = () => getJSON<Replay[]>("/api/replays")
       .then((all) => {
-        if (!stopped) setReplays(all.filter((r) => mine.includes(r.wid)));
+        if (stopped) return;
+        const rs = all.filter((r) => mine.includes(r.wid));
+        update(rs);
+        setReplays(rs);
       })
       .catch((e: Error) => setError(`Cannot read the replay state (${e.message}).`));
     poll();
@@ -36,6 +63,8 @@ export function ReplayBar({ session, onSwitch, onSeek }: Props) {
       clearInterval(timer);
     };
   }, [wids]);
+
+  useEffect(() => onState(replays), [replays, onState]);
 
   useEffect(() => {
     getJSON<Recording[]>("/api/recordings").then(setRecordings)
@@ -47,17 +76,22 @@ export function ReplayBar({ session, onSwitch, onSeek }: Props) {
     return <div className="replaybar muted">Replay {wids}: waiting for its state.{error && ` ${error}`}</div>;
   }
 
-  const control = (body: (r: Replay) => object) => {
+  const control = (body: (r: Replay) => object, ownJump = false) => {
     setError(null);
     return Promise.all(replays.map((r) => send<Replay>("PATCH", `/sessions/${session.id}/replays/${r.wid}`,
       body(r))))
-      .then(setReplays)
+      .then((rs) => {
+        update(rs, ownJump);
+        setReplays(rs);
+      })
       .catch((e: Error) => setError(`Replay control failed (${e.message}).`));
   };
   const jump = (delta: number) => {
-    const done = control((r) => ({ seek_s: Math.max(0, r.position_s + delta) }));
+    const done = control((r) => ({ seek_s: Math.max(0, r.position_s + delta) }), true);
     const to = Math.min(Math.max(0, first.position_s + delta), first.duration_s);
-    if (!first.paused) onSeek(to - first.position_s); // paused, no frame comes until Play: nothing to wait for
+    const playing = new Set(first.paused ? [] : replays.flatMap( // paused, no frame comes until Play
+      (r) => playingAt(r, Math.min(Math.max(0, r.position_s + delta), r.duration_s))));
+    onSeek(to - first.position_s, playing);
     return done;
   };
   const commit = (value: number) => {

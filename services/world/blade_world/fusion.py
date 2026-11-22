@@ -312,6 +312,12 @@ class World:
         out, self.merged = self.merged, []
         return out
 
+    def forget_all(self) -> list[str]:
+        """Drop what every stream saw (a replay went back: all of it happens later); -> the published oids dropped"""
+        sids = ({s for o in self.objects.values() for s in o.seen_by} | {k[0] for k in self.by_track}
+                | {e["sid"] for e in self.events.values()})
+        return [oid for sid in sorted(sids) for oid in self.forget(sid)]
+
     def forget(self, sid: str) -> list[str]:
         """Drop the objects only this stream saw and its tracks from the others; -> the published oids dropped"""
         dropped = []

@@ -291,8 +291,9 @@ async def test_model_switch_does_not_reuse_track_ids(monkeypatch):
 
 
 class _Msg:
-    def __init__(self, subject, data, t):
-        self.subject, self.data, self.headers = subject, data, {"t": str(t)}
+    def __init__(self, subject, data, t, wid="w-1", drone="uav1", src="udp:a"):
+        self.subject, self.data = subject, data
+        self.headers = {"t": str(t), "wid": wid, "drone": drone, "mission": "m1", "map": "tiny", "src": src}
 
 
 async def test_recorder_takes_no_new_recording_while_closing(tmp_path, ts_bytes):
@@ -300,10 +301,10 @@ async def test_recorder_takes_no_new_recording_while_closing(tmp_path, ts_bytes)
 
     rec = Recorder(tmp_path, record_all=True)
     await rec.on_raw(_Msg("raw.s1", ts_bytes, 1.0))
-    assert list(rec.active) == ["s1"]
-    await rec.close()  # finalizes s1
+    assert list(rec.missions) == ["w-1"]
+    await rec.close()  # finalizes w-1
     await rec.on_raw(_Msg("raw.s1", ts_bytes[-4096:], 2.0))  # ingest's tail arrives after the close
-    assert rec.active == {}
+    assert rec.missions == {}
     dirs = [d for d in tmp_path.iterdir() if d.is_dir()]
     assert len(dirs) == 1 and not json.loads((dirs[0] / "manifest.json").read_text())["recording"]
 
@@ -595,7 +596,7 @@ def test_an_idle_or_stopped_world_ends_and_the_next_drone_starts_a_new_one():
     a = ws.join_live("m1", "altis", "uav1", "udp:a")
     ws.join_live("m1", "stratis", "uav2", "udp:b")
     ws.seen(a.world.wid, time.time() - 700)  # altis: nothing for 700 s
-    assert ws.idle(time.time(), 600) == [a.world.wid]
+    assert ws.idle(time.time(), 600, set(), 5) == [a.world.wid]
     ended = ws.end(a.world.wid)
     assert ended.ended and ws.end(a.world.wid) is None  # ends once
     assert [w["map"] for w in ws.of_mission("m1")] == ["stratis"]
@@ -654,3 +655,78 @@ async def test_detector_settings_move_to_the_drones_new_id():
     await c.set("d-y", model="m1")
     await c.move("d-x", "d-y", ("model", "conf"))
     assert c.model("d-y") == "m1" and "d-x" not in c.assign  # set for the new id already: kept
+
+
+async def test_one_world_is_one_recording_with_a_segment_per_connection(tmp_path, ts_bytes):
+    from blade_sessions.recorder import Recorder
+    from blade_sessions.recording import drones, list_recordings
+
+    rec = Recorder(tmp_path, record_all=True)
+    await rec.on_raw(_Msg("raw.d-1", ts_bytes, 100.0, drone="uav1", src="udp:a:1"))
+    await rec.on_raw(_Msg("raw.d-2", ts_bytes, 140.0, drone="uav2", src="udp:b:1"))  # joined 40 s later
+    await rec.on_raw(_Msg("raw.d-1", ts_bytes, 400.0, drone="uav1", src="udp:a:2"))  # its uplink came back
+    assert len(rec.missions) == 1
+    (r,) = list_recordings(tmp_path)
+    assert r["recording"]  # listed, but not to be replayed yet
+    await rec.on_world_info(InfoMsg(wid="w-1", ended=time.time()))  # ingest ended the world
+    assert rec.missions == {}
+    (r,) = list_recordings(tmp_path)
+    assert not r["recording"] and r["mission"] == "m1" and r["map"] == "tiny" and r["wid"] == "w-1"
+    by_name = {d["name"]: d for d in drones(r)}
+    assert by_name["uav1"]["start_s"] == 0 and by_name["uav2"]["start_s"] == 40
+    assert [x["dir"] for x in by_name["uav1"]["segments"]] == ["uav1/000", "uav1/001"]
+    assert [x["start_s"] for x in by_name["uav1"]["segments"]] == [0, 300]
+    assert r["duration_s"] == pytest.approx(300, abs=0.01)  # its first chunk to its last
+
+
+async def test_a_replay_world_ends_only_when_no_push_has_been_open_for_a_while():
+    from blade_ingest.worlds import Worlds
+
+    ws = Worlds(alive=lambda key: True)
+    ws.join_replay("rw", "rp-1", "m1", "tiny", "uav1")
+    now = time.time()
+    assert ws.idle(now + 100, 600, {"rw"}, 5) == []  # a push is open (playing or paused)
+    assert ws.idle(now + 103, 600, set(), 5) == []  # between two segments of a drone
+    assert ws.idle(now + 106, 600, set(), 5) == ["rw"]  # the session stopped
+
+
+async def test_a_drone_plays_its_segments_one_push_each(tmp_path):
+    from blade_sessions.replay import segment_at
+
+    r, (body_a, body_b) = replay_of((track_dir(tmp_path / "a", 5), 0.0), (track_dir(tmp_path / "b", 5), 2.0),
+                                    speed=10.0)
+    a, b = r.tracks  # one drone, two segments: 0-0.4 s and 2.0-2.4 s
+    a.name = b.name = "uav0"
+    r.__post_init__()
+    segs = r.drones["uav0"]
+    body_a = a.body(r.clock, r._send_truth, segs)
+    assert [x async for x in body_a] == [bytes([k]) for k in range(5)]  # played to its end, then its push ends
+    assert a.done_at == r.clock.generation and segment_at(segs, 1.0) is b  # the next one, in its own push
+    body_b = b.body(r.clock, r._send_truth, segs)
+    assert await anext(body_b) == bytes([0])
+    r.patch(seek_s=0.1)  # back into the first segment
+    with pytest.raises(StopAsyncIteration):
+        await anext(body_b)  # its push ends; the first segment's starts again
+    assert segment_at(segs, r.clock.position()) is a and segment_at(segs, 3.0) is None
+
+
+async def test_a_replay_going_back_forgets_what_every_drone_saw(monkeypatch):
+    wm, nc = world_service(monkeypatch)
+    monkeypatch.setattr(wm, "ended", set())
+
+    def geo(sid, k, media, x):
+        pts = [{"tid": 1, "cls": "tank", "grp": "tank", "conf": 0.9, "xyz": [x, 500.0, 5.0], "sigma_m": 1.0}]
+        return GeoMsg(Envelope(sid=sid, wid="w1", frame=k, ts={"capture": time.time(), "media": media},
+                               data={"pts": pts, "map": "tiny"}))
+
+    for k in range(10):  # 40 s into the recording both drones see a tank of their own
+        await wm.on_geo(geo("d1", k, 540 + k / 10, 100.0))
+        await wm.on_geo(geo("d2", k, 540 + k / 10, 900.0))
+    assert len(wm.worlds["w1"].published()) == 2
+    await wm.on_geo(geo("d1", 0, 500.0, 100.0))  # a seek back to before d2 joined: only d1 sends
+    assert wm.worlds["w1"].published() == [] or all(set(o.seen_by) == {"d1"} for o in wm.worlds["w1"].published())
+    assert not [o for o in wm.worlds["w1"].objects.values() if "d2" in o.seen_by]  # nothing d2 saw is left
+    forgotten = [x for _, m in nc.sent for x in m["data"].get("forgotten", [])]
+    assert len(forgotten) == 2  # both tanks, d2's too
+    _, rewind = wm.clocks["w1"].frame("d2", 540.0, time.time())  # d2 joins at 40 s again: not a rewind of its own
+    assert not rewind

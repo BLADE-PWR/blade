@@ -27,7 +27,7 @@ ROOT = Path(env_str("RECORDINGS_DIR", "recordings"))
 INGEST_URL = env_str("INGEST_URL", f"http://127.0.0.1:{ports.INGEST}")
 INGEST_TRUTH = (env_str("INGEST_TRUTH_HOST", "127.0.0.1"), env_int("INGEST_TRUTH_PORT", ports.TRUTH_UDP))
 
-recorder = Recorder(ROOT, env_bool("RECORD_ALL", True), env_float("RECORD_IDLE_S", 5.0))
+recorder = Recorder(ROOT, env_bool("RECORD_ALL", True), env_float("RECORD_IDLE_S", 660.0))
 replays: dict[str, Replay] = {}  # wid -> the replay playing into it
 
 
@@ -40,6 +40,7 @@ async def lifespan(app: FastAPI):
     await nc.subscribe("raw.>", cb=recorder.on_raw)
     for subj in ("truth.>", "registry.>", "events.>"):
         await nc.subscribe(subj, cb=recorder.on_truth)
+    await nc.subscribe("worlds.*", cb=recorder.on_world_info)
     reaper = asyncio.create_task(recorder.reap())
     yield
     reaper.cancel()
@@ -53,7 +54,7 @@ app = FastAPI(title="blade sessions", lifespan=lifespan)
 
 
 def _rec_dir(rid: str) -> Path:
-    if "/" in rid or "\\" in rid or rid.startswith(".") or not (ROOT / rid / "stream.ts").exists():
+    if "/" in rid or "\\" in rid or rid.startswith(".") or not (ROOT / rid / "manifest.json").exists():
         raise HTTPException(404, f"no recording {rid}")
     return ROOT / rid
 
@@ -70,10 +71,7 @@ async def recordings():
 
 @app.get("/recordings/{rid}")
 async def recording(rid: str):
-    m = _rec_dir(rid) / "manifest.json"
-    if not m.exists():
-        raise HTTPException(404, f"{rid} has no manifest")
-    rec = json.loads(m.read_text())
+    rec = json.loads((_rec_dir(rid) / "manifest.json").read_text())
     return {**rec, "drones": drones(rec)}
 
 
@@ -125,8 +123,9 @@ class RecordToggle(BaseModel):
 @app.put("/recording/{sid}")
 async def toggle(sid: str, body: RecordToggle):
     recorder.wanted[sid] = body.on
-    closed = None if body.on else await recorder.stop(sid)
-    return {"sid": sid, "on": body.on, "closed": closed}
+    if not body.on:
+        await recorder.stop(sid)
+    return {"sid": sid, "on": body.on}
 
 
 class ReplayReq(BaseModel):
@@ -153,11 +152,10 @@ async def start_replay(req: ReplayReq):
     if old and old.state in ("starting", "playing", "paused"):
         raise HTTPException(409, f"{req.wid} is already playing")
     d = _rec_dir(req.recording)
-    m = d / "manifest.json"
-    manifest = json.loads(m.read_text()) if m.exists() else {"id": req.recording}
+    manifest = json.loads((d / "manifest.json").read_text())
     if manifest.get("recording"):
         raise HTTPException(409, f"{req.recording} is still recording")
-    specs = [TrackSpec(x["name"], d / x["dir"], x["start_s"]) for x in drones(manifest)]
+    specs = [TrackSpec(x["name"], d / s["dir"], s["start_s"]) for x in drones(manifest) for s in x["segments"]]
     missing = sorted({t.name for t in specs} - req.sids.keys())
     if missing:
         raise HTTPException(400, f"sids: no stream id for {', '.join(missing)}")

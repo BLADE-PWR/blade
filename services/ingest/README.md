@@ -18,7 +18,7 @@ drone its world and stream id (`worlds.py`).
 |---|---|
 | publishes | `frames.<sid>` (telemetry + JPEG); `ts.capture` is the grab time live and the arrival in a replay, which also carries its recording time `ts.media` |
 | publishes | `truth.<sid>`, `registry.<sid>`, `events.<sid>` (sim truth) |
-| publishes | `raw.<sid>` (live MPEG-TS bytes, for the recorder; headers `t`, `drone`, `mission`) |
+| publishes | `raw.<sid>` (live MPEG-TS bytes, for the recorder; headers `t`, `src` (the connection), `wid`, `drone`, `mission`, `map`) |
 | publishes | `worlds.<wid>` (a world started, a drone joined it, or it `ended`: mission, map, `kind` live or replay, drone names by sid, and `previous`: the sid each drone had before) |
 
 ## REST
@@ -38,7 +38,8 @@ drone that goes to another map moves to that map's world, with another `sid`. In
 restarts.
 
 A live world ends when none of its drones has sent a frame for `EXPIRE_S` (600 s, the world model's object expiry:
-nothing of it is left on the map), or when the mission is stopped; a replay world ends when its last push closes.
+nothing of it is left on the map), or when the mission is stopped; a replay world ends when it has had no push open
+for 5 s (its session stopped; a drone has none for a moment between two segments).
 `worlds.<wid>` then carries `ended`, and the world model, decision, evaluator, detector and gateway drop it. A drone
 still sending starts a new world with its next frame. A drone that gets a new `sid` (a new world, another map)
 lists its old one in `previous`, so the detector moves its model and threshold along.

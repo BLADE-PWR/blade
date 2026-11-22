@@ -85,7 +85,8 @@ export type RecordedDrone = { name: string; start_s: number }; // start_s: where
 export type Replay = {
   wid: string;
   recording: string;
-  drones: (RecordedDrone & { sid: string })[];
+  drones: (RecordedDrone & { sid: string; segments: [number, number][] })[]; // segments: [from, to] on the timeline
+  generation: number; // goes up with every jump (a seek, from any tab, or a loop)
   position_s: number;
   duration_s: number;
   speed: number;
@@ -95,12 +96,12 @@ export type Replay = {
 
 export type Recording = {
   id: string;
-  sid: string; // the drone
   mission?: string | null; // its uplink --mission; none for stills, or while still recording
+  map?: string | null;
   scene: string | null;
   started: number;
   duration_s?: number; // both missing while the recording is still being written
   recording?: boolean; // still being written: listed, but cannot be replayed yet
   has_truth?: boolean;
-  drones: RecordedDrone[];
+  drones: RecordedDrone[]; // every drone of the mission, in the order they joined
 };

@@ -2,7 +2,7 @@
 import { type FormEvent, useEffect, useState } from "react";
 
 import { Command } from "./Command";
-import type { Alert, Recording, Session } from "./contracts";
+import type { Alert, Recording, Replay, Session } from "./contracts";
 import { recordingName } from "./format";
 import { connect, getJSON, send, startReplay, type Target } from "./gateway";
 import { Operator } from "./Operator";
@@ -96,6 +96,7 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
   const [main, setMain] = useState<MainPanel>("video");
   const [picked, setPicked] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>({ hidden: new Set(), stale: true });
+  const [replays, setReplays] = useState<Replay[]>([]); // the session's replays, as the replay bar last read them
 
   useEffect(() => {
     let frame = 0;
@@ -139,7 +140,11 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
   }, []);
 
   const now = Date.now() / 1000;
-  const sids = [...sit.drones.keys()]; // every drone seen so far, in the order they joined
+  // every drone seen so far, in the order they joined; in a replay not the ones that join only later on its timeline
+  const all = [...sit.drones.keys()];
+  const notYet = (s: string) => !sit.drones.get(s)?.previews.length && replays.some((r) =>
+    r.drones.some((d) => d.sid === s && d.start_s > r.position_s + 0.5));
+  const sids = all.filter((s) => !notYet(s));
   const sid = picked && sids.includes(picked) ? picked : (sids[0] ?? null);
   const drone = sid ? sit.drones.get(sid) : undefined;
   const replay = "session" in target; // sessions are replays; live is a mission
@@ -216,7 +221,7 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
       {error && <p className="error banner">{error}</p>}
       {replay && sit.session && (
         <ReplayBar session={sit.session} onSwitch={(id) => onPick({ session: id })}
-          onSeek={(delta) => seek(sit, sids, delta)} />
+          onSeek={(delta, playing) => seek(sit, all, delta, playing)} onState={setReplays} />
       )}
       {view === "operator"
         ? <Operator sit={sit} sid={sid} main={main} onMain={setMain} onDrone={setPicked} filter={filter}

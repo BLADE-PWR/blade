@@ -37,7 +37,8 @@ Open http://localhost:5173. Type a mission (the uplinks' `--mission`) to watch e
 including ones that join later. Drones are shown by their names (`--drone`). In the Command view, Stop mission
 ends it now instead of after 10 minutes without frames: its map, objects and alerts are cleared and its recordings
 closed; drones still flying start it afresh. Or click Replay next to a recording: that opens the running session already replaying it, or
-creates and starts one with a looping replay of every drone in it, on one timeline (under new ids, so it never mixes
+creates and starts one with a looping replay of every drone in it (a recording is a whole mission on one map), on
+one timeline (under new ids, so it never mixes
 with the live mission or other replays). Replay
 sessions are shared: every tab on one sees, and controls, the same playback. In the top bar,
 Live goes back to the picker and Replay to the newest running replay session. The dev server listens on all interfaces, so other

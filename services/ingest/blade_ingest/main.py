@@ -28,6 +28,7 @@ VIDEO_PORT = env_int("VIDEO_PORT", ports.VIDEO_UDP)
 TRUTH_PORT = env_int("TRUTH_PORT", ports.TRUTH_UDP)
 IDLE_S = env_float("SOURCE_IDLE_S", 3.0)
 EXPIRE_S = env_float("EXPIRE_S", 600.0)  # a live world without frames this long ends (its objects have all expired)
+REPLAY_GRACE_S = 5.0  # a replay world with no push open this long ends (a drone briefly has none between segments)
 RAW_CHUNK = 64 * 1024
 RAW_FLUSH_S = 0.1
 
@@ -96,8 +97,9 @@ class Ingest:
     async def reap_worlds(self) -> None:
         while True:
             await asyncio.sleep(1.0)
-            for wid in self.worlds.idle(time.time(), EXPIRE_S):
-                await self.end_world(wid, f"no frame for {EXPIRE_S:.0f} s")
+            pushed = {s.wid for s in list(self.sources.values()) if s.kind == "replay" and not s.done.is_set()}
+            for wid in self.worlds.idle(time.time(), EXPIRE_S, pushed, REPLAY_GRACE_S):
+                await self.end_world(wid, "nothing for a while")
 
     def on_frame(self, src: Source, p: Paired) -> None:
         tel = p.tel
@@ -152,8 +154,10 @@ class Ingest:
             slot[0] = bytearray()
         for i in range(0, len(data), 512 * 1024):
             self._spawn(self.nc.publish(f"raw.{src.sid}", data[i:i + 512 * 1024],
-                                        headers={"t": f"{t:.6f}", "src": src.key, "drone": src.drone or src.sid,
-                                                 "mission": src.joined[0] if src.joined else ""}))
+                                        headers={"t": f"{t:.6f}", "src": src.key, "wid": src.wid or "",
+                                                 "drone": src.drone or src.sid,
+                                                 "mission": src.joined[0] if src.joined else "",
+                                                 "map": src.joined[1] if src.joined else ""}))
 
     def video_udp(self) -> None:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -332,8 +336,6 @@ async def push(sid: str, request: Request, wid: str):
     finally:
         await asyncio.to_thread(src.close)
         await asyncio.to_thread(src.done.wait, 30)
-        if not any(s.wid == wid and s.kind == "replay" and not s.done.is_set() for s in svc.sources.values()):
-            await svc.end_world(wid, "its replays stopped")
     return {"sid": sid, "bytes": n, "frames": src.frames, "unpaired": src.unpaired}
 
 

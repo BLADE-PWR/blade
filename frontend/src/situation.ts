@@ -29,6 +29,7 @@ const MATCH_FRAMES = 2;
 const SILENT_S = 3; // s
 const SEEK_MATCH_S = 2; // a frame this close to a seek's target ends the wait
 const SEEK_GIVE_UP_S = 15;
+const SEEK_STALE_S = 1; // s after a jump during which messages from before it (still on their way) are dropped
 
 export type Preview = { frame: number | null; url: string; blob: Blob; w: number; h: number; src: [number, number];
   media: number | null }; // a replay frame's time in its recording, s
@@ -37,7 +38,8 @@ export type Drone = {
   sid: string;
   name: string | null; // from its frames (tel.drone)
   wid: string | null; // its world, from worlds.<wid>, detections and geo
-  seekTo: { media: number; at: number } | null; // a replay jump waiting for its first frame (recording time, wall s)
+  // a replay jump: its target in recording time (if known), when (wall s), and whether a frame is expected there
+  seekTo: { media: number | null; at: number; wait: boolean } | null;
   previews: Preview[];
   lastFrameAt: number;
   dets: (DetectionsData & { frame: number | null; at: number }) | null;
@@ -150,14 +152,14 @@ export function apply(s: Situation, m: Message): void {
       break;
     }
     case "detections":
-      if (m.sid) {
+      if (m.sid && !fromBeforeJump(s.drones.get(m.sid), m.ts?.media)) {
         const d = drone(s, m.sid);
         d.dets = { ...(m.data as DetectionsData), frame: m.frame ?? null, at: Date.now() / 1000 };
         d.wid = m.wid ?? d.wid;
       }
       break;
     case "geo":
-      if (m.sid) {
+      if (m.sid && !fromBeforeJump(s.drones.get(m.sid), m.ts?.media)) {
         const d = drone(s, m.sid);
         d.geo = m.data as GeoData;
         d.wid = m.wid ?? null;
@@ -208,23 +210,40 @@ export function addPreview(s: Situation, f: Frame): void {
   d.name = f.header.drone ?? d.name;
   const src = f.header.src;
   const media = typeof f.header.ts.media === "number" ? f.header.ts.media : null;
+  if (fromBeforeJump(d, media)) return;
   d.previews.push({ frame: f.header.frame, url: URL.createObjectURL(f.jpeg), blob: f.jpeg, w: f.header.w,
     h: f.header.h, src: src ? [src.w, src.h] : [f.header.w, f.header.h], media });
-  if (d.seekTo && media !== null && Math.abs(media - d.seekTo.media) < SEEK_MATCH_S) d.seekTo = null;
+  d.seekTo = null; // not from before a jump: the jump is over
   d.lastFrameAt = Date.now() / 1000;
   while (d.previews.length > PREVIEWS_KEPT) URL.revokeObjectURL(d.previews.shift()!.url);
 }
 
-/** A replay jumps by deltaS: its drones wait for a frame from there (frames still on the way are older). */
-export function seek(s: Situation, sids: string[], deltaS: number): void {
+/** A message from before a replay jump, still on its way: its picture, boxes or position are of another moment. */
+function fromBeforeJump(d: Drone | undefined, media: unknown): boolean {
+  const j = d?.seekTo;
+  if (!j || j.media === null || typeof media !== "number" || Date.now() / 1000 - j.at > SEEK_STALE_S) return false;
+  return Math.abs(media - j.media) >= SEEK_MATCH_S;
+}
+
+/** A replay jumps by deltaS. Every drone's picture, boxes and position are of another moment, so they go; the drones
+ * playing there wait for a frame from there (playing: their sids), the others (not joined yet, or gone by then) show
+ * nothing until they send. */
+export function seek(s: Situation, sids: string[], deltaS: number, playing: Set<string>): void {
+  const now = Date.now() / 1000;
   for (const sid of sids) {
     const d = s.drones.get(sid);
-    const media = d?.previews.at(-1)?.media;
-    if (d && media != null) d.seekTo = { media: media + deltaS, at: Date.now() / 1000 };
+    if (!d) continue;
+    const media = d.previews.at(-1)?.media;
+    for (const p of d.previews) URL.revokeObjectURL(p.url);
+    d.previews = [];
+    d.dets = d.geo = null;
+    d.route = [];
+    d.seekTo = { media: media == null ? null : media + deltaS, at: now, wait: playing.has(sid) && media != null };
   }
 }
 
-export const seeking = (d: Drone | undefined, now: number) => !!d?.seekTo && now - d.seekTo.at < SEEK_GIVE_UP_S;
+export const seeking = (d: Drone | undefined, now: number) =>
+  !!d?.seekTo?.wait && now - d.seekTo.at < SEEK_GIVE_UP_S;
 
 /** The drone's world (empty until it is known). */
 export function worldOf(s: Situation, d: Drone | undefined): WorldView {

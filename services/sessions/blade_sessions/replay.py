@@ -1,7 +1,8 @@
-"""A replay plays a mission recording back into one world: one track per drone, each pushed into ingest
-(POST /push/{sid}?wid=) with its truth sent to the truth port, all on one clock (clock.py). A drone that joined the
-mission later starts later on the timeline, as it did live. From ingest onwards the drones look like live ones.
-Control: pause, speed, seek, step N frames, loop."""
+"""A replay plays a mission recording back into one world, all on one clock (clock.py). Each drone is pushed into
+ingest (POST /push/{sid}?wid=) with its truth sent to the truth port: segment after segment (one per connection it
+had live, each its own MPEG-TS stream, so each its own push), each when the clock reaches it. A drone that joined
+the mission later, or came back after a gap, does so on the timeline as it did live. From ingest onwards the drones
+look like live ones. Control: pause, speed, seek, step N frames, loop."""
 from __future__ import annotations
 
 import asyncio
@@ -30,7 +31,8 @@ class TrackSpec:
 
 
 class Track:
-    """One drone: its recorded chunks, sent when the clock reaches their time on the mission's timeline."""
+    """One segment of one drone: its recorded chunks, sent when the clock reaches their time on the mission's
+    timeline."""
 
     def __init__(self, spec: TrackSpec, sid: str, send_truth: bool):
         self.name, self.dir, self.start_s, self.sid = spec.name, spec.dir, spec.start_s, sid
@@ -47,6 +49,7 @@ class Track:
         self.end_s = self.start_s + self.times[-1]
         self.frames: list[int] | None = None  # frame_ends, loaded on the first step
         self.steps = 0  # the clock's steps this track has sent
+        self.done_at = -1  # the clock's generation when it last played to its end
         self.error: str | None = None
 
     def _chunk_at(self, byte: int) -> int:
@@ -56,13 +59,16 @@ class Track:
         return self.times[self._chunk_at(byte)]
 
     def _byte_at(self, t: float) -> int:
-        """The first chunk at or after mission time t (the end if the track is over by then)."""
+        """The chunk playing at mission time t, the first one before the track starts (the end once it is over)."""
         rel = t - self.start_s
         if rel > self.times[-1]:
             return self.size
-        return self.offsets[bisect.bisect_left(self.times, rel)]
+        return self.offsets[max(bisect.bisect_right(self.times, rel) - 1, 0)]
 
-    async def body(self, clock: ReplayClock, send_truth):
+    async def body(self, clock: ReplayClock, send_truth, segments: list[Track] | None = None):
+        """The segment's bytes as the clock reaches them; it ends when the clock jumps to another of the drone's
+        segments (segments, in order), or when it is done and another one follows."""
+        segments = segments or [self]
         f = open(self.dir / "stream.ts", "rb")
 
         def read(a: int, b: int) -> bytes:
@@ -81,6 +87,8 @@ class Track:
         try:
             while True:  # once per jump (the start, a seek, a loop)
                 gen = clock.generation
+                if segment_at(segments, clock.position()) is not self:
+                    return  # the jump went to another segment: its own push
                 byte = self._byte_at(clock.position())
                 for r in self.truth:  # every spawn first, before any gt mentions it
                     if r["kind"] == "spawn":
@@ -114,16 +122,24 @@ class Track:
                     yield read(byte, end)  # from byte: a step may have sent the start of this chunk
                     byte = end
                 else:
-                    await clock.jumped(gen)  # this track is over: wait for a seek or a loop
+                    if self is not segments[-1]:
+                        self.done_at = clock.generation
+                        return  # done, and the drone's next segment is another push
+                    await clock.jumped(gen)  # the drone's last: wait for a seek or a loop
         finally:
             f.close()
+
+
+def segment_at(segments: list[Track], t: float) -> Track | None:
+    """The drone's segment for mission time t: the one playing then, else the next one; None after its last."""
+    return next((s for s in segments if t <= s.end_s), None)
 
 
 @dataclass
 class Replay:
     recording: str
     wid: str
-    tracks: list[Track]
+    tracks: list[Track]  # every segment of every drone
     ingest_url: str
     truth_addr: tuple[str, int]
     speed: float = 1.0
@@ -135,13 +151,17 @@ class Replay:
     _tasks: list[asyncio.Task] = field(default_factory=list)
 
     def __post_init__(self):
+        self.drones: dict[str, list[Track]] = {}  # drone name -> its segments, in order
+        for t in sorted(self.tracks, key=lambda t: t.start_s):
+            self.drones.setdefault(t.name, []).append(t)
         self.duration_s = max(t.end_s for t in self.tracks)
         self.clock = ReplayClock(self.duration_s, self.speed, self.loop, self.offset_s)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
     def start(self) -> None:
         self._tasks = [asyncio.create_task(self._conduct(), name=f"replay-{self.wid}")]
-        self._tasks += [asyncio.create_task(self._push(t), name=f"replay-{self.wid}-{t.sid}") for t in self.tracks]
+        self._tasks += [asyncio.create_task(self._push(segs), name=f"replay-{self.wid}-{segs[0].sid}")
+                        for segs in self.drones.values()]
 
     async def stop(self) -> None:
         for task in self._tasks:
@@ -169,9 +189,12 @@ class Replay:
         state = self.state if self.state in ("stopped", "failed") else "paused" if c.paused else "playing"
         return {"wid": self.wid, "recording": self.recording, "state": state,
                 "position_s": round(c.position(), 3), "duration_s": round(self.duration_s, 2), "speed": c.speed,
-                "paused": c.paused, "loop": c.loop, "loops": self.loops, "error": self.error,
-                "drones": [{"name": t.name, "sid": t.sid, "start_s": round(t.start_s, 3), "error": t.error}
-                           for t in self.tracks]}
+                "paused": c.paused, "loop": c.loop, "loops": self.loops, "generation": c.generation,
+                "error": self.error,
+                "drones": [{"name": name, "sid": segs[0].sid, "start_s": round(segs[0].start_s, 3),
+                            "segments": [[round(s.start_s, 3), round(s.end_s, 3)] for s in segs],
+                            "error": next((s.error for s in segs if s.error), None)}
+                           for name, segs in self.drones.items()]}
 
     def _send_truth(self, sid: str, r: dict) -> None:
         msg = {"sid": sid, "wid": self.wid, "kind": r["kind"], "t": time.time(), "rec": r["rec"]}
@@ -194,16 +217,29 @@ class Replay:
                 c.end()
                 await c.jumped(gen)
 
-    async def _push(self, track: Track) -> None:
-        url = f"{self.ingest_url}/push/{track.sid}"
+    async def _push(self, segments: list[Track]) -> None:
+        """One drone: each of its segments in a push of its own, the one the clock is at or comes to next."""
+        c, first = self.clock, segments[0]
+        url = f"{self.ingest_url}/push/{first.sid}"
+        seg = segment_at(segments, c.position())
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(None, connect=5)) as client:
-                r = await client.post(url, params={"wid": self.wid}, content=track.body(self.clock, self._send_truth))
-                r.raise_for_status()
-                log.info("replay %s, drone %s done: %s", self.wid, track.name, r.json())
+                while True:
+                    if seg is None:  # after its last segment: until a seek or a loop brings it back
+                        await c.jumped(c.generation)
+                        seg = segment_at(segments, c.position())
+                        continue
+                    r = await client.post(url, params={"wid": self.wid},
+                                          content=seg.body(c, self._send_truth, segments))
+                    r.raise_for_status()
+                    if seg.done_at == c.generation:  # it played to its end: the next one
+                        i = segments.index(seg) + 1
+                        seg = segments[i] if i < len(segments) else None
+                    else:  # the clock jumped to another segment
+                        seg = segment_at(segments, c.position())
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            track.error = self.error = f"{track.name}: {e}"
+            first.error = self.error = f"{first.name}: {e}"
             self.state = "failed"
-            log.exception("replay %s, drone %s failed", self.wid, track.name)
+            log.exception("replay %s, drone %s failed", self.wid, first.name)

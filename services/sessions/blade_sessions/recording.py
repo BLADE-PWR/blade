@@ -1,10 +1,14 @@
-"""Recording format: recordings/<id>/ holds manifest.json, stream.ts (the MPEG-TS as it arrived),
-index.jsonl ({"o": offset, "n": bytes, "t": receive time} per chunk, which replays pace on) and
-truth.jsonl ({"kind", "t", "rec"})."""
+"""Recording format. A segment is one connection of one drone: a folder with stream.ts (the MPEG-TS as it
+arrived), index.jsonl ({"o": offset, "n": bytes, "t": receive time} per chunk, which replays pace on), truth.jsonl
+({"kind", "t", "rec"}) and its manifest.json. A mission recording is one live world: recordings/<id>/manifest.json
+lists its drones, and each drone's segments are in <id>/<drone>/<NNN>/ (a new one each time its uplink connected
+again, since a new connection is a new MPEG-TS stream whose timestamps start over). A recording made of a single
+segment in recordings/<id>/ (an import, or one recorded before mission recordings) is one drone."""
 from __future__ import annotations
 
 import json
 import logging
+import shutil
 import time
 from pathlib import Path
 
@@ -115,6 +119,48 @@ def finalize(rec_dir: Path, extra: dict | None = None) -> dict:
     return manifest
 
 
+def finalize_mission(mission_dir: Path, extra: dict | None = None) -> dict | None:
+    """Finalize every segment of a mission recording and write its manifest: each drone with where it and each of
+    its segments start on the mission's timeline (s from its first chunk). Segments with no playable video are
+    removed (a scrap under 1 MB) or left out; -> None, and the folder removed, if none is left."""
+    segs: list[tuple[str, Path, dict, float, float]] = []  # drone name, folder, manifest, first and last chunk time
+    for d in sorted(p.parent for p in mission_dir.glob("*/*/stream.ts")):
+        size = (d / "stream.ts").stat().st_size
+        try:
+            m = finalize(d, {"recording": False})
+            idx = load_index(d)
+        except Exception as e:
+            if size < 1 << 20:
+                log.info("%s: %d bytes and no playable video, removed", d, size)
+                shutil.rmtree(d, ignore_errors=True)
+            else:
+                log.warning("%s: could not finalize (%s), left out", d, e)
+            continue
+        if idx:
+            segs.append((m.get("drone") or d.parent.name, d, m, idx[0]["t"], idx[-1]["t"]))
+    m_path = mission_dir / "manifest.json"
+    old = json.loads(m_path.read_text()) if m_path.exists() else {}
+    if not segs:
+        log.info("%s: nothing playable, removed", mission_dir)
+        shutil.rmtree(mission_dir, ignore_errors=True)
+        return None
+    t0 = min(s[3] for s in segs)
+    drones: dict[str, dict] = {}
+    for name, d, m, first, last in segs:
+        dr = drones.setdefault(name, {"name": name, "start_s": round(first - t0, 3), "segments": []})
+        dr["segments"].append({"dir": d.relative_to(mission_dir).as_posix(), "start_s": round(first - t0, 3),
+                               "duration_s": round(last - first, 3), "frames": m.get("frames", 0)})
+    first_m, end = segs[0][2], max(s[4] for s in segs)
+    manifest = {**old, **(extra or {}), "v": SCHEMA_V, "id": mission_dir.name, "recording": False,
+                "map": old.get("map") or first_m.get("map"), "mission": old.get("mission") or first_m.get("mission"),
+                "scene": first_m.get("scene"), "started": t0, "ended": end, "duration_s": round(end - t0, 3),
+                "frames": sum(s[2].get("frames", 0) for s in segs), "bytes": sum(s[2].get("bytes", 0) for s in segs),
+                "has_truth": any(s[2].get("has_truth") for s in segs), "drones": list(drones.values()),
+                "finalized": time.time()}
+    m_path.write_text(json.dumps(manifest, indent=2) + "\n")
+    return manifest
+
+
 def _jsonl(p: Path) -> list[dict]:
     with open(p) as f:
         return [json.loads(line) for line in f if line.strip()]
@@ -130,9 +176,10 @@ def load_truth(rec_dir: Path) -> list[dict]:
 
 
 def drones(manifest: dict) -> list[dict]:
-    """The drones of a recording: name, folder (relative to the recording) and where each starts on the mission's
-    timeline. A recording of a single stream is one drone starting at 0."""
-    return manifest.get("drones") or [{"name": manifest.get("sid") or manifest.get("id"), "dir": ".", "start_s": 0.0}]
+    """The drones of a recording: name, where it starts on the mission's timeline, and its segments (folder relative
+    to the recording, start). A recording of a single segment is one drone starting at 0."""
+    return manifest.get("drones") or [{"name": manifest.get("sid") or manifest.get("id"), "start_s": 0.0,
+                                       "segments": [{"dir": ".", "start_s": 0.0}]}]
 
 
 def list_recordings(root: Path) -> list[dict]:
