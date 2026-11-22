@@ -7,6 +7,7 @@ import { recordingName } from "./format";
 import { getJSON, send, startReplay } from "./gateway";
 
 const POLL_MS = 1000;
+const TICK_MS = 100; // the slider and the clock move this often while playing, between two reads of the state
 const JUMP_S = 10;
 const SPEEDS = [0.5, 1, 2, 4];
 const JOIN_SLACK_S = 0.5; // a drone starting this soon after a jump's target counts as playing there
@@ -41,6 +42,8 @@ export function ReplayBar({ session, onSwitch, onSeek, onState }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<number | null>(null); // while the slider is dragged
   const seen = useRef(new Map<string, { generation: number; position: number }>()); // wid -> as last read
+  const readAt = useRef(0); // performance.now() when replays was last read
+  const [, setTick] = useState(0);
   const seekRef = useRef(onSeek);
   seekRef.current = onSeek; // the latest: it knows every drone shown now
 
@@ -52,6 +55,7 @@ export function ReplayBar({ session, onSwitch, onSeek, onState }: Props) {
         if (stopped) return;
         const rs = all.filter((r) => mine.includes(r.wid));
         update(rs);
+        readAt.current = performance.now();
         setReplays(rs);
       })
       .catch((e: Error) => setError(`Cannot read the replay state (${e.message}).`));
@@ -65,6 +69,13 @@ export function ReplayBar({ session, onSwitch, onSeek, onState }: Props) {
 
   useEffect(() => onState(replays), [replays, onState]);
 
+  const playing = replays.length > 0 && !replays[0].paused;
+  useEffect(() => { // redraw between reads, so the slider and the clock move smoothly
+    if (!playing) return;
+    const timer = setInterval(() => setTick((t) => t + 1), TICK_MS);
+    return () => clearInterval(timer);
+  }, [playing]);
+
   const first = replays[0];
   if (!first) {
     return <div className="replaybar muted">Replay {wids}: waiting for its state.{error && ` ${error}`}</div>;
@@ -76,22 +87,26 @@ export function ReplayBar({ session, onSwitch, onSeek, onState }: Props) {
       body(r))))
       .then((rs) => {
         update(rs, ownJump);
+        readAt.current = performance.now();
         setReplays(rs);
       })
       .catch((e: Error) => setError(`Replay control failed (${e.message}).`));
   };
+  /** Where r is now: as last read, moved on by the time since at its speed while playing (the next read corrects it). */
+  const now = (r: Replay) => r.paused ? r.position_s
+    : Math.min(r.position_s + ((performance.now() - readAt.current) / 1000) * r.speed, r.duration_s);
   const jump = (delta: number) => {
-    const done = control((r) => ({ seek_s: Math.max(0, r.position_s + delta) }), true);
-    const to = Math.min(Math.max(0, first.position_s + delta), first.duration_s);
-    const playing = new Set(first.paused ? [] : replays.flatMap( // paused, no frame comes until Play
-      (r) => playingAt(r, Math.min(Math.max(0, r.position_s + delta), r.duration_s))));
-    onSeek(to - first.position_s, playing);
+    const done = control((r) => ({ seek_s: Math.max(0, now(r) + delta) }), true);
+    const to = Math.min(Math.max(0, now(first) + delta), first.duration_s);
+    const there = new Set(first.paused ? [] : replays.flatMap( // paused, no frame comes until Play
+      (r) => playingAt(r, Math.min(Math.max(0, now(r) + delta), r.duration_s))));
+    onSeek(to - now(first), there);
     return done;
   };
   const commit = (value: number) => {
-    void jump(value - first.position_s).finally(() => setDraft(null)); // until the reply, show where it goes
+    void jump(value - now(first)).finally(() => setDraft(null)); // until the reply, show where it goes
   };
-  const position = draft ?? first.position_s;
+  const position = draft ?? now(first);
   const switchTo = (rec: Recording) => {
     startReplay(rec)
       .then(async (id) => {
