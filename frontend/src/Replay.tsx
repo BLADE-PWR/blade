@@ -81,7 +81,9 @@ export function ReplayBar({ session, onSwitch, onSeek }: Props) {
           {!recordings.some((r) => r.id === first.recording) && (
             <option value={first.recording}>{first.recording}</option>
           )}
-          {recordings.map((r) => <option key={r.id} value={r.id}>{recordingName(r)}</option>)}
+          {recordings.map((r) => (
+            <option key={r.id} value={r.id} disabled={r.recording}>{recordingName(r)}</option>
+          ))}
         </select>
       </label>
       <div className="replay-buttons">

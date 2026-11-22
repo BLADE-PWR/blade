@@ -26,7 +26,7 @@ A recording is a folder `recordings/<id>/` with `manifest.json`, `stream.ts`, `i
 | POST | `/recordings/register` | Body `{"path", "name"}`: link a folder on the server as a recording |
 | GET | `/recording/active` | What is being recorded now |
 | PUT | `/recording/{sid}` | Body `{"on": bool}`: turn recording of a stream on or off |
-| POST | `/replays` | Start a replay (body below) |
+| POST | `/replays` | Start a replay (body below); 409 for a recording that is still being written |
 | GET | `/replays` | List replays with state and position |
 | PATCH | `/replays/{sid}` | Body `{"paused", "speed", "seek_s", "step"}`, any subset. `step` plays N frames and pauses |
 | DELETE | `/replays/{sid}` | Stop a replay |

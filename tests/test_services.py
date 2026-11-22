@@ -472,3 +472,19 @@ async def test_replay_without_loop_waits_at_the_end_for_a_seek(tmp_path):
     r.patch(seek_s=1.0)
     assert await asyncio.wait_for(nxt, 2) == bytes([10]) and not r.paused  # goes on from the seek and plays
     await body.aclose()
+
+
+async def test_a_recording_still_being_written_cannot_be_replayed(tmp_path, monkeypatch):
+    from fastapi import HTTPException
+
+    from blade_sessions import main as sm
+
+    d = tmp_path / "open"
+    d.mkdir()
+    (d / "stream.ts").write_bytes(b"x")
+    (d / "index.jsonl").write_text(json.dumps({"o": 0, "n": 1, "t": 100.0}) + "\n")
+    (d / "manifest.json").write_text(json.dumps({"id": "open", "recording": True}))
+    monkeypatch.setattr(sm, "ROOT", tmp_path)
+    with pytest.raises(HTTPException) as e:
+        await sm.start_replay(sm.ReplayReq(recording="open", sid="rp", wid="rp"))
+    assert e.value.status_code == 409 and "rp" not in sm.replays

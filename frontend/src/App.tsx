@@ -66,7 +66,11 @@ function Pick({ onPick }: { onPick: (t: Target) => void }) {
       <ul>
         {recordings.map((r) => (
           <li key={r.id}>
-            <button onClick={() => replay(r)}>Replay</button> {recordingName(r)}
+            <button onClick={() => replay(r)} disabled={r.recording}
+              title={r.recording ? "Still recording: it can be replayed once it has ended" : undefined}>
+              Replay
+            </button>{" "}
+            {recordingName(r)}
             {r.has_truth === false && ", without true positions"}
           </li>
         ))}

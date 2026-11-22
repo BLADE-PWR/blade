@@ -157,8 +157,12 @@ async def start_replay(req: ReplayReq):
     old = replays.get(req.sid)
     if old and old.state in ("starting", "playing", "paused"):
         raise HTTPException(409, f"{req.sid} is already playing")
+    d = _rec_dir(req.recording)
+    m = d / "manifest.json"
+    if m.exists() and json.loads(m.read_text()).get("recording"):
+        raise HTTPException(409, f"{req.recording} is still recording")
     try:
-        r = Replay(sid=req.sid, recording=req.recording, dir=_rec_dir(req.recording), ingest_url=INGEST_URL,
+        r = Replay(sid=req.sid, recording=req.recording, dir=d, ingest_url=INGEST_URL,
                    truth_addr=INGEST_TRUTH, wid=req.wid, speed=req.speed, loop=req.loop, offset_s=req.offset_s,
                    pacing=req.pacing, delivery=req.delivery, send_truth=req.truth)
     except FileNotFoundError as e:

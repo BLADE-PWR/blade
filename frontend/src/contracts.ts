@@ -92,5 +92,6 @@ export type Recording = {
   scene: string | null;
   started: number;
   duration_s?: number; // both missing while the recording is still being written
+  recording?: boolean; // still being written: listed, but cannot be replayed yet
   has_truth?: boolean;
 };
