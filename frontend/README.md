@@ -12,8 +12,8 @@ Two views, in English, switched in the top bar. The layout follows the accepted 
   video (previews of all drones, the chosen drone, a small map, state per service, settings: the world's map, map background and alert rules, then the chosen drone's detector model).
 
 Both views can put the map or the video on the main panel. A session with replays gets the replay bar
-(the mission: a button that lists the recordings and switches to another one, stopping the current replay; pause,
-next frame, 10 s jumps, speed, slider).
+(the recording: a dropdown that switches to another one; 10 s back, play / pause, next frame, 10 s forward, the slider,
+speed, loop). Keys: space plays / pauses, `.` steps one frame (pausing first), left / right jump 10 s.
 
 Libraries besides React: `leaflet` (the map) and `milsymbol` (APP-6 symbols), both named in module 8.
 

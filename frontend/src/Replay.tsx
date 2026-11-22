@@ -16,6 +16,11 @@ const JOIN_SLACK_S = 0.5; // a drone starting this soon after a jump's target co
 const playingAt = (r: Replay, t: number) =>
   r.drones.filter((d) => d.segments.some(([a, b]) => t >= a - JOIN_SLACK_S && t <= b)).map((d) => d.sid);
 
+/** Keys typed here belong to the element, not to the replay shortcuts (the map pans with the arrows). */
+const ownsKeys = (t: EventTarget | null) => t instanceof HTMLElement && (t.isContentEditable
+  || !!t.closest("select, textarea, .leaflet-container")
+  || (t instanceof HTMLInputElement && !["range", "checkbox"].includes(t.type)));
+
 const mmss = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${(s % 60).toFixed(1).padStart(4, "0")}`;
 
 type Props = {
@@ -45,6 +50,7 @@ export function ReplayBar({ session, onSwitch, onSeek, onState, onGone }: Props)
   const seen = useRef(new Map<string, { generation: number; position: number }>()); // wid -> as last read
   const readAt = useRef(0); // performance.now() when replays was last read
   const [, setTick] = useState(0);
+  const keys = useRef<Record<string, () => unknown> | null>(null); // the shortcuts, with this render's state
   const seekRef = useRef(onSeek);
   seekRef.current = onSeek; // the latest: it knows every drone shown now
   const goneRef = useRef(onGone);
@@ -76,6 +82,25 @@ export function ReplayBar({ session, onSwitch, onSeek, onState, onGone }: Props)
 
   useEffect(() => onState(replays), [replays, onState]);
 
+  useEffect(() => { // space: play / pause, ".": next frame, left / right: 10 s
+    const down = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.altKey || e.metaKey || ownsKeys(e.target)) return;
+      const act = keys.current?.[e.key];
+      if (!act) return;
+      e.preventDefault(); // no page scroll, no slider step
+      if (!e.repeat) act(); // held down: once
+    };
+    const up = (e: KeyboardEvent) => { // a focused button would also click itself on space
+      if (e.key === " " && !ownsKeys(e.target)) e.preventDefault();
+    };
+    addEventListener("keydown", down);
+    addEventListener("keyup", up);
+    return () => {
+      removeEventListener("keydown", down);
+      removeEventListener("keyup", up);
+    };
+  }, []);
+
   const playing = replays.length > 0 && !replays[0].paused;
   useEffect(() => { // redraw between reads, so the slider and the clock move smoothly
     if (!playing) return;
@@ -84,6 +109,7 @@ export function ReplayBar({ session, onSwitch, onSeek, onState, onGone }: Props)
   }, [playing]);
 
   const first = replays[0];
+  keys.current = null;
   if (!first) {
     return <div className="replaybar muted">Replay {wids}: waiting for its state.{error && ` ${error}`}</div>;
   }
@@ -122,16 +148,20 @@ export function ReplayBar({ session, onSwitch, onSeek, onState, onGone }: Props)
       .catch((e: Error) => setError(`Cannot switch to ${rec.scene ?? rec.id} (${e.message}).`));
   };
 
+  const playPause = () => control(() => ({ paused: !first.paused }));
+  const nextFrame = () => control(() => ({ step: 1 })); // while playing too: a step pauses first
+  keys.current = { " ": playPause, ".": nextFrame, ArrowLeft: () => jump(-JUMP_S), ArrowRight: () => jump(JUMP_S) };
+
   return (
     <div className="replaybar">
       <RecordingSelect current={first.recording} onPick={switchTo} />
       <div className="replay-buttons">
-        <button onClick={() => jump(-JUMP_S)}>Back {JUMP_S} s</button>
-        <button className="primary" onClick={() => control(() => ({ paused: !first.paused }))}>
+        <button onClick={() => jump(-JUMP_S)} title={`Back ${JUMP_S} s (left arrow)`}>« {JUMP_S} s</button>
+        <button className="primary play" onClick={playPause} title="Play / pause (space)">
           {first.paused ? "Play" : "Pause"}
         </button>
-        <button onClick={() => jump(JUMP_S)}>Forward {JUMP_S} s</button>
-        {first.paused && <button onClick={() => control(() => ({ step: 1 }))}>Next frame</button>}
+        <button onClick={nextFrame} title="Next frame, pausing (.)">Frame ›</button>
+        <button onClick={() => jump(JUMP_S)} title={`Forward ${JUMP_S} s (right arrow)`}>{JUMP_S} s »</button>
       </div>
       <span className="mono nowrap">{mmss(position)} of {mmss(first.duration_s)}</span>
       <input className="timeline" type="range" min="0" max={first.duration_s} step="any" value={position}
