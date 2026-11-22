@@ -8,7 +8,7 @@ it, and sends H.264 + telemetry as MPEG-TS to ingest. Sim truth from the game is
 uv sync --package blade-uplink
 ```
 ```bash
-uv run blade-uplink --sid pc1-uav1 --mission <mission> --server <server-ip>
+uv run blade-uplink --drone uav1 --mission <mission> --server <server-ip>
 ```
 
 Arma must be borderless and in the foreground, BattlEye off, and the `zpi_telemetry` extension sending
@@ -18,8 +18,8 @@ to `127.0.0.1:5005`.
 
 | Option | Default | Meaning |
 |---|---|---|
-| `--sid` | required | Stream id, e.g. `pc1-uav1` |
-| `--mission` | required | World the drone joins, e.g. `arma-live1`: drones of one mission share one map picture. Sent in every telemetry record and with the sim truth |
+| `--drone` | required | The drone's name, e.g. `uav1`; the server gives it an id. If another connected uplink of the mission already flies under it, the server shows this one as `uav1-2` |
+| `--mission` | required | The mission's name, e.g. `arma-live1`: drones of one mission on one map share one map picture. Both names are sent in every telemetry record and with the sim truth |
 | `--server` | required | Ingest host |
 | `--transport` | `udp` | `udp` for a wired LAN; `tcp` for internet, Tailscale or Wi-Fi (resends lost packets, skips to the next keyframe when more than 0.5 s behind) |
 | `--fps` | 60 | Stream frame rate |

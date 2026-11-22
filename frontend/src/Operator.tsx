@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { MainPanel } from "./App";
 import { colorOf, EVENT_KINDS, GROUPS, nameOf } from "./classes";
-import type { Alert, Vec2, WorldObject } from "./contracts";
+import type { Vec2, WorldObject } from "./contracts";
 import { ago, clock } from "./format";
 import { getJSON, send } from "./gateway";
 import { AlertList, EventList, ObjectList } from "./Lists";
@@ -11,23 +11,26 @@ import { MapView, symbolUrl } from "./MapView";
 import {
   allAlerts,
   boxVisible,
+  droneIn,
   droneName,
   type Filter,
-  offMap,
   seeking,
+  type ShownAlert,
   shownFrame,
+  shownWorld,
   type Situation,
   stageTimes,
   visible,
+  type WorldView,
   worldNow,
 } from "./situation";
 import { Video } from "./Video";
 
 type Tab = "alerts" | "objects" | "events";
-const TABS: [Tab, string, (s: Situation) => number][] = [
-  ["alerts", "Alerts", (s) => allAlerts(s).length],
-  ["objects", "Objects", (s) => s.objects.size],
-  ["events", "Events", (s) => s.events.size],
+const TABS: [Tab, string, (s: Situation, w: WorldView) => number][] = [
+  ["alerts", "Alerts", (s) => allAlerts(s).length], // every world's: an alert on another map matters too
+  ["objects", "Objects", (_, w) => w.objects.size],
+  ["events", "Events", (_, w) => w.events.size],
 ];
 
 const SLOW_STAGE_S = 0.1;
@@ -50,15 +53,18 @@ export function Operator({ sit, sid, main, onMain, onDrone, filter, onFilter }: 
   const [centre, setCentre] = useState<{ xy: Vec2; at: number } | null>(null);
   const [tab, setTab] = useState<Tab>("alerts");
   const [alertId, setAlertId] = useState<string | null>(null);
-  const now = worldNow(sit);
+  const world = shownWorld(sit, sid); // the drone's world: its objects, events and clock
+  const now = worldNow(sit, world);
   const drone = sid ? sit.drones.get(sid) : undefined;
   const shown = drone ? shownFrame(drone) : { preview: null, dets: null };
-  const object = selected ? sit.objects.get(selected) : undefined;
+  const object = selected ? world.objects.get(selected) : undefined;
   const alerts = allAlerts(sit);
-  const alert = alerts.find((a) => a.aid === alertId) ?? null;
-  const pickAlert = (a: Alert) => {
-    setAlertId(a.aid === alertId ? null : a.aid);
-    if (a.objects.length) setSelected(a.objects[0]);
+  const alert = alerts.find((a) => a.key === alertId) ?? null;
+  const pickAlert = (a: ShownAlert) => {
+    setAlertId(a.key === alertId ? null : a.key);
+    const other = a.wid !== world.wid ? droneIn(sit, a.wid) : undefined; // on another map: go to that drone
+    if (other) onDrone(other);
+    setSelected(a.objects[0] ?? null);
     if (a.xy) setCentre({ xy: a.xy, at: Date.now() });
   };
   const video = (
@@ -74,8 +80,8 @@ export function Operator({ sit, sid, main, onMain, onDrone, filter, onFilter }: 
         </span>
       </div>
       {sid && (
-        <Video sid={sid} shown={shown} geo={drone?.geo} objects={sit.objects} selected={selected} filter={filter}
-          offMap={offMap(sit, drone)} seeking={seeking(drone, Date.now() / 1000)} />
+        <Video sid={sid} name={droneName(sit, sid)} shown={shown} geo={drone?.geo} objects={world.objects}
+          selected={selected} filter={filter} seeking={seeking(drone, Date.now() / 1000)} />
       )}
     </section>
   );
@@ -109,17 +115,19 @@ export function Operator({ sit, sid, main, onMain, onDrone, filter, onFilter }: 
             <div className="tablist" role="tablist">
               {TABS.map(([key, name, count]) => (
                 <button key={key} role="tab" aria-selected={tab === key} onClick={() => setTab(key)}>
-                  {name} <span className="mono muted">{count(sit)}</span>
+                  {name} <span className="mono muted">{count(sit, world)}</span>
                 </button>
               ))}
             </div>
-            {tab === "alerts" && <AlertList alerts={alerts} picked={alert?.aid ?? null} onPick={pickAlert} now={now} />}
+            {tab === "alerts" && (
+              <AlertList alerts={alerts} picked={alert?.key ?? null} onPick={pickAlert} now={worldNow(sit)} />
+            )}
             {tab === "objects" && (
-              <ObjectList objects={[...sit.objects.values()].filter((o) => visible(o, filter))} selected={selected}
+              <ObjectList objects={[...world.objects.values()].filter((o) => visible(o, filter))} selected={selected}
                 onSelect={setSelected} now={now} />
             )}
             {tab === "events" && (
-              <EventList events={[...sit.events.values()].filter((e) => !filter.hidden.has(e.kind))} now={now}
+              <EventList events={[...world.events.values()].filter((e) => !filter.hidden.has(e.kind))} now={now}
                 name={(s) => droneName(sit, s)}
                 onPick={(e) => setCentre({ xy: e.xy, at: Date.now() })} />
             )}
@@ -134,8 +142,9 @@ export function Operator({ sit, sid, main, onMain, onDrone, filter, onFilter }: 
 type BarProps = { sit: Situation; sid: string | null; filter: Filter; onFilter: (f: Filter) => void };
 
 function BottomBar({ sit, sid, filter, onFilter }: BarProps) {
-  const count = (kind: string) => [...sit.objects.values()].filter((o) => o.grp === kind).length +
-    [...sit.events.values()].filter((e) => e.kind === kind).length;
+  const world = shownWorld(sit, sid);
+  const count = (kind: string) => [...world.objects.values()].filter((o) => o.grp === kind).length +
+    [...world.events.values()].filter((e) => e.kind === kind).length;
   const toggle = (kind: string) => {
     const hidden = new Set(filter.hidden);
     if (!hidden.delete(kind)) hidden.add(kind);

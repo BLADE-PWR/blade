@@ -21,30 +21,29 @@ function centreLabel(geo: GeoData): string | null {
 
 type Props = {
   sid: string;
+  name?: string; // what to call the drone; its sid by default
   shown: { preview: Preview | null; dets: Drone["dets"] };
   geo?: GeoData | null;
   objects: Map<string, WorldObject>;
   selected?: string | null;
   filter?: Filter;
   labels?: boolean;
-  offMap?: boolean;
   seeking?: boolean;
 };
 
-export function Video({ sid, shown, geo, objects, selected, filter, labels = true, offMap = false,
+export function Video({ sid, name = sid, shown, geo, objects, selected, filter, labels = true,
   seeking = false }: Props) {
   const { preview, dets } = shown;
-  if (!preview) return <div className="video empty">No picture from drone {sid}</div>;
+  if (!preview) return <div className="video empty">No picture from drone {name}</div>;
   const oids = trackOids(objects);
   const [w, h] = dets?.img ?? preview.src;
   const centre = geo ? centreLabel(geo) : null;
   return (
     <div className="video">
-      <img src={preview.url} alt={`Video from drone ${sid}, frame ${preview.frame ?? "?"}`} />
+      <img src={preview.url} alt={`Video from drone ${name}, frame ${preview.frame ?? "?"}`} />
       {seeking && (
         <div className="seeking" role="status"><span className="spinner" aria-hidden="true" />Jumping in the recording…</div>
       )}
-      {offMap && <p className="off-map">This drone is on another map, so detections are not put on the map</p>}
       {dets?.dets.filter((d) => !filter || boxVisible(d, filter)).map((d, i) => {
         const oid = d.tid === null ? undefined : oids.get(`${sid}:${d.tid}`);
         const [x0, y0, x1, y1] = d.box;

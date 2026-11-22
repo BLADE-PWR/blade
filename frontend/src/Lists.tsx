@@ -3,6 +3,7 @@ import { nameOf, SEVERITY_COLORS } from "./classes";
 import type { Alert, WorldEvent, WorldObject } from "./contracts";
 import { ago, clock } from "./format";
 import { symbolUrl } from "./MapView";
+import type { ShownAlert } from "./situation";
 
 const SEVERITY_NAMES: Record<Alert["severity"], string> = {
   warning: "Warning",
@@ -24,15 +25,15 @@ function SeverityIcon({ severity }: { severity: Alert["severity"] }) {
   );
 }
 
-type AlertProps = { alerts: Alert[]; picked: string | null; onPick: (a: Alert) => void; now: number };
+type AlertProps = { alerts: ShownAlert[]; picked: string | null; onPick: (a: ShownAlert) => void; now: number };
 
 export function AlertList({ alerts, picked, onPick, now }: AlertProps) {
   if (alerts.length === 0) return <p className="muted hint">No active alerts.</p>;
   return (
     <ul className="rows">
       {alerts.map((a) => (
-        <li key={a.aid}>
-          <button className="row" aria-pressed={a.aid === picked} onClick={() => onPick(a)}>
+        <li key={a.key}>
+          <button className="row" aria-pressed={a.key === picked} onClick={() => onPick(a)}>
             <SeverityIcon severity={a.severity} />
             <span className="row-text">
               <strong>{a.title}</strong>

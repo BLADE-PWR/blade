@@ -40,7 +40,7 @@ def scan_ts(ts: Path) -> dict:
                     info["map"] = info["map"] or tel["map"]
                     info["mission"] = info["mission"] or tel.get("mission")  # stills have none
                     info["seed"] = info["seed"] if info["seed"] is not None else tel.get("seed")
-                    info["sid"] = info["sid"] or tel.get("sid")
+                    info["sid"] = info["sid"] or tel.get("drone") or tel.get("sid")  # the drone's name
             elif pkt.stream.index == v.index:
                 info["frames"] += 1
                 pts0 = pkt.pts if pts0 is None else pts0

@@ -14,6 +14,7 @@ export type Message = {
 export type FrameHeader = {
   type: "frame";
   sid: string;
+  drone?: string | null; // its name
   frame: number | null;
   w: number;
   h: number;
@@ -23,7 +24,8 @@ export type FrameHeader = {
 
 export type Frame = { header: FrameHeader; jpeg: Blob };
 
-export type Target = { session: string } | { wid: string }; // a world: every drone in it, also ones joining later
+// a mission: every live world of it (one per map) and every drone in them, also ones starting or joining later
+export type Target = { session: string } | { mission: string };
 
 export function parseFrame(buf: ArrayBuffer): Frame {
   const magic = new TextDecoder().decode(new Uint8Array(buf, 0, 4));
@@ -36,7 +38,7 @@ export function parseFrame(buf: ArrayBuffer): Frame {
 function wsUrl(target: Target): string {
   const q = "session" in target
     ? new URLSearchParams({ session: target.session })
-    : new URLSearchParams({ wids: target.wid });
+    : new URLSearchParams({ mission: target.mission });
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   return `${proto}//${location.host}/ws?${q}`;
 }

@@ -1,9 +1,7 @@
 """world-model: geo.<sid> -> world.<wid>.objects / .events. Fusion is in
 fusion.py; streams of different worlds never merge. Unseen objects stay "stale" for EXPIRE_S. Each world runs on
 its own clock (clock.py): the wall clock live, the recording's time in a replay, published as WorldObjectsData.t.
-A world is on one map, set by the first drone that reports into it; drones on another map are left out (map
-coordinates of different maps overlap). Once no drone on its map has reported for MAP_IDLE_S, the next drone on
-another map moves the world there, and it starts afresh: its old objects are published as forgotten."""
+A world is on one map for its whole life: ingest gives drones on another map another world."""
 from __future__ import annotations
 
 import asyncio
@@ -27,14 +25,11 @@ EXPIRE_S = env_float("EXPIRE_S", 600.0)
 EVENT_TTL_S = env_float("EVENT_TTL_S", 5.0)
 CONFIRM_N = env_int("CONFIRM_N", 5)
 EVENT_CLASSES = set(env_str("EVENT_CLASSES", "explosion,tank_fire").split(","))
-MAP_IDLE_S = env_float("MAP_IDLE_S", 30.0)
 
 worlds: dict[str, World] = {}
 clocks: dict[str, WorldClock] = {}
 swept: dict[str, float] = {}  # wid -> world time at the last sweep
 maps: dict[str, str] = {}  # wid -> map
-map_seen: dict[str, float] = {}  # wid -> wall time of the last frame on its map
-left_out: set[tuple[str, str]] = set()  # (wid, sid) logged as being on another map
 state: dict = {"nc": None}
 diag = Diag("world")
 
@@ -47,42 +42,12 @@ def world(wid: str) -> World:
     return worlds[wid]
 
 
-async def on_map(wid: str, sid: str, name: str, wall: float) -> bool:
-    """-> whether this drone's frame belongs on the world's map."""
-    cur = maps.get(wid)
-    if cur is not None and cur != name and wall - map_seen[wid] > MAP_IDLE_S:
-        log.info("world %s: no drone on %s for %.0f s, moving to %s", wid, cur, wall - map_seen[wid], name)
-        maps[wid] = cur = name  # before the await in reset: the sweeper must not publish the old map
-        await reset(wid, name)
-    if cur is None:
-        maps[wid] = cur = name
-    if cur != name:
-        if (wid, sid) not in left_out:
-            left_out.add((wid, sid))
-            log.warning("%s is on map %s, but world %s is on %s: its detections are left out", sid, name, wid, cur)
-        return False
-    left_out.discard((wid, sid))
-    map_seen[wid] = wall
-    return True
-
-
-async def reset(wid: str, name: str) -> None:
-    """The world starts afresh on another map; clients drop its old objects."""
-    old = worlds.pop(wid)
-    del clocks[wid]
-    swept.pop(wid, None)
-    world(wid)
-    data = WorldObjectsData(forgotten=[o.oid for o in old.published()], t=clocks[wid].t, map=name)
-    await publish(state["nc"], f"world.{wid}.objects", Envelope(wid=wid, data=data.model_dump(exclude_none=True)))
-
-
 async def on_geo(msg) -> None:
     t_in = now()
     env, _ = decode(msg)
     wid = env.wid
-    if not await on_map(wid, env.sid, env.data["map"], time.time()):
-        return
     w = world(wid)
+    maps.setdefault(wid, env.data["map"])
     t, rewind = clocks[wid].frame(env.sid, env.ts.get("media"), t_in)
     forgotten = w.forget(env.sid) if rewind else []
     changed, events = w.observe(env.sid, env.data.get("pts", []), t)

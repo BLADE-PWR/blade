@@ -35,7 +35,6 @@ class Engine:
         self.history: deque[Alert] = deque(maxlen=200)
         self.missing: dict[str, float] = {}  # alert key -> when its condition became false
         self.clock: float | None = None  # the world's time, s, from its object updates
-        self.map: str | None = None  # the world's map, from its object updates
         self._ids = itertools.count(1)
 
     def now(self) -> float:
@@ -119,13 +118,6 @@ async def on_objects(msg) -> None:
     env, _ = decode(msg)
     wid = msg.subject.split(".")[1]
     eng = engine(wid)
-    if env.data["map"] != eng.map:  # a new map: nothing from the old one applies any more
-        if eng.map is not None:
-            cleared = eng.clear_now(list(eng.active))
-            eng.ws, eng.clock = WorldState(), None  # the world's clock restarts too
-            if cleared:
-                await send_alerts(wid, cleared, time.time())
-        eng.map = env.data["map"]
     if env.data.get("t") is not None:
         eng.clock = max(eng.clock or 0.0, env.data["t"])
     ws = eng.ws
@@ -155,8 +147,6 @@ async def on_geo(msg) -> None:
     wid = env.wid
     sid_wid[env.sid] = wid
     eng = engine(wid)
-    if eng.map is not None and env.data["map"] != eng.map:  # a drone the world leaves out
-        return
     eng.ws.cameras[env.sid] = {"gsd_m": env.data.get("gsd_m"), "centre": env.data.get("centre"), "t": eng.now()}
 
 

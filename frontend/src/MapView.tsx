@@ -4,9 +4,11 @@ import ms, { type Symbol as MilSymbol } from "milsymbol";
 import { useEffect, useRef, useState } from "react";
 
 import { colorOf, nameOf, SEVERITY_COLORS } from "./classes";
-import type { Alert, Prediction, Vec2, WorldObject } from "./contracts";
+import type { Prediction, Vec2, WorldObject } from "./contracts";
 import { getJSON } from "./gateway";
-import { type Drone, droneName, type Filter, type Situation, shownMap, visible, worldNow } from "./situation";
+import {
+  type Drone, droneName, type Filter, type ShownAlert, type Situation, shownWorld, visible, type WorldView, worldNow,
+} from "./situation";
 
 const TILE_PX = 256;
 const MIN_ZOOM = -5; // 32 m/px
@@ -181,9 +183,9 @@ function drawObjects(group: L.LayerGroup, objects: WorldObject[], selected: stri
   }
 }
 
-function drawTruth(group: L.LayerGroup, sit: Situation): void {
-  for (const t of sit.truth) {
-    const match = t.oid ? sit.objects.get(t.oid) : undefined;
+function drawTruth(group: L.LayerGroup, w: WorldView): void {
+  for (const t of w.truth) {
+    const match = t.oid ? w.objects.get(t.oid) : undefined;
     if (match) L.polyline([ll(t.xy), ll(match.xy)], { color: "#ffffff", weight: 1, dashArray: "3 3" }).addTo(group);
     const html = t.err_m === undefined ? "" : `<span class="sym-label">${t.err_m.toFixed(0)} m</span>`;
     L.marker(ll(t.xy), { interactive: false, icon: L.divIcon({ className: "truth", iconSize: [14, 14], html }) })
@@ -191,8 +193,8 @@ function drawTruth(group: L.LayerGroup, sit: Situation): void {
   }
 }
 
-function drawEvents(group: L.LayerGroup, sit: Situation, filter: Filter, now: number): void {
-  for (const e of sit.events.values()) {
+function drawEvents(group: L.LayerGroup, w: WorldView, filter: Filter, now: number): void {
+  for (const e of w.events.values()) {
     const age = now - e.t;
     if (age >= e.ttl_s || filter.hidden.has(e.kind)) continue;
     L.marker(ll(e.xy), { interactive: false, opacity: 1 - (0.7 * age) / e.ttl_s, icon: eventIcon(e.kind, age) })
@@ -200,9 +202,10 @@ function drawEvents(group: L.LayerGroup, sit: Situation, filter: Filter, now: nu
   }
 }
 
-function drawAlert(group: L.LayerGroup, sit: Situation, a: Alert): void {
+function drawAlert(group: L.LayerGroup, w: WorldView, a: ShownAlert): void {
+  if (a.wid !== w.wid) return; // on another map
   const color = SEVERITY_COLORS[a.severity];
-  const known = a.objects.map((oid) => sit.objects.get(oid)?.xy).filter((xy): xy is Vec2 => xy !== undefined);
+  const known = a.objects.map((oid) => w.objects.get(oid)?.xy).filter((xy): xy is Vec2 => xy !== undefined);
   const rings = known.length ? known : a.xy ? [a.xy] : [];
   for (const xy of rings) {
     L.circleMarker(ll(xy), { radius: ALERT_RING_PX, color, weight: 3, fill: false, interactive: false }).addTo(group);
@@ -246,7 +249,7 @@ type Props = {
   onSelect: (oid: string) => void;
   onExpand?: () => void;
   centre?: { xy: Vec2; at: number } | null;
-  alert?: Alert | null;
+  alert?: ShownAlert | null;
   filter: Filter;
   overview?: boolean;
   layer?: Background;
@@ -263,7 +266,8 @@ export function MapView(props: Props) {
   const [error, setError] = useState<string | null>(null);
   const [centredOn, setCentredOn] = useState<string | undefined>(); // the map the view was last centred on
   const [, setMoved] = useState(0);
-  const mapId = shownMap(sit, focus); // none until a world has reported
+  const world = shownWorld(sit, focus); // the focused drone's: one map, and only its objects
+  const mapId = world.map ?? undefined; // none until a world has reported
 
   useEffect(() => {
     const m = L.map(box.current!, { crs: L.CRS.Simple, minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM, zoomControl: false,
@@ -302,7 +306,7 @@ export function MapView(props: Props) {
     };
   }, [map, mapId, layer]);
 
-  const now = worldNow(sit);
+  const now = worldNow(sit, world);
   const focusGeo = focus ? sit.drones.get(focus)?.geo : null;
 
   const fit = (pts: L.LatLng[]) => {
@@ -318,7 +322,7 @@ export function MapView(props: Props) {
     if (!overview && focus) {
       if (!focusGeo?.centre || focusGeo.map !== mapId) return;
       map.setView(ll(focusGeo.centre), START_ZOOM);
-    } else if (!fitDrones() && !fit([...sit.objects.values()].map((o) => ll(o.xy)))) return;
+    } else if (!fitDrones() && !fit([...world.objects.values()].map((o) => ll(o.xy)))) return;
     setCentredOn(mapId);
   });
 
@@ -328,13 +332,13 @@ export function MapView(props: Props) {
 
   useEffect(() => {
     if (!map || !centred) return;
-    const objects = [...sit.objects.values()].filter((o) => visible(o, filter));
+    const objects = [...world.objects.values()].filter((o) => visible(o, filter));
     vectors.clearLayers();
     if (layers.drones) drawDrones(vectors, sit, focus, mapId);
     drawObjects(vectors, objects, selected, layers, now);
-    if (layers.truth) drawTruth(vectors, sit);
-    drawEvents(vectors, sit, filter, now);
-    if (alert) drawAlert(vectors, sit, alert);
+    if (layers.truth) drawTruth(vectors, world);
+    drawEvents(vectors, world, filter, now);
+    if (alert) drawAlert(vectors, world, alert);
     syncMarkers(map, markers.current, objects, selected, onSelect);
   });
 

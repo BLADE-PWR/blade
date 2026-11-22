@@ -8,9 +8,6 @@ Rules run on the world's clock (`t` in `world.<wid>.objects`, see the world READ
 replay raises no lost contact; objects in `forgotten` (merged, or their replay went back) are not lost.
 A world that sends no clock runs on the wall clock.
 
-When a world moves to another map (`map` in `world.<wid>.objects`), its alerts are cleared and its state
-starts afresh; `geo` from drones on another map than their world is ignored.
-
 ## Rules
 
 | Rule | Fires when | Parameters |

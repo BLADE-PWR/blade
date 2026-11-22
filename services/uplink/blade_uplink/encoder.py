@@ -28,13 +28,13 @@ def pick_encoder(name: str) -> str:
 
 
 class TsWriter:
-    def __init__(self, sink, sid: str, width: int, height: int, fps: int = 60,
+    def __init__(self, sink, drone: str, width: int, height: int, fps: int = 60,
                  bitrate: str = "8M", encoder: str = "auto"):
         self.sink = sink
         # write each packet at once, and set the PES length so the receiver need not wait for the next PES
         self.out = av.open(sink, "w", format="mpegts",
                            options={"flush_packets": "1", "omit_video_pes_length": "0"})
-        self.out.metadata["service_name"] = sid
+        self.out.metadata["service_name"] = drone
         self.out.metadata["service_provider"] = "blade"
         codec = pick_encoder(encoder)
         v = self.out.add_stream(codec, rate=fps)

@@ -5,6 +5,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import re
 import shutil
 import time
 from dataclasses import dataclass, field
@@ -30,6 +31,11 @@ class Active:
     last: float = field(default_factory=time.time)
     bytes: int = 0
     truth_n: int = 0
+
+
+def _names(*names: str | None) -> str:
+    """"arma-live1", "uav 1" -> "arma-live1_uav_1": a folder name from the names people typed"""
+    return "_".join(re.sub(r"[^\w.-]+", "_", n) for n in names if n)
 
 
 class Recorder:
@@ -81,9 +87,9 @@ class Recorder:
     def should_record(self, sid: str) -> bool:
         return self.wanted.get(sid, self.record_all)
 
-    async def _open(self, sid: str, t: float) -> Active:
+    async def _open(self, sid: str, t: float, names: str) -> Active:
         stamp = datetime.fromtimestamp(t, UTC).strftime("%Y-%m-%d_%H%M%S")
-        rid = f"{stamp}_{sid}"
+        rid = f"{stamp}_{names}"
         d = self.root / rid
         d.mkdir(parents=True, exist_ok=True)
         a = Active(rid, sid, d, open(d / "stream.ts", "ab"), open(d / "index.jsonl", "a"),
@@ -109,8 +115,9 @@ class Recorder:
         sid = msg.subject.split(".", 1)[1]
         if self.closing or not self.should_record(sid):
             return
-        t = float(msg.headers.get("t", time.time())) if msg.headers else time.time()
-        a = self.active.get(sid) or await self._open(sid, t)
+        h = msg.headers or {}
+        t = float(h.get("t", time.time()))
+        a = self.active.get(sid) or await self._open(sid, t, _names(h.get("mission"), h.get("drone") or sid))
         a.index.write(json.dumps({"o": a.bytes, "n": len(msg.data), "t": t}) + "\n")
         a.ts.write(msg.data)
         a.bytes += len(msg.data)

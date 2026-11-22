@@ -1,6 +1,6 @@
-"""gateway: operator sessions, /api/<area>/... proxied to the services (PROXIES), and a WebSocket per
-session or world (/ws?session=<id> or ?wids=x,y; every drone in those worlds, also ones that join later): JSON text
-messages, plus binary frames (b"ZPIF" + uint32 header length + header JSON + JPEG)."""
+"""gateway: operator sessions, /api/<area>/... proxied to the services (PROXIES), and a WebSocket per session or
+mission (/ws?session=<id>, or ?mission=<name>: every live world of that mission, also ones that start later, and every
+drone in them): JSON text messages, plus binary frames (b"ZPIF" + uint32 header length + header JSON + JPEG)."""
 from __future__ import annotations
 
 import asyncio
@@ -164,7 +164,7 @@ def _preview(jpeg: bytes, width: int) -> tuple[bytes, int, int]:
 
 
 @app.websocket("/ws")
-async def ws(websocket: WebSocket, session: str | None = None, wids: str = ""):
+async def ws(websocket: WebSocket, session: str | None = None, mission: str = ""):
     await websocket.accept()
     if session:
         s = orch.sessions.get(session)
@@ -173,10 +173,10 @@ async def ws(websocket: WebSocket, session: str | None = None, wids: str = ""):
             return
         wid_list = s.wids
         await websocket.send_text(json.dumps({"type": "session", "data": s.model_dump()}))
+    elif mission:
+        wid_list = []  # filled below, once worlds.* is subscribed, so no world starting meanwhile is missed
     else:
-        wid_list = [x for x in wids.split(",") if x]
-    if not wid_list:
-        await websocket.close(code=4400, reason="give ?session= or ?wids=")
+        await websocket.close(code=4400, reason="give ?session= or ?mission=")
         return
 
     out: asyncio.Queue = asyncio.Queue(maxsize=256)
@@ -201,8 +201,9 @@ async def ws(websocket: WebSocket, session: str | None = None, wids: str = ""):
                 return
             last_preview[env.sid] = t
             jpeg, w, h = await asyncio.to_thread(_preview, blob, PREVIEW_W)
-            head = json.dumps({"type": "frame", "sid": env.sid, "frame": env.frame, "w": w, "h": h,
-                               "src": env.data.get("tel", {}).get("image"), "ts": env.ts}).encode()
+            tel = env.data.get("tel", {})
+            head = json.dumps({"type": "frame", "sid": env.sid, "drone": tel.get("drone"), "frame": env.frame,
+                               "w": w, "h": h, "src": tel.get("image"), "ts": env.ts}).encode()
             put(b"ZPIF" + struct.pack(">I", len(head)) + head + jpeg)
             return
         typ = "world." + msg.subject.split(".")[-1] if kind == "world" else kind
@@ -211,9 +212,12 @@ async def ws(websocket: WebSocket, session: str | None = None, wids: str = ""):
         put(json.dumps({"type": typ, "sid": env.sid, "wid": env.wid, "frame": env.frame, "ts": env.ts,
                         "data": env.data}, separators=(",", ":")))
 
-    for subj in ("frames", "detections", "geo"):  # every drone; on_msg keeps the ones in wid_list
-        subs.append(await nc.subscribe(f"{subj}.>", cb=on_msg))
-    for wid in wid_list:
+    watched: set[str] = set()
+
+    async def watch(wid: str) -> None:
+        if wid in watched:
+            return
+        watched.add(wid)
         subs.append(await nc.subscribe(f"world.{wid}.>", cb=on_msg))
         subs.append(await nc.subscribe(f"alerts.{wid}", cb=on_msg))
         subs.append(await nc.subscribe(f"eval.{wid}", cb=on_msg))
@@ -223,6 +227,33 @@ async def ws(websocket: WebSocket, session: str | None = None, wids: str = ""):
                 put(json.dumps({"type": "snapshot", "wid": wid, "data": r.json()}))
         except httpx.HTTPError:
             pass
+
+    async def on_world(msg):
+        """A world started or a drone joined one: a new live world of the mission is watched from now on."""
+        env, _ = decode(msg)
+        w = env.data
+        if w.get("wid") in wid_list:
+            put(json.dumps({"type": "world", "wid": w["wid"], "data": w}))
+        elif mission and w.get("kind") == "live" and w.get("mission") == mission:
+            wid_list.append(w["wid"])
+            put(json.dumps({"type": "world", "wid": w["wid"], "data": w}))
+            await watch(w["wid"])
+
+    for subj in ("frames", "detections", "geo"):  # every drone; on_msg keeps the ones in wid_list
+        subs.append(await nc.subscribe(f"{subj}.>", cb=on_msg))
+    subs.append(await nc.subscribe("worlds.*", cb=on_world))
+    if mission:  # the worlds it has now; worlds.* (subscribed above) brings the ones that start from now on
+        try:
+            r = await state["http"].get(f"{URLS['ingest']}/worlds", params={"mission": mission})
+            r.raise_for_status()
+            for w in r.json():
+                if w["wid"] not in wid_list:
+                    wid_list.append(w["wid"])
+                    put(json.dumps({"type": "world", "wid": w["wid"], "data": w}))
+        except httpx.HTTPError as e:
+            log.warning("cannot ask ingest for the worlds of mission %s (%s): only new ones are shown", mission, e)
+    for wid in list(wid_list):
+        await watch(wid)
     subs.append(await nc.subscribe("diag.>", cb=on_msg))
 
     async def sender():

@@ -49,13 +49,16 @@ replay may use the recorded one, and so may `wid`); `drone` and `mission`, the r
 
 ## WebSocket
 
-`/ws?session=<id>` or `/ws?wids=x,y`: every drone in those worlds, also ones that join later. The server only sends.
+`/ws?session=<id>`: the session's worlds. `/ws?mission=<name>`: every live world of that mission (one per map),
+asked from ingest (`GET /worlds?mission=`), and the ones that start later (`worlds.<wid>`). Either way every drone in
+them, also ones that join later. The server only sends.
 
 Text messages are JSON: `{"type", "sid", "wid", "frame", "ts", "data"}`.
 
 | `type` | Content |
 |---|---|
 | `session` | The session, once at the start (with `?session=`) |
+| `world` | A world's mission, map and drone names (`worlds.<wid>`): at the start, then when a drone joins |
 | `snapshot` | All current objects of a world, once at the start |
 | `detections` | Boxes of one frame |
 | `geo` | Map points of one frame |
@@ -65,7 +68,7 @@ Text messages are JSON: `{"type", "sid", "wid", "frame", "ts", "data"}`.
 | `diag` | Per-service fps, latency, drops |
 
 Binary messages are video previews: `"ZPIF"` + uint32 big-endian header length + header JSON
-(`{"type": "frame", "sid", "frame", "w", "h", "src"}`) + JPEG. Previews are limited to
+(`{"type": "frame", "sid", "drone", "frame", "w", "h", "src"}`, `drone` being its name) + JPEG. Previews are limited to
 `PREVIEW_FPS` and scaled to `PREVIEW_W` wide. A slow client loses messages instead of slowing the bus.
 
 Config: `PREVIEW_FPS` (15), `PREVIEW_W` (960), `SESSION_IDLE_S` (30), and `<SERVICE>_URL` for each service.

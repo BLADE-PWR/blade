@@ -40,9 +40,15 @@ Every message is one envelope (`v`, `sid`, `frame`, `wid`, `ts`, `data`). Payloa
 | `world.<wid>.objects`, `world.<wid>.events` | world | fused objects, events (explosions) |
 | `alerts.<wid>` | decision | active alerts |
 | `eval.<wid>` | evaluator | CEP and detection rate |
+| `worlds.<wid>` | ingest | a world started or a drone joined it: its mission, map and drone names |
 | `diag.<service>` | all | per-stream fps, latency, drops |
 
-`sid` is a stream (one drone), `wid` is a world (streams in the same world are fused together).
+`sid` is a stream (one drone), `wid` is a world (streams in the same world are fused together). Both are ids
+ingest picks (`d-3f2a9c`, `w-81b0e4`); people pick names. A live world is one mission on one map: drones started
+with the same `--mission` on the same map share it, and a drone on another map gets that map's world. A drone keeps
+its `sid` when its uplink reconnects; a second uplink with a `--drone` name already flying gets `uav1-2`. A replay
+plays under new ids of its own, so it never mixes with the live mission it was recorded in. The names travel in every
+frame's telemetry (`tel.drone`, `tel.mission`) and in `worlds.<wid>`, and the frontend shows those.
 
 ## Frontend
 
@@ -77,7 +83,7 @@ cd frontend && npm install && npm run dev
 
 On the Arma PC (Windows), see [uplink](services/uplink/README.md):
 ```bash
-uv run blade-uplink --sid pc1-uav1 --mission <mission> --server <server-ip>
+uv run blade-uplink --drone uav1 --mission <mission> --server <server-ip>
 ```
 
 With Docker:

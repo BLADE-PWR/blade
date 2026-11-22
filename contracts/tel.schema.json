@@ -115,10 +115,23 @@
     }
   },
   "additionalProperties": true,
-  "description": "Arma's tel record, as the mission emits it, plus what the uplink adds (sid, mission, t_capture).",
+  "description": "Arma's tel record, as the mission emits it, plus what the uplink adds (drone, mission, t_capture).",
   "properties": {
     "camera": {
       "$ref": "#/$defs/Camera"
+    },
+    "drone": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "the drone's name (uplink --drone; ingest may add -2, -3 when another uplink already flies under it)",
+      "title": "Drone"
     },
     "frame": {
       "description": "full diag_frameNo",
@@ -143,7 +156,7 @@
         }
       ],
       "default": null,
-      "description": "world a live drone joins (uplink --mission); a replay plays into its own",
+      "description": "the mission's name (uplink --mission): drones of one mission on one map share a world",
       "title": "Mission"
     },
     "range_m": {
@@ -193,18 +206,6 @@
       ],
       "default": null,
       "title": "Seed"
-    },
-    "sid": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Sid"
     },
     "t_capture": {
       "anyOf": [

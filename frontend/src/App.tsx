@@ -26,7 +26,7 @@ function Pick({ onPick }: { onPick: (t: Target) => void }) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [wid, setWid] = useState("");
+  const [mission, setMission] = useState("");
 
   useEffect(() => {
     Promise.all([getJSON<Session[]>("/sessions"), getJSON<Recording[]>("/api/recordings")])
@@ -39,7 +39,7 @@ function Pick({ onPick }: { onPick: (t: Target) => void }) {
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (wid.trim()) onPick({ wid: wid.trim() });
+    if (mission.trim()) onPick({ mission: mission.trim() });
   };
   const replay = (rec: Recording) => {
     setError(null);
@@ -77,7 +77,8 @@ function Pick({ onPick }: { onPick: (t: Target) => void }) {
       </ul>
       <h2>Or a mission</h2>
       <form onSubmit={submit}>
-        <label>mission <input value={wid} placeholder="uplink --mission" onChange={(e) => setWid(e.target.value)} />
+        <label>mission <input value={mission} placeholder="uplink --mission"
+          onChange={(e) => setMission(e.target.value)} />
         </label>
         <button type="submit">Connect</button>
       </form>
@@ -161,7 +162,7 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
         <label className="muted">
           Mission{" "}
           <button onClick={onLeave}>
-            {"wid" in target ? target.wid : (sit.session?.streams[0]?.mission ?? sit.session?.name ?? "…")}
+            {"mission" in target ? target.mission : (sit.session?.streams[0]?.mission ?? sit.session?.name ?? "…")}
           </button>
         </label>
         <div className="switch" role="group" aria-label="Mode">

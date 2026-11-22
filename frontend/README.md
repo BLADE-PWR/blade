@@ -33,8 +33,8 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173. Type a mission (the uplinks' `--mission`) to watch every drone in it, including ones
-that join later. Or click Replay next to a recording: that opens the running session already replaying it, or
+Open http://localhost:5173. Type a mission (the uplinks' `--mission`) to watch every drone in it, on every map,
+including ones that join later. Drones are shown by their names (`--drone`). Or click Replay next to a recording: that opens the running session already replaying it, or
 creates and starts one with a looping replay (with a new `sid`, so it does not replace other replays). Replay
 sessions are shared: every tab on one sees, and controls, the same playback. In the top bar,
 Live goes back to the picker and Replay to the newest running replay session. The dev server listens on all interfaces, so other
@@ -71,7 +71,7 @@ GATEWAY_URL=http://<server-ip>:8000 npm run dev
 |---|---|
 | `src/gateway.ts` | WebSocket client: JSON messages and `ZPIF` video previews (`b"ZPIF"` + uint32 BE header length + header JSON + JPEG); small REST helpers, including starting a replay session for a recording |
 | `src/contracts.ts` | Types of the message payloads the UI reads, copied by hand from `libs/common/blade_common/contracts.py` |
-| `src/situation.ts` | The live picture of one connection (drones, objects, events, alerts, diag), updated by each message |
+| `src/situation.ts` | The live picture of one connection (drones, diag, and per world its objects, events, true positions, alerts and clock), updated by each message. A mission flown on two maps is two worlds: the map and the lists show the chosen drone's world, the alert list every world's (picking one of another world switches to a drone there), and a name flown on both maps gets the map added, e.g. `uav1 (stratis)` |
 | `src/App.tsx` | Picker (a mission to watch live, replay sessions, recordings: Replay starts a replay session), the connection (redrawn at most once per screen frame) and the top bar |
 | `src/Operator.tsx` | View 1: one drone; also the object details (crop from the latest box of its track) |
 | `src/Command.tsx` | View 2: every drone in view; map on the main panel (drone list, alerts, state) or video (drone previews, the chosen drone, small map, state per service, settings) |

@@ -55,7 +55,7 @@ def ts_bytes(pkg):
     t0 = time.time()
     for k in range(45):
         t = k / 30
-        tel = dict(look_at_tel(pkg.terrain, CENTRE, 1000 + k, bearing_deg=k), sid="t-uav1", mission="t-mission",
+        tel = dict(look_at_tel(pkg.terrain, CENTRE, 1000 + k, bearing_deg=k), drone="t-uav1", mission="t-mission",
                    t_capture=t0 + t)
         w.write(frame_image(k), tel, t0 + t)
     w.close()
@@ -339,8 +339,7 @@ class GeoMsg:
 def world_service(monkeypatch):
     from blade_world import main as wm
     nc = FakeNats()
-    for name, value in (("state", {"nc": nc}), ("worlds", {}), ("clocks", {}), ("swept", {}), ("maps", {}),
-                        ("map_seen", {}), ("left_out", set())):
+    for name, value in (("state", {"nc": nc}), ("worlds", {}), ("clocks", {}), ("swept", {}), ("maps", {})):
         monkeypatch.setattr(wm, name, value)
     return wm, nc
 
@@ -373,23 +372,69 @@ async def test_live_world_ages_and_beats(monkeypatch):
     assert [o["state"] for o in beat["data"]["objects"]] == ["stale"] and beat["data"]["t"] > time.time() + 3
 
 
-def test_live_stream_joins_its_mission_and_a_replay_keeps_its_world(monkeypatch, pkg):
+def test_ingest_gives_live_drones_ids_and_a_replay_keeps_its_own(monkeypatch, pkg):
     from blade_ingest import main as im
     from blade_ingest.source import Paired, PipeReader
 
     ing, sent = im.Ingest(), []
-    monkeypatch.setattr(im, "publish", lambda nc, subject, env, blob=None: sent.append(env.wid))
-    monkeypatch.setattr(ing, "_spawn", lambda coro: None)
-    tel = dict(look_at_tel(pkg.terrain, CENTRE, 1), sid="uav1", mission="m1",
-               t_capture=time.time())
-    live = Source(key="udp:x", kind="live", pipe=PipeReader(4))
-    replay = Source(key="push:rp", kind="replay", wid="rp-1", pipe=PipeReader(4))
+    monkeypatch.setattr(im, "publish", lambda nc, subject, env, blob=None: sent.append((env.sid, env.wid, env.data)))
+    monkeypatch.setattr(ing, "_spawn", lambda coro: coro and coro.close())  # announce: not run here
+    tel = dict(look_at_tel(pkg.terrain, CENTRE, 1), drone="uav1", mission="m1", t_capture=time.time())
+    live = ing.new_source("udp:10.0.0.5:5000", "live")
+    replay = Source(key="push:rp", kind="replay", sid_override="rp-1", wid="rw-1", pipe=PipeReader(4))
     for src in (live, replay):
-        src.sid = "uav1"
-        ing.on_frame(src, Paired("uav1", tel, b"", (320, 180), time.time(), time.time()))
-    assert sent == ["m1", "rp-1"] and live.wid == "m1"  # the replay ignores the mission it was recorded with
+        ing.on_frame(src, Paired("?", dict(tel), b"", (320, 180), time.time(), time.time()))
+    (sid, wid, data), (rsid, rwid, rdata) = sent
+    assert sid.startswith("d-") and wid.startswith("w-") and (sid, wid) == (live.sid, live.wid)
+    assert data["tel"]["drone"] == "uav1" and data["tel"]["mission"] == "m1"
+    assert (rsid, rwid) == ("rp-1", "rw-1") and rdata["tel"]["drone"] == "uav1"  # its ids, the recorded names
+    assert ing.worlds.truth_ids("m1", "uav1", "10.0.0.5") == (wid, sid)
     for src in (live, replay):
         src.close()
+
+
+def test_one_world_per_mission_and_map():
+    from blade_ingest.worlds import Worlds
+
+    ws = Worlds(alive=lambda key: True)
+    a = ws.join_live("m1", "altis", "uav1", "udp:a")
+    b = ws.join_live("m1", "altis", "uav2", "udp:b")
+    c = ws.join_live("m1", "stratis", "uav3", "udp:c")
+    d = ws.join_live("m2", "altis", "uav1", "udp:d")
+    assert a.world is b.world and a.sid != b.sid  # same mission and map: one picture
+    assert c.world is not a.world and d.world is not a.world  # another map, another mission: their own
+    assert d.name == "uav1" and d.sid != a.sid  # a name is per world: uav1 of m2 is not uav1 of m1
+    assert a.changed and b.changed and not ws.join_live("m1", "altis", "uav1", "udp:a").changed
+    assert sorted(w["map"] for w in ws.of_mission("m1")) == ["altis", "stratis"]  # what a new viewer is told
+    assert [w["drones"] for w in ws.of_mission("m2")] == [{d.sid: "uav1"}]
+
+
+def test_a_name_already_flying_gets_a_suffix_and_a_reconnect_keeps_its_id():
+    from blade_ingest.worlds import Worlds
+
+    connected = {"udp:a", "udp:b"}
+    ws = Worlds(alive=lambda key: key in connected)
+    first = ws.join_live("m1", "altis", "uav1", "udp:a")
+    second = ws.join_live("m1", "altis", "uav1", "udp:b")  # another uplink, same --drone
+    assert second.name == "uav1-2" and second.sid != first.sid and second.world is first.world
+    assert ws.join_live("m1", "altis", "uav1", "udp:c").name == "uav1-3"
+    connected.discard("udp:a")  # the first uplink went away and came back on a new port
+    back = ws.join_live("m1", "altis", "uav1", "udp:a2")
+    assert back.sid == first.sid and back.name == "uav1"
+    assert ws.truth_ids("m1", "uav1", "") in {(first.world.wid, first.sid), (first.world.wid, second.sid)}
+
+
+def test_a_drone_that_changes_maps_frees_its_name_and_takes_its_truth_along():
+    from blade_ingest.worlds import Worlds
+
+    ws = Worlds(alive=lambda key: True)
+    old = ws.join_live("m1", "altis", "uav1", "udp:a")
+    ws.leave(old.world.wid, old.sid)
+    new = ws.join_live("m1", "stratis", "uav1", "udp:a")
+    assert new.world is not old.world
+    assert ws.join_live("m1", "altis", "uav1", "udp:b").sid == old.sid  # not renamed: nobody flies it there now
+    ws.leave(new.world.wid, new.sid)
+    assert ws.truth_ids("m1", "uav1", "") is not None
 
 
 async def test_session_nobody_watches_is_deleted():
