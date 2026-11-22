@@ -175,6 +175,11 @@ button.primary {
   font-weight: 600;
 }
 
+button.danger {
+  border-color: #b91c1c;
+  color: #fca5a5;
+}
+
 .timeline {
   flex: 1 1 240px;
   accent-color: #e6eaf0;

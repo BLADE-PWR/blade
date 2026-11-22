@@ -89,6 +89,20 @@ class Detector:
         self.slots[sid] = (env, jpeg, t)
         self.ready.set()
 
+    async def on_world_info(self, msg) -> None:
+        """A drone that had another stream id before (it reconnected after its world ended, or changed maps) keeps
+        its model and threshold; the streams of an ended world are forgotten."""
+        env, _ = decode(msg)
+        w = env.data
+        for sid, old in (w.get("previous") or {}).items():
+            await self.cluster.move(old, sid, ("model", "conf"))
+        if w.get("ended"):
+            for sid in w.get("drones") or {}:
+                for key in [k for k in self.trackers if k[0] == sid]:
+                    del self.trackers[key]
+                for d in (self.top_tid, self.slots, self.last_frame, self.accepted):
+                    d.pop(sid, None)
+
     async def on_truth(self, msg) -> None:
         env, _ = decode(msg)
         if msg.subject.startswith("registry."):
@@ -184,6 +198,7 @@ async def lifespan(app: FastAPI):
     await svc.nc.subscribe(SUBJECTS, cb=svc.on_frame)
     await svc.nc.subscribe("truth.>", cb=svc.on_truth)
     await svc.nc.subscribe("registry.>", cb=svc.on_truth)
+    await svc.nc.subscribe("worlds.*", cb=svc.on_world_info)
     tasks = [asyncio.create_task(svc.run()), asyncio.create_task(svc.diag.run(svc.nc)),
              asyncio.create_task(svc.cluster.run(svc.status))]
     yield

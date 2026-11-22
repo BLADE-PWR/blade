@@ -5,7 +5,10 @@ recorded in, never mix.
 A live world is one (mission, map) pair: drones on different maps can never share a picture. The first drone of a
 pair starts the world, later ones join it. A drone keeps its id when its uplink reconnects. A name another connected
 uplink already flies under gets a suffix: uav1-2, uav1-3, ...
-A replay brings its own ids (sessions picks them); it is only registered here, so its names are known too."""
+A live world ends when none of its drones has sent a frame for EXPIRE_S (by then all its objects have expired), or
+when the operator stops the mission; the next drone of that mission and map starts a new one, with new ids.
+A replay brings its own ids (sessions picks them); it is only registered here, so its names are known too, and it
+ends when its pushes stop."""
 from __future__ import annotations
 
 import secrets
@@ -26,13 +29,17 @@ class World:
     map: str
     kind: str  # live | replay
     started: float = field(default_factory=time.time)
+    last: float = field(default_factory=time.time)  # wall time of its last frame
+    ended: float | None = None
     drones: dict[str, str] = field(default_factory=dict)  # sid -> name shown
     asked: dict[str, str] = field(default_factory=dict)  # sid -> name its uplink asked for (before any suffix)
     owner: dict[str, str] = field(default_factory=dict)  # sid -> source key of the uplink sending as it, if any
+    previous: dict[str, str] = field(default_factory=dict)  # sid -> the sid the drone had before (settings go along)
 
     def info(self) -> dict:
         return {"wid": self.wid, "mission": self.mission, "map": self.map, "kind": self.kind,
-                "started": self.started, "drones": dict(self.drones)}
+                "started": self.started, "ended": self.ended, "drones": dict(self.drones),
+                "previous": dict(self.previous)}
 
 
 @dataclass
@@ -49,6 +56,7 @@ class Worlds:
         self.lock = threading.Lock()  # demux threads of several sources assign at once
         self.live: dict[tuple[str, str], World] = {}  # (mission, map) -> its world
         self.by_wid: dict[str, World] = {}
+        self.last_sid: dict[tuple[str, str], str] = {}  # (mission, drone name) -> its latest sid, in any world
 
     def join_live(self, mission: str, map_name: str, drone: str, key: str) -> Joined:
         with self.lock:
@@ -63,6 +71,9 @@ class Worlds:
                 if sid is None:  # a new drone
                     sid = new_id("d")
                     w.drones[sid], w.asked[sid] = name, drone
+                    if (prev := self.last_sid.get((mission, name))) is not None:
+                        w.previous[sid] = prev
+                    self.last_sid[(mission, name)] = sid
                     changed = True
                     break
                 owner = w.owner.get(sid)
@@ -71,6 +82,7 @@ class Worlds:
                 n += 1  # another connected uplink flies under this name
                 name = f"{drone}-{n}"
             w.owner[sid] = key
+            w.last = time.time()
             return Joined(w, sid, name, changed)
 
     def leave(self, wid: str, sid: str) -> None:
@@ -90,6 +102,28 @@ class Worlds:
                 w.drones[sid] = drone
                 changed = True
             return Joined(w, sid, w.drones[sid], changed)
+
+    def seen(self, wid: str, t: float) -> None:
+        """A frame of the world arrived."""
+        w = self.by_wid.get(wid)
+        if w is not None:
+            w.last = t
+
+    def idle(self, now: float, after_s: float) -> list[str]:
+        """Live worlds none of whose drones has sent a frame for after_s."""
+        with self.lock:
+            return [w.wid for w in self.by_wid.values() if w.kind == "live" and now - w.last > after_s]
+
+    def end(self, wid: str) -> World | None:
+        """-> the world, ended and forgotten (None if it had ended already)."""
+        with self.lock:
+            w = self.by_wid.pop(wid, None)
+            if w is None:
+                return None
+            if self.live.get((w.mission, w.map)) is w:
+                del self.live[(w.mission, w.map)]
+            w.ended = time.time()
+            return w
 
     def of_mission(self, mission: str) -> list[dict]:
         """The live worlds of a mission (one per map), for a viewer that starts following it."""

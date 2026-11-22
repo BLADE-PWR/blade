@@ -9,6 +9,7 @@ fusion). Every matched sample is also written to `state/eval/eval_<wid>_<start>.
 | | Subject |
 |---|---|
 | subscribes | `truth.<sid>`, `registry.<sid>`, `geo.<sid>`, `world.<wid>.objects` |
+| subscribes | `worlds.<wid>`: an `ended` world is dropped and its CSV closed |
 | publishes | `eval.<wid>`: current numbers, twice a second |
 
 ## REST

@@ -27,6 +27,7 @@ log = logging.getLogger("ingest")
 VIDEO_PORT = env_int("VIDEO_PORT", ports.VIDEO_UDP)
 TRUTH_PORT = env_int("TRUTH_PORT", ports.TRUTH_UDP)
 IDLE_S = env_float("SOURCE_IDLE_S", 3.0)
+EXPIRE_S = env_float("EXPIRE_S", 600.0)  # a live world without frames this long ends (its objects have all expired)
 RAW_CHUNK = 64 * 1024
 RAW_FLUSH_S = 0.1
 
@@ -63,8 +64,9 @@ class Ingest:
         if src.joined == want or (src.kind != "live" and src.joined is not None):
             return
         if src.kind == "live":
-            if src.joined is not None:  # bytes buffered so far belong to the old stream id
+            if src.sid is not None:  # bytes buffered so far belong to the old stream id
                 self._flush_raw(src, force=True)
+            if src.joined is not None:
                 self.worlds.leave(src.wid, src.sid)
             j = self.worlds.join_live(mission, map_name, asked, src.key)
         else:
@@ -79,9 +81,28 @@ class Ingest:
         data = WorldInfo.model_validate(info).model_dump()
         await publish(self.nc, f"worlds.{info['wid']}", Envelope(wid=info["wid"], data=data))
 
+    async def end_world(self, wid: str, why: str) -> bool:
+        """End a world: services drop it. Its drones still sending start a new one with their next frame."""
+        w = self.worlds.end(wid)
+        if w is None:
+            return False
+        for src in list(self.sources.values()):
+            if src.kind == "live" and src.wid == wid:
+                src.joined = None  # assigned afresh by its next frame
+        log.info("world %s (mission %s, map %s) ended: %s", wid, w.mission, w.map, why)
+        await self.announce(w.info())
+        return True
+
+    async def reap_worlds(self) -> None:
+        while True:
+            await asyncio.sleep(1.0)
+            for wid in self.worlds.idle(time.time(), EXPIRE_S):
+                await self.end_world(wid, f"no frame for {EXPIRE_S:.0f} s")
+
     def on_frame(self, src: Source, p: Paired) -> None:
         tel = p.tel
         self.assign(src, tel)
+        self.worlds.seen(src.wid, p.t_in)
         tel.pop("sid", None)  # recordings made before names and ids were split
         tel["drone"] = src.drone
         ts = frame_ts(src.kind, tel, p.t_in, p.t_out)
@@ -257,10 +278,11 @@ async def lifespan(app: FastAPI):
     threading.Thread(target=svc.video_udp, name="video-udp", daemon=True).start()
     threading.Thread(target=svc.video_tcp, name="video-tcp", daemon=True).start()
     threading.Thread(target=svc.truth_udp, name="truth-udp", daemon=True).start()
-    diag = asyncio.create_task(svc.diag.run(svc.nc))
+    tasks = [asyncio.create_task(svc.diag.run(svc.nc)), asyncio.create_task(svc.reap_worlds())]
     yield
     svc._stop.set()
-    diag.cancel()
+    for t in tasks:
+        t.cancel()
     await close(svc.nc)
 
 
@@ -282,6 +304,15 @@ async def worlds(mission: str):
     return svc.worlds.of_mission(mission)
 
 
+@app.post("/missions/{mission}/stop")
+async def stop_mission(mission: str):
+    """End every live world of the mission now, instead of after EXPIRE_S: services drop its objects and alerts, and
+    its recordings are closed. Drones still sending start the mission afresh, with new ids."""
+    ended = [w["wid"] for w in svc.worlds.of_mission(mission)
+             if await svc.end_world(w["wid"], "stopped by the operator")]
+    return {"mission": mission, "ended": ended}
+
+
 @app.post("/push/{sid}")
 async def push(sid: str, request: Request, wid: str):
     """Stream an MPEG-TS body in. Backpressure: the body is read only as fast as it is decoded."""
@@ -301,6 +332,8 @@ async def push(sid: str, request: Request, wid: str):
     finally:
         await asyncio.to_thread(src.close)
         await asyncio.to_thread(src.done.wait, 30)
+        if not any(s.wid == wid and s.kind == "replay" and not s.done.is_set() for s in svc.sources.values()):
+            await svc.end_world(wid, "its replays stopped")
     return {"sid": sid, "bytes": n, "frames": src.frames, "unpaired": src.unpaired}
 
 

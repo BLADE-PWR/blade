@@ -47,6 +47,7 @@ For any map client (the frontend does this, `frontend/src/MapView.tsx`):
 | | Subject |
 |---|---|
 | subscribes | `geo.<sid>` |
+| subscribes | `worlds.<wid>`: an `ended` world is dropped, and `geo` still on its way for it is ignored |
 | publishes | `world.<wid>.objects`: changed objects, expired and forgotten ids, counts per group, the world's clock `t` |
 | publishes | `world.<wid>.events`: events such as explosions |
 

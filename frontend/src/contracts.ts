@@ -50,7 +50,7 @@ export type WorldEvent = { eid: string; kind: string; xy: Vec2; t: number; ttl_s
 
 // worlds.<wid>, from ingest: a world's mission, map and the names of its drones
 export type WorldInfo = { wid: string; mission: string; map: string; kind: "live" | "replay"; started: number;
-  drones: Record<string, string> }; // sid -> name
+  ended?: number | null; drones: Record<string, string> }; // sid -> name
 
 export type Snapshot = { objects: WorldObject[]; events: WorldEvent[]; t?: number; map?: string | null };
 

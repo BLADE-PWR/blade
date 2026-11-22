@@ -1,7 +1,8 @@
 """world-model: geo.<sid> -> world.<wid>.objects / .events. Fusion is in
 fusion.py; streams of different worlds never merge. Unseen objects stay "stale" for EXPIRE_S. Each world runs on
 its own clock (clock.py): the wall clock live, the recording's time in a replay, published as WorldObjectsData.t.
-A world is on one map for its whole life: ingest gives drones on another map another world."""
+A world is on one map for its whole life: ingest gives drones on another map another world. When ingest ends a
+world (worlds.<wid> with ended), it is dropped."""
 from __future__ import annotations
 
 import asyncio
@@ -30,6 +31,7 @@ worlds: dict[str, World] = {}
 clocks: dict[str, WorldClock] = {}
 swept: dict[str, float] = {}  # wid -> world time at the last sweep
 maps: dict[str, str] = {}  # wid -> map
+ended: set[str] = set()  # worlds ingest ended: geo still on its way for them is dropped, not a new world
 state: dict = {"nc": None}
 diag = Diag("world")
 
@@ -42,10 +44,26 @@ def world(wid: str) -> World:
     return worlds[wid]
 
 
+async def on_world_info(msg) -> None:
+    env, _ = decode(msg)
+    wid = env.data["wid"]
+    if not env.data.get("ended"):
+        ended.discard(wid)  # a replay world comes back under its id when its session starts again
+        return
+    ended.add(wid)
+    w = worlds.pop(wid, None)
+    for d in (clocks, swept, maps):
+        d.pop(wid, None)
+    if w is not None:
+        log.info("world %s ended: dropped with %d objects", wid, len(w.objects))
+
+
 async def on_geo(msg) -> None:
     t_in = now()
     env, _ = decode(msg)
     wid = env.wid
+    if wid in ended:
+        return
     w = world(wid)
     maps.setdefault(wid, env.data["map"])
     t, rewind = clocks[wid].frame(env.sid, env.ts.get("media"), t_in)
@@ -87,6 +105,7 @@ async def sweeper() -> None:
 async def lifespan(app: FastAPI):
     state["nc"] = await connect("world")
     await state["nc"].subscribe("geo.>", cb=on_geo)
+    await state["nc"].subscribe("worlds.*", cb=on_world_info)
     tasks = [asyncio.create_task(sweeper()), asyncio.create_task(diag.run(state["nc"]))]
     yield
     for t in tasks:

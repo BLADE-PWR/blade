@@ -98,6 +98,15 @@ function drone(s: Situation, sid: string): Drone {
   return d;
 }
 
+function dropWorld(s: Situation, wid: string): void {
+  s.worlds.delete(wid);
+  for (const [sid, d] of s.drones) {
+    if (d.wid !== wid) continue;
+    for (const p of d.previews) URL.revokeObjectURL(p.url);
+    s.drones.delete(sid);
+  }
+}
+
 function addEvents(w: WorldView, events: WorldEvent[]): void {
   for (const e of events) w.events.set(e.eid, e);
   while (w.events.size > EVENTS_KEPT) w.events.delete(w.events.keys().next().value!);
@@ -117,6 +126,10 @@ export function apply(s: Situation, m: Message): void {
       break;
     case "world": {
       const info = m.data as WorldInfo;
+      if (info.ended) { // ended by ingest (no frame for 10 min, or Stop mission): its drones and objects go
+        dropWorld(s, info.wid);
+        break;
+      }
       const w = world(s, info.wid);
       w.info = info;
       w.map = info.map;

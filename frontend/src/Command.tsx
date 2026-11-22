@@ -330,7 +330,10 @@ function Settings({ sit, drone, layer, onLayer }: SettingsProps) {
         <span className="muted">Alerts</span>
         {wid ? <RulePicker wid={wid} /> : <span className="muted">waiting for a drone</span>}
       </div>
-      <p className="muted setting-note">Rules that raise alerts, for this world until a restart.</p>
+      <p className="muted setting-note">
+        Rules that raise alerts. Live, they are the mission's: every map of it, also when it starts again, until the
+        server restarts.
+      </p>
       <div className="panel-head settings-head">
         <strong>Drone settings</strong>
         {drone && <span className="mono muted">{drone.sid}</span>}

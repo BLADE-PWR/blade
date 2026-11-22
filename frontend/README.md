@@ -34,7 +34,9 @@ npm run dev
 ```
 
 Open http://localhost:5173. Type a mission (the uplinks' `--mission`) to watch every drone in it, on every map,
-including ones that join later. Drones are shown by their names (`--drone`). Or click Replay next to a recording: that opens the running session already replaying it, or
+including ones that join later. Drones are shown by their names (`--drone`). In the Command view, Stop mission
+ends it now instead of after 10 minutes without frames: its map, objects and alerts are cleared and its recordings
+closed; drones still flying start it afresh. Or click Replay next to a recording: that opens the running session already replaying it, or
 creates and starts one with a looping replay (with a new `sid`, so it does not replace other replays). Replay
 sessions are shared: every tab on one sees, and controls, the same playback. In the top bar,
 Live goes back to the picker and Replay to the newest running replay session. The dev server listens on all interfaces, so other

@@ -47,7 +47,10 @@ Every message is one envelope (`v`, `sid`, `frame`, `wid`, `ts`, `data`). Payloa
 ingest picks (`d-3f2a9c`, `w-81b0e4`); people pick names. A live world is one mission on one map: drones started
 with the same `--mission` on the same map share it, and a drone on another map gets that map's world. A drone keeps
 its `sid` when its uplink reconnects; a second uplink with a `--drone` name already flying gets `uav1-2`. A replay
-plays under new ids of its own, so it never mixes with the live mission it was recorded in. The names travel in every
+plays under new ids of its own, so it never mixes with the live mission it was recorded in. A live world ends when
+none of its drones has sent a frame for `EXPIRE_S` (600 s, when its objects have all expired anyway) or when the
+operator presses Stop mission; every service then drops it, and the next drone starts a new one, with new ids. Alert
+rules belong to the mission and a drone's model and threshold to the drone, so both carry over. The names travel in every
 frame's telemetry (`tel.drone`, `tel.mission`) and in `worlds.<wid>`, and the frontend shows those.
 
 ## Frontend

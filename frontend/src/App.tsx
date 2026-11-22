@@ -4,7 +4,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { Command } from "./Command";
 import type { Alert, Recording, Session } from "./contracts";
 import { recordingName } from "./format";
-import { connect, getJSON, startReplay, type Target } from "./gateway";
+import { connect, getJSON, send, startReplay, type Target } from "./gateway";
 import { Operator } from "./Operator";
 import { ReplayBar } from "./Replay";
 import {
@@ -148,6 +148,12 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
     if (s) onPick({ session: s.id });
     else onLeave();
   };
+  const stopMission = (mission: string) => {
+    if (!window.confirm(`Stop mission ${mission}? Its map, objects and alerts are cleared and its recordings saved. `
+      + "Drones still flying start it afresh.")) return;
+    send("POST", `/api/missions/${encodeURIComponent(mission)}/stop`)
+      .catch((e: Error) => setError(`Cannot stop mission ${mission} (${e.message}).`));
+  };
   const fps = sid ? sit.diag.get("ingest")?.streams[sid]?.fps_in : undefined;
   const latency = drone ? latencyS(drone) : null;
 
@@ -165,6 +171,9 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
             {"mission" in target ? target.mission : (sit.session?.streams[0]?.mission ?? sit.session?.name ?? "…")}
           </button>
         </label>
+        {view === "command" && "mission" in target && (
+          <button className="danger" onClick={() => stopMission(target.mission)}>Stop mission</button>
+        )}
         <div className="switch" role="group" aria-label="Mode">
           <button aria-pressed={!replay} onClick={() => replay && onLeave()}>
             <span className="dot live-dot" />Live

@@ -33,6 +33,7 @@ class Evaluator:
         self.objects: dict[str, dict[str, dict]] = defaultdict(dict)
         self.evals: dict[str, WorldEval] = {}
         self.writers: dict[str, tuple] = {}
+        self.ended: set[str] = set()  # worlds ingest ended: messages still on their way for them are dropped
         self.nc = None
 
     def ev(self, wid: str) -> WorldEval:
@@ -49,8 +50,25 @@ class Evaluator:
             self.writers[wid] = (f, w)
         self.writers[wid][1].writerow(row)
 
+    async def on_world_info(self, msg) -> None:
+        env, _ = decode(msg)
+        wid = env.data["wid"]
+        if not env.data.get("ended"):
+            self.ended.discard(wid)  # a replay world comes back under its id when its session starts again
+            return
+        self.ended.add(wid)
+        self.evals.pop(wid, None)
+        self.objects.pop(wid, None)
+        if wid in self.writers:
+            self.writers.pop(wid)[0].close()
+        for sid in [s for s, w in self.sid_wid.items() if w == wid]:
+            del self.sid_wid[sid]
+            self.truth.pop(sid, None)
+
     async def on_truth(self, msg) -> None:
         env, _ = decode(msg)
+        if env.wid in self.ended:
+            return
         if env.wid:
             self.sid_wid[env.sid] = env.wid
         if msg.subject.startswith("registry."):
@@ -61,6 +79,8 @@ class Evaluator:
     async def on_geo(self, msg) -> None:
         env, _ = decode(msg)
         sid, wid = env.sid, env.wid
+        if wid in self.ended:
+            return
         self.sid_wid[sid] = wid
         st = self.truth[sid]
         fp = [p for p in env.data.get("footprint", []) if p]
@@ -83,6 +103,8 @@ class Evaluator:
     async def on_world(self, msg) -> None:
         env, _ = decode(msg)
         wid = msg.subject.split(".")[1]
+        if wid in self.ended:
+            return
         objs = self.objects[wid]
         for o in env.data.get("objects", []):
             objs[o["oid"]] = o
@@ -152,6 +174,7 @@ async def lifespan(app: FastAPI):
         await svc.nc.subscribe(subj, cb=svc.on_truth)
     await svc.nc.subscribe("geo.>", cb=svc.on_geo)
     await svc.nc.subscribe("world.*.objects", cb=svc.on_world)
+    await svc.nc.subscribe("worlds.*", cb=svc.on_world_info)
     task = asyncio.create_task(svc.tick())
     yield
     task.cancel()

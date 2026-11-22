@@ -229,14 +229,17 @@ class EvalData(BaseModel):
 
 
 class WorldInfo(BaseModel):
-    """A world and the names behind its ids, published by ingest as worlds.<wid> whenever it starts or a drone
-    joins; GET /worlds?mission= on ingest lists a mission's live ones."""
+    """A world and the names behind its ids, published by ingest as worlds.<wid> when it starts, when a drone joins
+    and when it ends; GET /worlds?mission= on ingest lists a mission's live ones."""
     wid: str
     mission: str = Field(description="the mission's name; a replay's is the recorded one")
     map: str
     kind: str = Field(description="live | replay")
     started: float = Field(description="epoch s")
+    ended: float | None = Field(None, description="epoch s; set once, in the world's last message: services drop it")
     drones: dict[str, str] = Field(default_factory=dict, description="sid -> the drone's name")
+    previous: dict[str, str] = Field(default_factory=dict, description="sid -> the sid the same drone (mission and "
+                                                                       "name) had before, whose settings it takes")
 
 
 class StreamDiag(BaseModel):

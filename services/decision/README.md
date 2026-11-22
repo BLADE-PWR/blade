@@ -8,6 +8,9 @@ Rules run on the world's clock (`t` in `world.<wid>.objects`, see the world READ
 replay raises no lost contact; objects in `forgotten` (merged, or their replay went back) are not lost.
 A world that sends no clock runs on the wall clock.
 
+Rules set for a live world (`PUT /worlds/{wid}/rules`) are its mission's: they apply to every world of the mission
+(one per map) and to the ones it starts later, until decision restarts. A replay world's rules are its own.
+
 ## Rules
 
 | Rule | Fires when | Parameters |
@@ -26,6 +29,7 @@ Every rule also has `enabled`.
 | | Subject |
 |---|---|
 | subscribes | `world.<wid>.objects`, `world.<wid>.events`, `geo.<sid>` |
+| subscribes | `worlds.<wid>`: which mission a live world is (its rules), and when it `ended` (dropped) |
 | publishes | `alerts.<wid>`: active alerts with rule, objects, confidence and explanation |
 
 ## REST

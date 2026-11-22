@@ -36,7 +36,7 @@ URLS = {
 PREVIEW_FPS = env_float("PREVIEW_FPS", 15.0)
 PREVIEW_W = env_int("PREVIEW_W", 960)
 SESSION_IDLE_S = env_float("SESSION_IDLE_S", 30.0)  # a session nobody watches this long is deleted
-PROXIES = {"models": ("detector", "/models"), "detector": ("detector", "/streams"),
+PROXIES = {"models": ("detector", "/models"), "detector": ("detector", "/streams"), "missions": ("ingest", "/missions"),
            "recordings": ("sessions", "/recordings"), "replays": ("sessions", "/replays"), "maps": ("terrain", "/maps"),
            "worlds": ("world", "/worlds"), "decision": ("decision", "/worlds"), "eval": ("evaluator", "/worlds")}
 
@@ -212,15 +212,13 @@ async def ws(websocket: WebSocket, session: str | None = None, mission: str = ""
         put(json.dumps({"type": typ, "sid": env.sid, "wid": env.wid, "frame": env.frame, "ts": env.ts,
                         "data": env.data}, separators=(",", ":")))
 
-    watched: set[str] = set()
+    watched: dict[str, list] = {}  # wid -> its subscriptions
 
     async def watch(wid: str) -> None:
         if wid in watched:
             return
-        watched.add(wid)
-        subs.append(await nc.subscribe(f"world.{wid}.>", cb=on_msg))
-        subs.append(await nc.subscribe(f"alerts.{wid}", cb=on_msg))
-        subs.append(await nc.subscribe(f"eval.{wid}", cb=on_msg))
+        watched[wid] = [await nc.subscribe(f"world.{wid}.>", cb=on_msg), await nc.subscribe(f"alerts.{wid}", cb=on_msg),
+                        await nc.subscribe(f"eval.{wid}", cb=on_msg)]
         try:
             r = await state["http"].get(f"{URLS['world']}/worlds/{wid}/snapshot")
             if r.status_code == 200:
@@ -229,12 +227,17 @@ async def ws(websocket: WebSocket, session: str | None = None, mission: str = ""
             pass
 
     async def on_world(msg):
-        """A world started or a drone joined one: a new live world of the mission is watched from now on."""
+        """A world started, a drone joined one, or one ended: a new live world of the mission is watched from now
+        on, an ended one no more (a session's replay world is kept: it comes back when the session starts again)."""
         env, _ = decode(msg)
         w = env.data
         if w.get("wid") in wid_list:
             put(json.dumps({"type": "world", "wid": w["wid"], "data": w}))
-        elif mission and w.get("kind") == "live" and w.get("mission") == mission:
+            if w.get("ended") and mission:
+                wid_list.remove(w["wid"])
+                for sub in watched.pop(w["wid"], []):
+                    await sub.unsubscribe()
+        elif mission and w.get("kind") == "live" and w.get("mission") == mission and not w.get("ended"):
             wid_list.append(w["wid"])
             put(json.dumps({"type": "world", "wid": w["wid"], "data": w}))
             await watch(w["wid"])
@@ -276,7 +279,7 @@ async def ws(websocket: WebSocket, session: str | None = None, mission: str = ""
         if session in orch.sessions:  # no viewers left: paused, and orch.reap deletes it after SESSION_IDLE_S
             await orch.unwatched(orch.sessions[session])
         task.cancel()
-        for sub in subs:
+        for sub in subs + [x for xs in watched.values() for x in xs]:
             await sub.unsubscribe()
 
 

@@ -39,6 +39,7 @@ replay may use the recorded one, and so may `wid`); `drone` and `mission`, the r
 | Prefix | Service | Path there |
 |---|---|---|
 | `/api/models` | [detector](../detector/README.md) | `/models` |
+| `/api/missions` | [ingest](../ingest/README.md) | `/missions` (stop a mission) |
 | `/api/detector` | [detector](../detector/README.md) | `/streams` (model and threshold of a stream) |
 | `/api/recordings` | [sessions](../sessions/README.md) | `/recordings` |
 | `/api/replays` | [sessions](../sessions/README.md) | `/replays` |
@@ -58,7 +59,7 @@ Text messages are JSON: `{"type", "sid", "wid", "frame", "ts", "data"}`.
 | `type` | Content |
 |---|---|
 | `session` | The session, once at the start (with `?session=`) |
-| `world` | A world's mission, map and drone names (`worlds.<wid>`): at the start, then when a drone joins |
+| `world` | A world's mission, map and drone names (`worlds.<wid>`): at the start, then when a drone joins, and once with `ended` when it ends (with `?mission=` it is not watched any more) |
 | `snapshot` | All current objects of a world, once at the start |
 | `detections` | Boxes of one frame |
 | `geo` | Map points of one frame |

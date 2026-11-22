@@ -533,3 +533,78 @@ async def test_a_recording_still_being_written_cannot_be_replayed(tmp_path, monk
     with pytest.raises(HTTPException) as e:
         await sm.start_replay(sm.ReplayReq(recording="open", sid="rp", wid="rp"))
     assert e.value.status_code == 409 and "rp" not in sm.replays
+
+
+class InfoMsg:
+    def __init__(self, **world):
+        info = {"mission": "m1", "map": "altis", "kind": "live", "started": 0.0, "drones": {}, **world}
+        self.subject, self.headers = f"worlds.{info['wid']}", None
+        self.data = Envelope(wid=info["wid"], data=info).model_dump_json().encode()
+
+
+def test_an_idle_or_stopped_world_ends_and_the_next_drone_starts_a_new_one():
+    from blade_ingest.worlds import Worlds
+
+    ws = Worlds(alive=lambda key: True)
+    a = ws.join_live("m1", "altis", "uav1", "udp:a")
+    ws.join_live("m1", "stratis", "uav2", "udp:b")
+    ws.seen(a.world.wid, time.time() - 700)  # altis: nothing for 700 s
+    assert ws.idle(time.time(), 600) == [a.world.wid]
+    ended = ws.end(a.world.wid)
+    assert ended.ended and ws.end(a.world.wid) is None  # ends once
+    assert [w["map"] for w in ws.of_mission("m1")] == ["stratis"]
+    again = ws.join_live("m1", "altis", "uav1", "udp:a")
+    assert again.world.wid != a.world.wid and again.sid != a.sid  # a new world, new ids
+    assert again.world.previous == {again.sid: a.sid}  # its settings come from the old id
+
+
+async def test_stop_mission_ends_its_worlds_and_its_drones_get_new_ids(monkeypatch, pkg):
+    from blade_ingest import main as im
+    from blade_ingest.source import Paired
+
+    ing, sent = im.Ingest(), []
+    monkeypatch.setattr(im, "svc", ing)
+
+    async def publish(nc, subject, env, blob=None):
+        sent.append((subject, env))
+
+    monkeypatch.setattr(im, "publish", publish)
+    monkeypatch.setattr(ing, "_spawn", lambda coro: coro and coro.close())
+    tel = dict(look_at_tel(pkg.terrain, CENTRE, 1), drone="uav1", mission="m1", t_capture=time.time())
+    src = ing.new_source("udp:10.0.0.5:5000", "live")
+    ing.on_frame(src, Paired("?", dict(tel), b"", (320, 180), time.time(), time.time()))
+    old = (src.wid, src.sid)
+    assert (await im.stop_mission("m1"))["ended"] == [old[0]]
+    ((subject, env),) = [x for x in sent if x[0].startswith("worlds.")]
+    assert subject == f"worlds.{old[0]}" and env.data["ended"] and env.data["drones"] == {old[1]: "uav1"}
+    ing.on_frame(src, Paired("?", dict(tel), b"", (320, 180), time.time(), time.time()))  # still flying
+    assert src.wid != old[0] and src.sid != old[1] and src.drone == "uav1"
+    src.close()
+
+
+async def test_world_service_drops_an_ended_world_and_ignores_its_late_geo(monkeypatch):
+    wm, nc = world_service(monkeypatch)
+    monkeypatch.setattr(wm, "ended", set())
+    for k in range(10):
+        await wm.on_geo(tank_geo(k))
+    assert "w1" in wm.worlds
+    await wm.on_world_info(InfoMsg(wid="w1", ended=time.time()))
+    assert "w1" not in wm.worlds and "w1" not in wm.clocks
+    await wm.on_geo(tank_geo(11))  # still on its way when the world ended
+    assert "w1" not in wm.worlds
+    await wm.on_world_info(InfoMsg(wid="w1", kind="replay"))  # a replay world starts again under its id
+    await wm.on_geo(tank_geo(12))
+    assert "w1" in wm.worlds
+
+
+async def test_detector_settings_move_to_the_drones_new_id():
+    from blade_detector.cluster import Cluster
+
+    c = Cluster("me")
+    await c.set("d-old", model="m2", conf=0.4, instance="me")
+    await c.move("d-old", "d-new", ("model", "conf"))
+    assert c.assign == {"d-new": {"model": "m2", "conf": 0.4}}  # where it runs is not a setting
+    await c.set("d-x", model="m3")
+    await c.set("d-y", model="m1")
+    await c.move("d-x", "d-y", ("model", "conf"))
+    assert c.model("d-y") == "m1" and "d-x" not in c.assign  # set for the new id already: kept
