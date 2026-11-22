@@ -119,12 +119,12 @@ class ReplayPatch(BaseModel):
     loop: bool | None = None
 
 
-@app.patch("/sessions/{sess_id}/replays/{sid}")
-async def patch_replay(sess_id: str, sid: str, body: ReplayPatch):
+@app.patch("/sessions/{sess_id}/replays/{wid}")
+async def patch_replay(sess_id: str, wid: str, body: ReplayPatch):
     s = _session(sess_id)
-    if sid not in s.sids:
-        raise HTTPException(404, f"{sid} is not in session {sess_id}")
-    r = await state["http"].patch(f"{URLS['sessions']}/replays/{sid}", json=body.model_dump(exclude_none=True))
+    if wid not in s.wids:
+        raise HTTPException(404, f"no replay into {wid} in session {sess_id}")
+    r = await state["http"].patch(f"{URLS['sessions']}/replays/{wid}", json=body.model_dump(exclude_none=True))
     return Response(r.content, r.status_code, media_type="application/json")
 
 

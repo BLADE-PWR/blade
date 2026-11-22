@@ -19,18 +19,19 @@ no sessions.
 | POST | `/sessions/{id}/start` | Assign detectors, start the replays |
 | POST | `/sessions/{id}/stop` | Stop the session's replays |
 | DELETE | `/sessions/{id}` | Stop the session's replays and delete it |
-| PATCH | `/sessions/{id}/replays/{sid}` | Replay control: `{"paused", "speed", "seek_s", "step"}` |
+| PATCH | `/sessions/{id}/replays/{wid}` | Replay control: `{"paused", "speed", "seek_s", "step", "loop"}` |
 | GET | `/detectors` | Live detector replicas and stream assignments |
 | GET | `/streams` | Streams ingest is receiving |
 
 Session body:
 ```json
 {"name": "session", "model": null,
- "streams": [{"sid": "rp-1", "wid": "rp-1", "recording": "<id>",
-              "speed": 1.0, "loop": false, "offset_s": 0}]}
+ "replays": [{"recording": "<id>", "wid": "rw-1", "sids": {"uav1": "rp-1", "uav2": "rp-2"},
+              "mission": "arma-live1", "speed": 1.0, "loop": false, "offset_s": 0}]}
 ```
-Each stream is one replay: `sid`, `wid` and `recording` are required. `sid` must be new (a live drone or another
-replay may use the recorded one, and so may `wid`); `drone` and `mission`, the recorded ones, are what the UI shows.
+Each replay plays one recording, every drone of it (`drones` in `GET /api/recordings`), into a world of its own:
+`recording`, `wid` and a new stream id per drone (`sids`) are required. `mission`, the recorded one, is what the UI
+shows.
 
 ## Proxy
 

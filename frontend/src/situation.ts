@@ -248,11 +248,11 @@ export function droneIn(s: Situation, wid: string): string | undefined {
 }
 
 function baseName(s: Situation, sid: string): string {
-  return s.session?.streams.find((st) => st.sid === sid)?.drone ?? s.drones.get(sid)?.name ?? sid;
+  return s.drones.get(sid)?.name ?? sid;
 }
 
-/** What to call a drone: a replay's recorded drone, else the name in its frames, else its stream id; with its map
- * when a drone of another world (another map) has the same name. */
+/** What to call a drone: its name (from its frames and its world; a replay's are the recorded ones), else its stream
+ * id; with its map when a drone of another world (another map) has the same name. */
 export function droneName(s: Situation, sid: string): string {
   const name = baseName(s, sid);
   const d = s.drones.get(sid);

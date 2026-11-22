@@ -57,7 +57,7 @@ function Pick({ onPick }: { onPick: (t: Target) => void }) {
         {sessions.map((s) => (
           <li key={s.id}>
             <button onClick={() => onPick({ session: s.id })}>{s.name}</button> {s.state},{" "}
-            {s.streams.map((st) => `${st.sid} replays ${st.recording} in world ${st.wid}`).join(", ")}
+            {s.replays.map((r) => `${r.recording} (${Object.keys(r.sids).join(", ")}) in world ${r.wid}`).join("; ")}
           </li>
         ))}
       </ul>
@@ -168,7 +168,7 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
         <label className="muted">
           Mission{" "}
           <button onClick={onLeave}>
-            {"mission" in target ? target.mission : (sit.session?.streams[0]?.mission ?? sit.session?.name ?? "…")}
+            {"mission" in target ? target.mission : (sit.session?.replays[0]?.mission ?? sit.session?.name ?? "…")}
           </button>
         </label>
         {view === "command" && "mission" in target && (

@@ -18,12 +18,11 @@ from blade_common.bus import kv_read
 log = logging.getLogger("gateway.sessions")
 
 
-class StreamSpec(BaseModel):
-    """One replay."""
-    sid: str  # new for every replay: a live drone or another replay may use the recorded one
-    wid: str
+class ReplaySpec(BaseModel):
+    """One mission recording, played into its own world: every drone of it under a stream id of its own."""
     recording: str
-    drone: str | None = None  # the recorded drone's sid, which the UI shows
+    wid: str  # new for every replay, so it never mixes with the live mission or another replay
+    sids: dict[str, str]  # drone name in the recording -> stream id; new for every replay too
     mission: str | None = None  # the recorded mission (its uplink --mission), which the UI shows
     speed: float = 1.0
     loop: bool = False
@@ -33,7 +32,7 @@ class StreamSpec(BaseModel):
 class SessionSpec(BaseModel):
     name: str = "session"
     model: str | None = None
-    streams: list[StreamSpec] = []
+    replays: list[ReplaySpec] = []
 
 
 class Session(SessionSpec):
@@ -45,11 +44,11 @@ class Session(SessionSpec):
 
     @property
     def wids(self) -> list[str]:
-        return sorted({s.wid for s in self.streams})
+        return sorted({r.wid for r in self.replays})
 
     @property
     def sids(self) -> list[str]:
-        return [s.sid for s in self.streams]
+        return [sid for r in self.replays for sid in r.sids.values()]
 
 
 class Orchestrator:
@@ -101,14 +100,14 @@ class Orchestrator:
             if a.get("instance") in load:
                 load[a["instance"]] += 1
         kv = await self.nc.jetstream().key_value("assign")
-        for st in s.streams:
-            prev = assign.get(st.sid, {}).get("instance")
+        for sid in s.sids:
+            prev = assign.get(sid, {}).get("instance")
             if prev in load:
                 load[prev] -= 1
             inst = min(load, key=lambda k: (load[k], k))
             load[inst] += 1
-            entry = {"instance": inst, "model": s.model or assign.get(st.sid, {}).get("model"), "session": s.id}
-            await kv.put(st.sid, json.dumps({k: v for k, v in entry.items() if v}).encode())
+            entry = {"instance": inst, "model": s.model or assign.get(sid, {}).get("model"), "session": s.id}
+            await kv.put(sid, json.dumps({k: v for k, v in entry.items() if v}).encode())
 
     async def start(self, s: Session) -> Session:
         s.errors = []
@@ -118,18 +117,18 @@ class Orchestrator:
             except Exception as e:
                 s.errors.append(f"detector assignment: {e}")
         async with httpx.AsyncClient(timeout=10) as c:
-            for st in s.streams:
-                await self._call(c, s, "DELETE", "sessions", f"/replays/{st.sid}", ok404=True)
+            for r in s.replays:
+                await self._call(c, s, "DELETE", "sessions", f"/replays/{r.wid}", ok404=True)
                 await self._call(c, s, "POST", "sessions", "/replays", json={
-                    "recording": st.recording, "sid": st.sid, "wid": st.wid, "speed": st.speed, "loop": st.loop,
-                    "offset_s": st.offset_s})
+                    "recording": r.recording, "wid": r.wid, "sids": r.sids, "speed": r.speed, "loop": r.loop,
+                    "offset_s": r.offset_s})
         s.state, s.started = "running", time.time()
         return s
 
     async def stop(self, s: Session) -> Session:
         async with httpx.AsyncClient(timeout=10) as c:
-            for st in s.streams:
-                await self._call(c, s, "DELETE", "sessions", f"/replays/{st.sid}", ok404=True)
+            for wid in s.wids:
+                await self._call(c, s, "DELETE", "sessions", f"/replays/{wid}", ok404=True)
         s.state = "stopped"
         return s
 
@@ -145,8 +144,8 @@ class Orchestrator:
         if self.viewers[s.id] or s.id not in self.sessions:
             return
         async with httpx.AsyncClient(timeout=10) as c:
-            for sid in s.sids:
-                await self._call(c, s, "PATCH", "sessions", f"/replays/{sid}", json={"paused": True})
+            for wid in s.wids:
+                await self._call(c, s, "PATCH", "sessions", f"/replays/{wid}", json={"paused": True})
 
     async def reap(self, now: float, idle_s: float) -> None:
         """Delete the sessions nobody has watched for idle_s."""

@@ -74,14 +74,18 @@ export type StreamDiag = { fps_in: number; fps_out: number; dropped: number; lat
 
 export type DiagData = { service: string; instance?: string | null; streams: Record<string, StreamDiag> };
 
-export type SessionStream = { sid: string; wid: string; recording: string; drone?: string | null;
-  mission?: string | null }; // a replay
+// one mission recording played into its own world, every drone of it under a stream id of its own
+export type SessionReplay = { recording: string; wid: string; sids: Record<string, string>; // drone name -> sid
+  mission?: string | null };
 
-export type Session = { id: string; name: string; state: string; streams: SessionStream[] };
+export type Session = { id: string; name: string; state: string; replays: SessionReplay[] };
+
+export type RecordedDrone = { name: string; start_s: number }; // start_s: where it starts on the mission's timeline
 
 export type Replay = {
-  sid: string;
+  wid: string;
   recording: string;
+  drones: (RecordedDrone & { sid: string })[];
   position_s: number;
   duration_s: number;
   speed: number;
@@ -98,4 +102,5 @@ export type Recording = {
   duration_s?: number; // both missing while the recording is still being written
   recording?: boolean; // still being written: listed, but cannot be replayed yet
   has_truth?: boolean;
+  drones: RecordedDrone[];
 };

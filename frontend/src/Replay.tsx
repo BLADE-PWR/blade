@@ -1,4 +1,5 @@
-// The replay bar: recording, position, pause, step, jumps and speed, the same for every replay of the session.
+// The replay bar: recording, position, pause, step, jumps and speed. One replay plays every drone of a mission
+// recording on one clock; the bar drives every replay of the session together.
 import { useEffect, useState } from "react";
 
 import type { Recording, Replay, Session } from "./contracts";
@@ -14,7 +15,7 @@ const mmss = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${(s
 type Props = { session: Session; onSwitch: (sessionId: string) => void; onSeek: (deltaS: number) => void };
 
 export function ReplayBar({ session, onSwitch, onSeek }: Props) {
-  const sids = session.streams.map((st) => st.sid).join(",");
+  const wids = session.replays.map((r) => r.wid).join(",");
   const [replays, setReplays] = useState<Replay[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<number | null>(null); // while the slider is dragged
@@ -22,10 +23,10 @@ export function ReplayBar({ session, onSwitch, onSeek }: Props) {
 
   useEffect(() => {
     let stopped = false;
-    const mine = sids.split(",");
+    const mine = wids.split(",");
     const poll = () => getJSON<Replay[]>("/api/replays")
       .then((all) => {
-        if (!stopped) setReplays(all.filter((r) => mine.includes(r.sid)));
+        if (!stopped) setReplays(all.filter((r) => mine.includes(r.wid)));
       })
       .catch((e: Error) => setError(`Cannot read the replay state (${e.message}).`));
     poll();
@@ -34,7 +35,7 @@ export function ReplayBar({ session, onSwitch, onSeek }: Props) {
       stopped = true;
       clearInterval(timer);
     };
-  }, [sids]);
+  }, [wids]);
 
   useEffect(() => {
     getJSON<Recording[]>("/api/recordings").then(setRecordings)
@@ -43,12 +44,12 @@ export function ReplayBar({ session, onSwitch, onSeek }: Props) {
 
   const first = replays[0];
   if (!first) {
-    return <div className="replaybar muted">Replay {sids}: waiting for its state.{error && ` ${error}`}</div>;
+    return <div className="replaybar muted">Replay {wids}: waiting for its state.{error && ` ${error}`}</div>;
   }
 
   const control = (body: (r: Replay) => object) => {
     setError(null);
-    return Promise.all(replays.map((r) => send<Replay>("PATCH", `/sessions/${session.id}/replays/${r.sid}`,
+    return Promise.all(replays.map((r) => send<Replay>("PATCH", `/sessions/${session.id}/replays/${r.wid}`,
       body(r))))
       .then(setReplays)
       .catch((e: Error) => setError(`Replay control failed (${e.message}).`));

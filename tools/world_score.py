@@ -33,13 +33,17 @@ def capture(args) -> int:
             out.write(json.dumps({"subj": msg.subject.split(".")[0], "sid": env.sid, "frame": env.frame,
                                   "ts": env.ts, "data": env.data}) + "\n")
 
-        for s in (f"geo.{args.sid}", f"truth.{args.sid}"):
-            await nc.subscribe(s, cb=on)
+        rec = httpx.get(f"{args.gateway}/api/recordings/{args.recording}", timeout=10)
+        rec.raise_for_status()
+        sids = {d["name"]: f"{args.sid}-{k}" for k, d in enumerate(rec.json()["drones"])}  # every drone of it
+        for sid in sids.values():
+            for s in (f"geo.{sid}", f"truth.{sid}"):
+                await nc.subscribe(s, cb=on)
         r = httpx.post(f"{args.gateway}/api/replays", timeout=10,
-                       json={"recording": args.recording, "sid": args.sid, "wid": args.sid})
+                       json={"recording": args.recording, "wid": args.sid, "sids": sids})
         r.raise_for_status()
         dur = r.json()["duration_s"]
-        print(f"replaying {args.recording} as {args.sid}: {dur:.0f} s")
+        print(f"replaying {args.recording} into {args.sid} ({', '.join(sids)}): {dur:.0f} s")
         await asyncio.sleep(dur + 3)
         httpx.delete(f"{args.gateway}/api/replays/{args.sid}", timeout=10)
         await nc.drain()

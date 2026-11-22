@@ -310,7 +310,7 @@ function ModelPicker({ sid }: { sid: string }) {
 type SettingsProps = { sit: Situation; drone?: Drone; layer: Background; onLayer: (l: Background) => void };
 
 function Settings({ sit, drone, layer, onLayer }: SettingsProps) {
-  const wid = drone?.wid ?? sit.session?.streams[0]?.wid; // the shown drone's world
+  const wid = drone?.wid ?? sit.session?.replays[0]?.wid; // the shown drone's world
   return (
     <section className="panel settings" aria-label="Settings">
       <div className="panel-head"><strong>Settings</strong></div>

@@ -18,8 +18,8 @@ from blade_common.service import env_bool, env_float, env_int, env_str, run_app
 from blade_common.util import extract, zip_root
 
 from .recorder import Recorder
-from .recording import finalize, list_recordings
-from .replay import Replay
+from .recording import drones, finalize, list_recordings
+from .replay import Replay, Track, TrackSpec
 
 log = logging.getLogger("sessions")
 
@@ -28,7 +28,7 @@ INGEST_URL = env_str("INGEST_URL", f"http://127.0.0.1:{ports.INGEST}")
 INGEST_TRUTH = (env_str("INGEST_TRUTH_HOST", "127.0.0.1"), env_int("INGEST_TRUTH_PORT", ports.TRUTH_UDP))
 
 recorder = Recorder(ROOT, env_bool("RECORD_ALL", True), env_float("RECORD_IDLE_S", 5.0))
-replays: dict[str, Replay] = {}
+replays: dict[str, Replay] = {}  # wid -> the replay playing into it
 
 
 @asynccontextmanager
@@ -73,7 +73,8 @@ async def recording(rid: str):
     m = _rec_dir(rid) / "manifest.json"
     if not m.exists():
         raise HTTPException(404, f"{rid} has no manifest")
-    return json.loads(m.read_text())
+    rec = json.loads(m.read_text())
+    return {**rec, "drones": drones(rec)}
 
 
 @app.post("/recordings")
@@ -130,8 +131,8 @@ async def toggle(sid: str, body: RecordToggle):
 
 class ReplayReq(BaseModel):
     recording: str
-    sid: str
     wid: str
+    sids: dict[str, str]  # drone name in the recording -> the stream id it plays under
     speed: float = 1.0
     loop: bool = False
     offset_s: float = 0.0
@@ -148,20 +149,25 @@ class ReplayPatch(BaseModel):
 
 @app.post("/replays")
 async def start_replay(req: ReplayReq):
-    old = replays.get(req.sid)
+    old = replays.get(req.wid)
     if old and old.state in ("starting", "playing", "paused"):
-        raise HTTPException(409, f"{req.sid} is already playing")
+        raise HTTPException(409, f"{req.wid} is already playing")
     d = _rec_dir(req.recording)
     m = d / "manifest.json"
-    if m.exists() and json.loads(m.read_text()).get("recording"):
+    manifest = json.loads(m.read_text()) if m.exists() else {"id": req.recording}
+    if manifest.get("recording"):
         raise HTTPException(409, f"{req.recording} is still recording")
+    specs = [TrackSpec(x["name"], d / x["dir"], x["start_s"]) for x in drones(manifest)]
+    missing = sorted({t.name for t in specs} - req.sids.keys())
+    if missing:
+        raise HTTPException(400, f"sids: no stream id for {', '.join(missing)}")
     try:
-        r = Replay(sid=req.sid, recording=req.recording, dir=d, ingest_url=INGEST_URL,
-                   truth_addr=INGEST_TRUTH, wid=req.wid, speed=req.speed, loop=req.loop, offset_s=req.offset_s,
-                   send_truth=req.truth)
-    except FileNotFoundError as e:
+        tracks = [Track(t, req.sids[t.name], req.truth) for t in specs]
+    except (FileNotFoundError, ValueError) as e:
         raise HTTPException(400, f"{req.recording}: {e}") from e
-    replays[req.sid] = r
+    r = Replay(recording=req.recording, wid=req.wid, tracks=tracks, ingest_url=INGEST_URL, truth_addr=INGEST_TRUTH,
+               speed=req.speed, loop=req.loop, offset_s=req.offset_s)
+    replays[req.wid] = r
     r.start()
     return r.info()
 
@@ -171,22 +177,22 @@ async def list_replays():
     return [r.info() for r in replays.values()]
 
 
-@app.patch("/replays/{sid}")
-async def patch_replay(sid: str, body: ReplayPatch):
-    r = replays.get(sid) or _404(sid)
+@app.patch("/replays/{wid}")
+async def patch_replay(wid: str, body: ReplayPatch):
+    r = replays.get(wid) or _404(wid)
     r.patch(body.paused, body.speed, body.seek_s, body.step, body.loop)
     return r.info()
 
 
-@app.delete("/replays/{sid}")
-async def stop_replay(sid: str):
-    r = replays.pop(sid, None) or _404(sid)
+@app.delete("/replays/{wid}")
+async def stop_replay(wid: str):
+    r = replays.pop(wid, None) or _404(wid)
     await r.stop()
     return r.info()
 
 
-def _404(sid: str):
-    raise HTTPException(404, f"no replay {sid}")
+def _404(wid: str):
+    raise HTTPException(404, f"no replay into {wid}")
 
 
 def main() -> None:

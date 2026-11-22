@@ -37,20 +37,11 @@ Open http://localhost:5173. Type a mission (the uplinks' `--mission`) to watch e
 including ones that join later. Drones are shown by their names (`--drone`). In the Command view, Stop mission
 ends it now instead of after 10 minutes without frames: its map, objects and alerts are cleared and its recordings
 closed; drones still flying start it afresh. Or click Replay next to a recording: that opens the running session already replaying it, or
-creates and starts one with a looping replay (with a new `sid`, so it does not replace other replays). Replay
+creates and starts one with a looping replay of every drone in it, on one timeline (under new ids, so it never mixes
+with the live mission or other replays). Replay
 sessions are shared: every tab on one sees, and controls, the same playback. In the top bar,
 Live goes back to the picker and Replay to the newest running replay session. The dev server listens on all interfaces, so other
 devices on the LAN open http://<server-ip>:5173 (port 5173 must be open in the firewall).
-
-For the command view with two drones, create a session with two streams in one world by hand:
-```bash
-curl -XPOST localhost:8000/sessions -H 'content-type: application/json' -d '{"name": "Demo",
-  "streams": [{"sid": "rp-1", "wid": "rp-1", "recording": "<id>", "loop": true},
-  {"sid": "rp-2", "wid": "rp-1", "recording": "<id>", "loop": true, "offset_s": 40}]}'
-```
-```bash
-curl -XPOST localhost:8000/sessions/<session id from the answer>/start
-```
 
 In dev, Vite forwards `/api`, `/sessions`, `/detectors`, `/streams` and the `/ws` WebSocket to the gateway on
 `127.0.0.1:8000`. For a gateway on another machine:

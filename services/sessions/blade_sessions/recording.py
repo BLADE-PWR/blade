@@ -129,6 +129,12 @@ def load_truth(rec_dir: Path) -> list[dict]:
     return _jsonl(p) if p.exists() else []
 
 
+def drones(manifest: dict) -> list[dict]:
+    """The drones of a recording: name, folder (relative to the recording) and where each starts on the mission's
+    timeline. A recording of a single stream is one drone starting at 0."""
+    return manifest.get("drones") or [{"name": manifest.get("sid") or manifest.get("id"), "dir": ".", "start_s": 0.0}]
+
+
 def list_recordings(root: Path) -> list[dict]:
     out = []
     for d in sorted(root.iterdir() if root.exists() else []):
@@ -137,7 +143,7 @@ def list_recordings(root: Path) -> list[dict]:
             try:
                 rec = json.loads(m.read_text())
                 if not rec.get("broken"):
-                    out.append(rec)
+                    out.append({**rec, "drones": drones(rec)})
             except ValueError:
                 log.warning("%s: unreadable manifest", m)
     return out

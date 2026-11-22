@@ -64,12 +64,13 @@ export async function send<T>(method: "POST" | "PUT" | "PATCH", path: string, bo
 /** -> the session replaying rec: the running one that already does, else a new one. */
 export async function startReplay(rec: Recording): Promise<string> {
   const running = (await getJSON<Session[]>("/sessions")).find((s) => s.state === "running"
-    && s.streams.length === 1 && s.streams[0].recording === rec.id);
+    && s.replays.length === 1 && s.replays[0].recording === rec.id);
   if (running) return running.id;
-  // a new sid each time (a live drone or another replay may use the recorded one); the UI shows the drone's
-  const sid = `rp-${Date.now().toString(36).slice(-5)}`;
+  // new ids each time, so it never mixes with the live mission or another replay; the UI shows the recorded names
+  const id = () => Math.random().toString(16).slice(2, 8);
+  const sids = Object.fromEntries(rec.drones.map((d) => [d.name, `rp-${id()}`]));
   const s = await send<Session>("POST", "/sessions", { name: `Replay ${rec.scene ?? rec.id}`,
-    streams: [{ sid, wid: sid, drone: rec.sid, mission: rec.mission, recording: rec.id, loop: true }] });
+    replays: [{ recording: rec.id, wid: `rw-${id()}`, sids, mission: rec.mission, loop: true }] });
   await send("POST", `/sessions/${s.id}/start`);
   return s.id;
 }
