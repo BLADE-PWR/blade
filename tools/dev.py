@@ -32,6 +32,11 @@ def pump(name: str, color: str, stream) -> None:
         print(f"\033[{color}m{name:>9}\033[0m | {text}", flush=True)
 
 
+# Children get their own process group, so Ctrl+C reaches only this script, which then stops them in order:
+# services first, NATS last (start_new_session does that on Linux and macOS, but Windows ignores it).
+OWN_GROUP = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt" else {"start_new_session": True}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--model", default="arma_detector_v1@1", help="model id, or 'oracle'")
@@ -59,7 +64,7 @@ def main() -> int:
         store.mkdir(parents=True, exist_ok=True)
         conf = ROOT / "state" / "nats.conf"  # the compose config with a local JetStream folder
         conf.write_text((ROOT / "deploy" / "nats.conf").read_text().replace("/data/jetstream", store.as_posix()))
-        procs.append(("nats", subprocess.Popen([nats, "-c", str(conf)], start_new_session=True,
+        procs.append(("nats", subprocess.Popen([nats, "-c", str(conf)], **OWN_GROUP,
                                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)))
         for _ in range(50):
             if port_open(4222):
@@ -73,8 +78,7 @@ def main() -> int:
             if copies > 1:
                 label = f"{name}{k + 1}"
                 extra = {"INSTANCE": label, "PORT": str(8003 if k == 0 else 8100 + k)}
-            # own session: Ctrl+C reaches only this script, which stops services first, NATS last
-            procs.append((label, subprocess.Popen([str(exe)], env={**env, **extra}, cwd=ROOT, start_new_session=True,
+            procs.append((label, subprocess.Popen([str(exe)], env={**env, **extra}, cwd=ROOT, **OWN_GROUP,
                                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT)))
     for i, (name, p) in enumerate(procs):
         threading.Thread(target=pump, args=(name, COLORS[i % len(COLORS)], p.stdout), daemon=True).start()
@@ -82,10 +86,7 @@ def main() -> int:
     def stop(*_):
         for _, p in reversed(procs):
             if p.poll() is None:
-                if os.name == "nt":  # Windows: no SIGINT for child processes
-                    subprocess.run(["taskkill", "/T", "/F", "/PID", str(p.pid)], capture_output=True)
-                else:
-                    p.send_signal(signal.SIGINT)
+                p.send_signal(signal.CTRL_BREAK_EVENT if os.name == "nt" else signal.SIGINT)  # a clean shutdown
                 try:
                     p.wait(8)
                 except subprocess.TimeoutExpired:
