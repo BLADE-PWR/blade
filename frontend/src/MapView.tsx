@@ -188,7 +188,8 @@ function drawTruth(group: L.LayerGroup, w: WorldView): void {
     const match = t.oid ? w.objects.get(t.oid) : undefined;
     if (match) L.polyline([ll(t.xy), ll(match.xy)], { color: "#ffffff", weight: 1, dashArray: "3 3" }).addTo(group);
     const html = t.err_m === undefined ? "" : `<span class="sym-label">${t.err_m.toFixed(0)} m</span>`;
-    L.marker(ll(t.xy), { interactive: false, icon: L.divIcon({ className: "truth", iconSize: [14, 14], html }) })
+    const className = t.in_view === false ? "truth unseen" : "truth";
+    L.marker(ll(t.xy), { interactive: false, icon: L.divIcon({ className, iconSize: [14, 14], html }) })
       .addTo(group);
   }
 }
@@ -262,9 +263,19 @@ export function MapView(props: Props) {
   const [vectors] = useState(() => L.layerGroup());
   const [layers, setLayers] = useState<Layers>({ drones: true, motion: true, uncertainty: true, truth: false });
   const [showLayers, setShowLayers] = useState(false);
+  const layersBox = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [centredOn, setCentredOn] = useState<string | undefined>(); // the map the view was last centred on
   const [, setMoved] = useState(0);
+
+  useEffect(() => { // the layer list closes on a click anywhere else (the map too)
+    if (!showLayers) return;
+    const away = (e: PointerEvent) => {
+      if (!layersBox.current?.contains(e.target as Node)) setShowLayers(false);
+    };
+    addEventListener("pointerdown", away);
+    return () => removeEventListener("pointerdown", away);
+  }, [showLayers]);
   const world = shownWorld(sit, focus); // the focused drone's: one map, and only its objects
   const mapId = world.map ?? undefined; // none until a world has reported
 
@@ -354,7 +365,7 @@ export function MapView(props: Props) {
           from the centre
         </span>
       )}
-      <div className="map-layers">
+      <div className="map-layers" ref={layersBox}>
         <button aria-expanded={showLayers} onClick={() => setShowLayers(!showLayers)}>Layers</button>
         {showLayers && (
           <div className="map-layer-list">

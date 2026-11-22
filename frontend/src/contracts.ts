@@ -66,7 +66,8 @@ export type Alert = {
   state: "active" | "cleared";
 };
 
-export type TruthMatch = { truth_id: number; grp: string; xy: Vec2; oid?: string; err_m?: number };
+// in_view false: no drone sees it (drawn faint, not scored)
+export type TruthMatch = { truth_id: number; grp: string; xy: Vec2; oid?: string; err_m?: number; in_view?: boolean };
 
 export type EvalData = { truth: TruthMatch[] };
 

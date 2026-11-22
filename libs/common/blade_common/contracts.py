@@ -211,6 +211,7 @@ class TruthMatch(BaseModel):
     xy: Vec2
     oid: str | None = None
     err_m: float | None = None
+    in_view: bool = True  # False: no drone sees it; shown on the map, not scored
 
 
 class GroupEval(BaseModel):
@@ -224,7 +225,8 @@ class GroupEval(BaseModel):
 class EvalData(BaseModel):
     window_s: float
     groups: dict[str, GroupEval]
-    truth: list[TruthMatch] = Field(description="true positions of objects in view, with their world match")
+    truth: list[TruthMatch] = Field(description="true positions of every known object: the ones in view with their "
+                                    "world match, the others with in_view false")
     false_objects: list[str] = Field(default_factory=list, description="active world objects with no truth nearby")
 
 

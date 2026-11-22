@@ -28,6 +28,10 @@ def test_truth_in_view_and_cep():
     st.footprint = [[0, 0], [20, 0], [20, 20], [0, 20]]
     assert st.in_view(12) == [(1, "soldier", (5.0, 5.0))]
     assert st.in_view(9) == []  # no truth at or before frame 9
+    assert st.known(12) == [(1, "soldier", (5.0, 5.0)), (2, "military_vehicle", (50.0, 50.0))]  # out of view too
+    st.spawn({"id": 4, "cls": "tracked_vehicle"})  # how the game names tanks
+    st.gt({"frame": 13, "objs": [[4, [7, 7, 0], 0, [0, 0, 0], ""]]})
+    assert st.in_view() == [(4, "tank", (7.0, 7.0))]
     assert inside(st.footprint, 10, 10) and not inside(st.footprint, 30, 10)
     assert cep([1, 2, 3, 4, 100]) == (3.0, 61.6)
     ev = WorldEval("w")

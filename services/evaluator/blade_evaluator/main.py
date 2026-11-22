@@ -127,9 +127,12 @@ class Evaluator:
         sids = [s for s, w in self.sid_wid.items() if w == wid]
         # streams of one world film one game: an object in view of two drones counts once
         seen: dict[int, tuple] = {}
+        everywhere: dict[int, tuple] = {}  # also out of view: drawn on the map, not scored
         footprints = []
         for sid in sids:
             st = self.truth[sid]
+            for tid, grp, xy in st.known():
+                everywhere[tid] = (grp, xy)
             for tid, grp, xy in st.in_view():
                 seen[tid] = ((sid, tid), grp, xy)
             if st.footprint:
@@ -159,6 +162,8 @@ class Evaluator:
             mine = [x for x in out if x["grp"] == grp]
             groups[grp] = {**summ.get(grp, {"n": 0}), "detected": sum(x["oid"] is not None for x in mine),
                            "in_view": len(mine)}
+        out += [{"truth_id": tid, "grp": grp, "xy": xy, "in_view": False}
+                for tid, (grp, xy) in everywhere.items() if tid not in seen]
         data = EvalData.model_validate({"window_s": WINDOW_S, "groups": groups, "truth": out, "false_objects": false})
         await publish(self.nc, f"eval.{wid}", Envelope(wid=wid, ts={"evaluator": [t, time.time()]},
                                                          data=data.model_dump(exclude_none=True)))

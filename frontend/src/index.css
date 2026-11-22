@@ -658,6 +658,10 @@ button.danger {
     linear-gradient(#fff, #fff) center / 100% 2px no-repeat;
 }
 
+.truth.unseen {
+  opacity: 0.35; /* no drone sees it */
+}
+
 .bottombar {
   display: flex;
   flex-wrap: wrap;
