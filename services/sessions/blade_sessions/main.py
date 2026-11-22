@@ -61,7 +61,7 @@ def _rec_dir(rid: str) -> Path:
 
 @app.get("/health")
 async def health():
-    return {"ok": True, "recordings": str(ROOT), "recording": len(recorder.active), "replays": len(replays)}
+    return {"ok": True, "recordings": str(ROOT), "recording": len(recorder.missions), "replays": len(replays)}
 
 
 @app.get("/recordings")

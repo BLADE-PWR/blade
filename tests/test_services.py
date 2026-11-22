@@ -743,3 +743,10 @@ def test_the_live_missions_list_their_maps_and_drones():
     (m1, m2) = ws.missions()
     assert m1["mission"] == "m1" and sorted(w["map"] for w in m1["worlds"]) == ["altis", "stratis"]
     assert m2["mission"] == "m2" and list(m2["worlds"][0]["drones"].values()) == ["uav1"]
+
+
+async def test_sessions_health_and_active_recordings_answer():
+    from blade_sessions import main as sm
+
+    assert (await sm.health())["ok"]
+    assert (await sm.active())["active"] == []

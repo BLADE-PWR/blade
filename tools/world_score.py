@@ -35,17 +35,17 @@ def capture(args) -> int:
 
         rec = httpx.get(f"{args.gateway}/api/recordings/{args.recording}", timeout=10)
         rec.raise_for_status()
-        sids = {d["name"]: f"{args.sid}-{k}" for k, d in enumerate(rec.json()["drones"])}  # every drone of it
+        sids = {d["name"]: f"{args.wid}-{k}" for k, d in enumerate(rec.json()["drones"])}  # every drone of it
         for sid in sids.values():
             for s in (f"geo.{sid}", f"truth.{sid}"):
                 await nc.subscribe(s, cb=on)
         r = httpx.post(f"{args.gateway}/api/replays", timeout=10,
-                       json={"recording": args.recording, "wid": args.sid, "sids": sids})
+                       json={"recording": args.recording, "wid": args.wid, "sids": sids})
         r.raise_for_status()
         dur = r.json()["duration_s"]
-        print(f"replaying {args.recording} into {args.sid} ({', '.join(sids)}): {dur:.0f} s")
+        print(f"replaying {args.recording} into {args.wid} ({', '.join(sids)}): {dur:.0f} s")
         await asyncio.sleep(dur + 3)
-        httpx.delete(f"{args.gateway}/api/replays/{args.sid}", timeout=10)
+        httpx.delete(f"{args.gateway}/api/replays/{args.wid}", timeout=10)
         await nc.drain()
         out.close()
 
@@ -139,7 +139,8 @@ def main() -> int:
     c = sub.add_parser("capture")
     c.add_argument("recording")
     c.add_argument("out")
-    c.add_argument("--sid", default=f"score-{int(time.time()) % 100000}")
+    c.add_argument("--wid", default=f"score-{int(time.time()) % 100000}",
+                   help="the replay's world id; its drones play as <wid>-0, <wid>-1, ...")
     c.add_argument("--gateway", default="http://127.0.0.1:8000")
     s = sub.add_parser("score")
     s.add_argument("file")

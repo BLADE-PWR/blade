@@ -2,9 +2,10 @@
 
 Server side of a drone ISR system built on Arma 3. An Arma PC plays the drone: it sends one MPEG-TS
 stream (H.264 + one telemetry packet per frame). The server detects objects in the video, places them
-on the map, fuses them into one world picture and raises attention cues for the operator.
+on the map, fuses the drones of one mission into one world picture and raises attention cues for the operator.
 
-Services talk over NATS, keyed by `(stream_id, frame)`. REST is only for control.
+Services talk over NATS, keyed by stream id (`sid`) and frame. REST is for control and for reading what is there
+when a client starts; every change after that travels on the bus.
 
 ![Architecture](docs/architecture.png)
 
@@ -16,7 +17,7 @@ Each service has its own README with its API.
 |---|---|---|
 | [uplink](services/uplink/README.md) | (Arma PC) | Captures the game screen, pairs each frame with telemetry, sends MPEG-TS |
 | [ingest](services/ingest/README.md) | 8001, 9000, 9100/udp | Receives video and sim truth, publishes decoded frames |
-| [sessions](services/sessions/README.md) | 8002 | Records streams, imports recordings, replays them |
+| [sessions](services/sessions/README.md) | 8002 | Records live missions, imports recordings, replays them |
 | [detector](services/detector/README.md) | 8003 | YOLO (ONNX Runtime) + BoT-SORT tracking per stream |
 | [georef](services/georef/README.md) | 8004 | Projects each box onto the terrain |
 | [world](services/world/README.md) | 8005 | Fuses per-stream tracks into map objects |
@@ -40,25 +41,33 @@ Every message is one envelope (`v`, `sid`, `frame`, `wid`, `ts`, `data`). Payloa
 | `world.<wid>.objects`, `world.<wid>.events` | world | fused objects, events (explosions) |
 | `alerts.<wid>` | decision | active alerts |
 | `eval.<wid>` | evaluator | CEP and detection rate |
-| `worlds.<wid>` | ingest | a world started or a drone joined it: its mission, map and drone names |
+| `worlds.<wid>` | ingest | a world started, a drone joined it, or it ended: its mission, map and drone names |
 | `diag.<service>` | all | per-stream fps, latency, drops |
 
-`sid` is a stream (one drone), `wid` is a world (streams in the same world are fused together). Both are ids
-ingest picks (`d-3f2a9c`, `w-81b0e4`); people pick names. A live world is one mission on one map: drones started
-with the same `--mission` on the same map share it, and a drone on another map gets that map's world. A drone keeps
-its `sid` when its uplink reconnects; a second uplink with a `--drone` name already flying gets `uav1-2`. A replay
-plays under new ids of its own, so it never mixes with the live mission it was recorded in. A live world ends when
-none of its drones has sent a frame for `EXPIRE_S` (600 s, when its objects have all expired anyway) or when the
-operator presses Stop mission; every service then drops it, and the next drone starts a new one, with new ids. Alert
-rules belong to the mission and a drone's model and threshold to the drone, so both carry over. The names travel in every
-frame's telemetry (`tel.drone`, `tel.mission`) and in `worlds.<wid>`, and the frontend shows those.
+### Missions, worlds and drones
+
+People pick names, the backend picks ids:
+
+- `--mission` and `--drone` on the uplink are names. They travel in every frame's telemetry (`tel.mission`,
+  `tel.drone`) and in `worlds.<wid>`, and the frontend shows them.
+- `wid` (a world, e.g. `w-81b0e4`) and `sid` (a drone's stream, e.g. `d-3f2a9c`) are ids ingest picks
+  ([ingest](services/ingest/README.md)). The drones of one world are fused together.
+- A live world is one mission on one map: drones started with the same `--mission` on the same map share it, a
+  drone on another map gets that map's world. A drone keeps its `sid` when its uplink reconnects; a second uplink
+  with a `--drone` name already flying is shown as `uav1-2`.
+- A live world ends when none of its drones has sent a frame for `EXPIRE_S` (600 s, when its objects have all
+  expired anyway) or when the operator presses Stop mission. Every service then drops it, its recording is
+  finalized, and the next drone starts a new one with new ids. Alert rules belong to the mission and a drone's model
+  and threshold to the drone, so both carry over.
+- A world is recorded as one mission recording, every drone of it ([sessions](services/sessions/README.md)). A
+  replay plays it back under new ids, into a world of its own, so it never mixes with the live mission.
 
 ## Frontend
 
 [frontend](frontend/README.md) is a React + TypeScript app (Vite) that talks only to the gateway: REST for control, the
 WebSocket for live data. In dev, Vite forwards `/api`, `/sessions`, `/detectors`, `/streams` and `/ws` to
-the gateway on `127.0.0.1:8000` (`GATEWAY_URL` for another machine). It has the session picker, the drones'
-video with boxes and the map. How to draw object motion (arrows, prediction cones): `services/world/README.md`.
+the gateway on `127.0.0.1:8000` (`GATEWAY_URL` for another machine). It has the picker (live missions, recordings,
+replay sessions), the drones' video with boxes and the map. How to draw object motion (arrows, prediction cones): `services/world/README.md`.
 
 ## Run
 
@@ -78,8 +87,8 @@ uv run python tools/dev.py --model oracle
 recording's sim truth; for the real model, copy `best.onnx` to `models/arma_detector_v1/model.onnx` and
 leave out `--model`.
 
-Watch in the browser (Node.js 22+): start the frontend, open http://localhost:5173 and pick a recording to replay
-or a live stream:
+Watch in the browser (Node.js 22+): start the frontend, open http://localhost:5173 and pick a live mission or a
+recording to replay:
 ```bash
 cd frontend && npm install && npm run dev
 ```
