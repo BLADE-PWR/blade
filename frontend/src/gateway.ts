@@ -47,7 +47,7 @@ function wsUrl(target: { session: string } | { mission: string }): string {
 export type Handlers = {
   onMessage: (m: Message) => void;
   onFrame: (f: Frame) => void;
-  onClose: (reason: string) => void;
+  onClose: (reason: string, code: number) => void;
 };
 
 export async function getJSON<T>(path: string): Promise<T> {
@@ -84,7 +84,7 @@ export function connect(target: { session: string } | { mission: string }, h: Ha
     if (typeof e.data === "string") h.onMessage(JSON.parse(e.data) as Message);
     else h.onFrame(parseFrame(e.data));
   };
-  ws.onclose = (e) => h.onClose(e.reason || `closed (${e.code})`);
+  ws.onclose = (e) => h.onClose(e.reason || `closed (${e.code})`, e.code);
   return () => {
     ws.onclose = null;
     ws.close();

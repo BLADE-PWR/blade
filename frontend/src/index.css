@@ -54,14 +54,10 @@ button:disabled {
   background: #2a1615;
 }
 
-.pick {
+.crash {
   max-width: 1200px;
   margin: 0 auto;
   padding: 16px;
-}
-
-.pick label {
-  margin-right: 12px;
 }
 
 /* top bar */
@@ -84,10 +80,6 @@ button:disabled {
 
 .brand {
   font-size: 15px;
-  font-weight: 700;
-  padding: 2px 4px;
-  border: none;
-  background: none;
 }
 
 .switch {

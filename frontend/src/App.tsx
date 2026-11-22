@@ -1,9 +1,8 @@
-// The start page, the live connection and the top bar shared by both views.
-import { type FormEvent, useEffect, useState } from "react";
+// The live connection and the top bar shared by both views: Live with a mission dropdown, Replay with a recording one.
+import { useEffect, useState } from "react";
 
 import { Command } from "./Command";
-import type { Alert, LiveMission, Recording, Replay, Session } from "./contracts";
-import { recordingName } from "./format";
+import type { Alert, LiveMission, Recording, Replay } from "./contracts";
 import { connect, getJSON, send, startReplay, type Target } from "./gateway";
 import { Operator } from "./Operator";
 import { RecordingSelect, ReplayBar } from "./Replay";
@@ -17,13 +16,49 @@ const MISSIONS_POLL_MS = 3000;
 export type View = "operator" | "command";
 export type MainPanel = "video" | "map";
 
+/** What the address says is watched (#mission=, #session=, #replay), so a reload comes back to it; else Live. */
+function fromAddress(): Target {
+  const h = new URLSearchParams(location.hash.slice(1));
+  const mission = h.get("mission");
+  const session = h.get("session");
+  if (mission) return { mission };
+  if (session) return { session };
+  return { choose: h.has("replay") ? "replay" : "live" };
+}
+
+function toAddress(t: Target): string {
+  if ("mission" in t) return `#mission=${encodeURIComponent(t.mission)}`;
+  if ("session" in t) return `#session=${encodeURIComponent(t.session)}`;
+  return t.choose === "replay" ? "#replay" : "";
+}
+
+/** A choice this browser remembers (the view, the main panel), or fallback if none or storage is blocked. */
+function remembered<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
+  try {
+    const v = localStorage.getItem(key);
+    return allowed.includes(v as T) ? (v as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function remember(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // storage blocked (private window): the choice lasts until the reload
+  }
+}
+
 export function App() {
-  const [target, setTarget] = useState<Target | null>(null);
+  const [target, setTarget] = useState<Target>(fromAddress);
   // kept across missions, recordings and Live / Replay, which each start a new Live
-  const [view, setView] = useState<View>("operator");
-  const [main, setMain] = useState<MainPanel>("video");
-  if (!target) return <Pick onPick={setTarget} />;
-  return <Live key={JSON.stringify(target)} target={target} onPick={setTarget} onLeave={() => setTarget(null)}
+  const [view, setView] = useState<View>(() => remembered("blade.view", ["operator", "command"], "operator"));
+  const [main, setMain] = useState<MainPanel>(() => remembered("blade.main", ["video", "map"], "video"));
+  useEffect(() => remember("blade.view", view), [view]);
+  useEffect(() => remember("blade.main", main), [main]);
+  useEffect(() => history.replaceState(null, "", location.pathname + location.search + toAddress(target)), [target]);
+  return <Live key={JSON.stringify(target)} target={target} onPick={setTarget}
     view={view} onView={setView} main={main} onMain={setMain} />;
 }
 
@@ -55,96 +90,16 @@ function MissionSelect({ current, onPick }: { current: string | null; onPick: (m
   );
 }
 
-function Pick({ onPick }: { onPick: (t: Target) => void }) {
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [recordings, setRecordings] = useState<Recording[]>([]);
-  const [missions, setMissions] = useState<LiveMission[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [mission, setMission] = useState("");
-
-  useEffect(() => {
-    Promise.all([getJSON<Session[]>("/sessions"), getJSON<Recording[]>("/api/recordings")])
-      .then(([s, r]) => {
-        setSessions(s);
-        setRecordings(r);
-      })
-      .catch((e: Error) => setError(`Gateway unreachable (${e.message}). Is tools/dev.py running?`));
-    const live = () => getJSON<LiveMission[]>("/api/missions").then(setMissions).catch(() => setMissions([]));
-    live();
-    const timer = setInterval(live, MISSIONS_POLL_MS); // missions start and end while the picker is open
-    return () => clearInterval(timer);
-  }, []);
-
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    if (mission.trim()) onPick({ mission: mission.trim() });
-  };
-  const replay = (rec: Recording) => {
-    setError(null);
-    startReplay(rec).then((id) => onPick({ session: id }))
-      .catch((e: Error) => setError(`Cannot start the replay (${e.message}).`));
-  };
-
-  return (
-    <main className="pick">
-      <h1>Blade</h1>
-      {error && <p className="error">{error}</p>}
-      <h2>Live missions</h2>
-      {missions.length === 0 && !error && <p>No drone is flying now.</p>}
-      <ul>
-        {missions.map((m) => (
-          <li key={m.mission}>
-            <button onClick={() => onPick({ mission: m.mission })}>Watch</button> {m.mission}:{" "}
-            {m.worlds.map((w) => `${w.map} (${Object.values(w.drones).join(", ")})`).join("; ")}
-          </li>
-        ))}
-      </ul>
-      <form onSubmit={submit}>
-        <label>or a mission by name <input value={mission} placeholder="uplink --mission"
-          onChange={(e) => setMission(e.target.value)} />
-        </label>
-        <button type="submit">Connect</button>{" "}
-        <span className="muted">(also before its first drone flies)</span>
-      </form>
-      <h2>Sessions</h2>
-      {sessions.length === 0 && !error && <p>No sessions on the gateway yet.</p>}
-      <ul>
-        {sessions.map((s) => (
-          <li key={s.id}>
-            <button onClick={() => onPick({ session: s.id })}>{s.name}</button> {s.state},{" "}
-            {s.replays.map((r) => `${r.recording}: ${Object.keys(r.sids).join(", ")}`).join("; ")}
-          </li>
-        ))}
-      </ul>
-      <h2>Recordings</h2>
-      {recordings.length === 0 && !error && <p>No recordings on the server.</p>}
-      <ul>
-        {recordings.map((r) => (
-          <li key={r.id}>
-            <button onClick={() => replay(r)} disabled={r.recording}
-              title={r.recording ? "Still recording: it can be replayed once it has ended" : undefined}>
-              Replay
-            </button>{" "}
-            {recordingName(r)}
-            {r.has_truth === false && ", without true positions"}
-          </li>
-        ))}
-      </ul>
-    </main>
-  );
-}
-
 type LiveProps = {
   target: Target;
   onPick: (t: Target) => void;
-  onLeave: () => void;
   view: View;
   onView: (v: View) => void;
   main: MainPanel;
   onMain: (p: MainPanel) => void;
 };
 
-function Live({ target, onPick, onLeave, view, onView: setView, main, onMain: setMain }: LiveProps) {
+function Live({ target, onPick, view, onView: setView, main, onMain: setMain }: LiveProps) {
   const [sit] = useState(emptySituation);
   const [, setTick] = useState(0);
   const [closed, setClosed] = useState<string | null>(null);
@@ -178,7 +133,10 @@ function Live({ target, onPick, onLeave, view, onView: setView, main, onMain: se
         addPreview(sit, f);
         redraw();
       },
-      onClose: setClosed,
+      onClose: (reason, code) => {
+        if (code === 4404) onPick({ choose: "replay" }); // the replay session ended (nobody watched it for a while)
+        else setClosed(reason);
+      },
     });
     const clock = setInterval(redraw, CLOCK_MS);
     return () => {
@@ -187,7 +145,7 @@ function Live({ target, onPick, onLeave, view, onView: setView, main, onMain: se
       cancelAnimationFrame(frame);
       dispose(sit);
     };
-  }, [sit, target]);
+  }, [sit, target, onPick]);
 
   const now = Date.now() / 1000;
   // every drone seen so far, in the order they joined; in a replay not the ones that join only later on its timeline
@@ -215,7 +173,7 @@ function Live({ target, onPick, onLeave, view, onView: setView, main, onMain: se
   return (
     <div className="live">
       <header className="topbar">
-        <button className="brand" onClick={onLeave} title="Back to the start page">Blade</button>
+        <strong className="brand">Blade</strong>
         <div className="switch" role="group" aria-label="View">
           <button aria-pressed={view === "operator"} onClick={() => setView("operator")}>Operator</button>
           <button aria-pressed={view === "command"} onClick={() => setView("command")}>Command</button>

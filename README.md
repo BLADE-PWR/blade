@@ -66,8 +66,8 @@ People pick names, the backend picks ids:
 
 [frontend](frontend/README.md) is a React + TypeScript app (Vite) that talks only to the gateway: REST for control, the
 WebSocket for live data. In dev, Vite forwards `/api`, `/sessions`, `/detectors`, `/streams` and `/ws` to
-the gateway on `127.0.0.1:8000` (`GATEWAY_URL` for another machine). It has the picker (live missions, recordings,
-replay sessions), the drones' video with boxes and the map. How to draw object motion (arrows, prediction cones): `services/world/README.md`.
+the gateway on `127.0.0.1:8000` (`GATEWAY_URL` for another machine). Its top bar switches between Live (a dropdown of
+the running missions) and Replay (a dropdown of the recordings); below are the drones' video with boxes and the map. How to draw object motion (arrows, prediction cones): `services/world/README.md`.
 
 ## Run
 
