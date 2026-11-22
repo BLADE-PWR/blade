@@ -58,6 +58,11 @@ export function App() {
   useEffect(() => remember("blade.view", view), [view]);
   useEffect(() => remember("blade.main", main), [main]);
   useEffect(() => history.replaceState(null, "", location.pathname + location.search + toAddress(target)), [target]);
+  useEffect(() => { // a link pasted into this tab changes only the hash: the browser does not reload, so follow it here
+    const follow = () => setTarget(fromAddress());
+    addEventListener("hashchange", follow);
+    return () => removeEventListener("hashchange", follow);
+  }, []);
   return <Live key={JSON.stringify(target)} target={target} onPick={setTarget}
     view={view} onView={setView} main={main} onMain={setMain} />;
 }
@@ -226,6 +231,7 @@ function Live({ target, onPick, view, onView: setView, main, onMain: setMain }: 
       {error && <p className="error banner">{error}</p>}
       {replay && sit.session && (
         <ReplayBar session={sit.session} onSwitch={(id) => onPick({ session: id })}
+          onGone={() => onPick({ choose: "replay" })}
           onSeek={(delta, playing) => seek(sit, all, delta, playing)} onState={setReplays} />
       )}
       {"choose" in target && (

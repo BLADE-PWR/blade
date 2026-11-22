@@ -62,11 +62,9 @@ export async function send<T>(method: "POST" | "PUT" | "PATCH", path: string, bo
   return (await r.json()) as T;
 }
 
-/** -> the session replaying rec: the running one that already does, else a new one. */
+/** -> a new session replaying rec, started: always its own, so nobody else's replay is touched (a session is
+ * shared only by its link, #session=). */
 export async function startReplay(rec: Recording): Promise<string> {
-  const running = (await getJSON<Session[]>("/sessions")).find((s) => s.state === "running"
-    && s.replays.length === 1 && s.replays[0].recording === rec.id);
-  if (running) return running.id;
   // new ids each time, so it never mixes with the live mission or another replay; the UI shows the recorded names
   const id = () => Math.random().toString(16).slice(2, 8);
   const sids = Object.fromEntries(rec.drones.map((d) => [d.name, `rp-${id()}`]));

@@ -23,9 +23,10 @@ type Props = {
   onSwitch: (sessionId: string) => void;
   onSeek: (deltaS: number, playing: Set<string>) => void; // playing: the drones with a segment at the target
   onState: (replays: Replay[]) => void;
+  onGone: () => void; // the session has no replay any more (stopped, deleted, or the server restarted)
 };
 
-export function ReplayBar({ session, onSwitch, onSeek, onState }: Props) {
+export function ReplayBar({ session, onSwitch, onSeek, onState, onGone }: Props) {
   /** Note how the replays are now; a jump this tab did not see coming (a loop, a seek from another tab, Play at the
    * end starting over) clears what the drones show, like a jump made here. */
   const update = (rs: Replay[], ownJump = false) => {
@@ -46,6 +47,8 @@ export function ReplayBar({ session, onSwitch, onSeek, onState }: Props) {
   const [, setTick] = useState(0);
   const seekRef = useRef(onSeek);
   seekRef.current = onSeek; // the latest: it knows every drone shown now
+  const goneRef = useRef(onGone);
+  goneRef.current = onGone;
 
   useEffect(() => {
     let stopped = false;
@@ -54,6 +57,10 @@ export function ReplayBar({ session, onSwitch, onSeek, onState }: Props) {
       .then((all) => {
         if (stopped) return;
         const rs = all.filter((r) => mine.includes(r.wid));
+        if (rs.length === 0) {
+          goneRef.current();
+          return;
+        }
         update(rs);
         readAt.current = performance.now();
         setReplays(rs);
@@ -107,13 +114,11 @@ export function ReplayBar({ session, onSwitch, onSeek, onState }: Props) {
     void jump(value - now(first)).finally(() => setDraft(null)); // until the reply, show where it goes
   };
   const position = draft ?? now(first);
+  // a new session of its own; the one left is not stopped (others may watch it): the gateway pauses it when nobody
+  // does, and deletes it after a while
   const switchTo = (rec: Recording) => {
     startReplay(rec)
-      .then(async (id) => {
-        if (id === session.id) return; // already playing it
-        await send("POST", `/sessions/${session.id}/stop`);
-        onSwitch(id);
-      })
+      .then(onSwitch)
       .catch((e: Error) => setError(`Cannot switch to ${rec.scene ?? rec.id} (${e.message}).`));
   };
 

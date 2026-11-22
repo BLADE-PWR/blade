@@ -37,11 +37,12 @@ Open http://localhost:5173. In live mode (the default), pick a mission in the to
 `--mission`) to watch every drone in it, on every map,
 including ones that join later. Drones are shown by their names (`--drone`). In the Command view, Stop mission
 ends it now instead of after 10 minutes without frames: its map, objects and alerts are cleared and its recordings
-closed; drones still flying start it afresh. Or switch to Replay and pick a recording: that opens the running session
-already replaying it, or creates and starts one with a looping replay of every drone in it (a recording is a whole mission on one map), on
+closed; drones still flying start it afresh. Or switch to Replay and pick a recording: that creates and starts a session of your own with a looping replay of every drone in it (a recording is a whole mission on one map), on
 one timeline (under new ids, so it never mixes
-with the live mission or other replays). Replay
-sessions are shared: every tab on one sees, and controls, the same playback. In the top bar, Live and Replay switch without leaving the views: Live shows a dropdown of the live missions, Replay one of the recordings; Operator / Command and Map / Video stay as they are. The address keeps what is watched
+with the live mission or other replays). A replay
+is yours unless you share its link (`#session=` in the address): everyone on it sees, and controls, the same playback.
+Picking another recording, or Live, leaves the session without stopping it; the gateway pauses it when nobody watches
+it and deletes it after 30 s. If its replay is gone, the bar goes back to choosing a recording. In the top bar, Live and Replay switch without leaving the views: Live shows a dropdown of the live missions, Replay one of the recordings; Operator / Command and Map / Video stay as they are. The address keeps what is watched
 (`#mission=`, `#session=`, `#replay`), so a reload comes back to it. The dev server listens on all interfaces, so other
 devices on the LAN open http://<server-ip>:5173 (port 5173 must be open in the firewall).
 
