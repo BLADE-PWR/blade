@@ -3,8 +3,6 @@ import { useEffect, useState } from "react";
 
 import type { MainPanel } from "./App";
 import type { Alert, Vec2 } from "./contracts";
-import { GROUPS, nameOf } from "./classes";
-import { loadWeights, MAX_WEIGHT, saveWeights, type Weights, weightOf } from "./force";
 import { getJSON, send } from "./gateway";
 import { AlertList } from "./Lists";
 import { type Background, MapView } from "./MapView";
@@ -43,11 +41,6 @@ export function Command({ sit, sids, sid, main, onMain, onDrone, onOperator }: P
   const [centre, setCentre] = useState<{ xy: Vec2; at: number } | null>(null);
   const [layer, setLayer] = useState<Background>("auto");
   const [settings, setSettings] = useState(false);
-  const [weights, setWeights] = useState<Weights>(loadWeights);
-  const changeWeights = (w: Weights) => {
-    setWeights(w);
-    saveWeights(w);
-  };
   const now = Date.now() / 1000;
   const alerts = allAlerts(sit);
   const alert = alerts.find((a) => a.aid === alertId) ?? null;
@@ -65,8 +58,7 @@ export function Command({ sit, sids, sid, main, onMain, onDrone, onOperator }: P
   };
   const map = (
     <MapView sit={sit} focus={sid} selected={selected} onSelect={setSelected} centre={centre} alert={alert}
-      filter={ALL} overview layer={layer} weights={weights}
-      onExpand={main === "video" ? () => onMain("map") : undefined} />
+      filter={ALL} overview layer={layer} onExpand={main === "video" ? () => onMain("map") : undefined} />
   );
 
   if (main === "video") {
@@ -75,8 +67,7 @@ export function Command({ sit, sids, sid, main, onMain, onDrone, onOperator }: P
         <aside className="side-col">
           <section className="panel map-panel" aria-label="Overview map">{map}</section>
           <StatePanel sit={sit} sid={sid} />
-          <Settings sit={sit} drone={drone} layer={layer} onLayer={setLayer} weights={weights}
-            onWeights={changeWeights} />
+          <Settings sit={sit} drone={drone} layer={layer} onLayer={setLayer} />
         </aside>
         <div className="main-col">
           <div className="thumbs" role="group" aria-label="Drone choice">
@@ -137,8 +128,7 @@ export function Command({ sit, sids, sid, main, onMain, onDrone, onOperator }: P
           <AlertList alerts={alerts} picked={alert?.aid ?? null} onPick={pickAlert} now={worldNow(sit)} />
         </section>
         <ServiceLine sit={sit} drone={drone} onSettings={() => setSettings(!settings)} />
-        {settings && <Settings sit={sit} drone={drone} layer={layer} onLayer={setLayer} weights={weights}
-          onWeights={changeWeights} />}
+        {settings && <Settings sit={sit} drone={drone} layer={layer} onLayer={setLayer} />}
       </aside>
     </div>
   );
@@ -307,32 +297,9 @@ function ModelPicker({ sid }: { sid: string }) {
   );
 }
 
-type SettingsProps = {
-  sit: Situation;
-  drone?: Drone;
-  layer: Background;
-  onLayer: (l: Background) => void;
-  weights: Weights;
-  onWeights: (w: Weights) => void;
-};
+type SettingsProps = { sit: Situation; drone?: Drone; layer: Background; onLayer: (l: Background) => void };
 
-/** How much each class counts for the strength of a group and the density of forces on the map. */
-function WeightPicker({ weights, onWeights }: { weights: Weights; onWeights: (w: Weights) => void }) {
-  return (
-    <div className="weights">
-      {GROUPS.map((grp) => (
-        <label key={grp}>
-          {nameOf(grp)}
-          <input type="range" min="0" max={MAX_WEIGHT} step="1" value={weightOf(weights, grp)}
-            onChange={(e) => onWeights({ ...weights, [grp]: Number(e.target.value) })} />
-          <span className="mono">{weightOf(weights, grp)}</span>
-        </label>
-      ))}
-    </div>
-  );
-}
-
-function Settings({ sit, drone, layer, onLayer, weights, onWeights }: SettingsProps) {
+function Settings({ sit, drone, layer, onLayer }: SettingsProps) {
   const wid = drone?.wid ?? sit.session?.streams[0]?.wid; // the shown drone's world
   return (
     <section className="panel settings" aria-label="Settings">
@@ -349,11 +316,6 @@ function Settings({ sit, drone, layer, onLayer, weights, onWeights }: SettingsPr
           <button aria-pressed={layer === "hillshade"} onClick={() => onLayer("hillshade")}>Hillshade</button>
         </div>
       </div>
-      <div className="setting">
-        <span className="muted">Weights</span>
-        <WeightPicker weights={weights} onWeights={onWeights} />
-      </div>
-      <p className="muted setting-note">How much a class counts in the strength of a group and the density map.</p>
       <div className="setting">
         <span className="muted">Alerts</span>
         {wid ? <RulePicker wid={wid} /> : <span className="muted">waiting for a drone</span>}

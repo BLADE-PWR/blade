@@ -3,9 +3,9 @@ import L from "leaflet";
 import ms, { type Symbol as MilSymbol } from "milsymbol";
 import { useEffect, useRef, useState } from "react";
 
-import { colorOf, nameOf, SEVERITY_COLORS } from "./classes";
+import { colorOf, GROUPS, nameOf, SEVERITY_COLORS } from "./classes";
 import type { Alert, Cluster, Prediction, Vec2, WorldObject } from "./contracts";
-import { DEFAULT_WEIGHTS, MAX_WEIGHT, strength, type Weights, weightOf } from "./force";
+import { loadWeights, MAX_WEIGHT, saveWeights, strength, type Weights, weightOf } from "./force";
 import { getJSON } from "./gateway";
 import { type Drone, droneName, type Filter, type Situation, shownMap, visible, worldNow } from "./situation";
 
@@ -323,8 +323,24 @@ type Props = {
   filter: Filter;
   overview?: boolean;
   layer?: Background;
-  weights?: Weights;
 };
+
+/** How much each class counts in the strength of a group and in the density of forces. */
+function WeightPicker({ weights, onWeights }: { weights: Weights; onWeights: (w: Weights) => void }) {
+  return (
+    <div className="weights" role="group" aria-label="Class weights">
+      <span className="muted">Weight of a class</span>
+      {GROUPS.map((grp) => (
+        <label key={grp}>
+          {nameOf(grp)}
+          <input type="range" min="0" max={MAX_WEIGHT} step="1" value={weightOf(weights, grp)}
+            onChange={(e) => onWeights({ ...weights, [grp]: Number(e.target.value) })} />
+          <span className="mono">{weightOf(weights, grp)}</span>
+        </label>
+      ))}
+    </div>
+  );
+}
 
 function GroupPanel({ group, sit, weights, onClose }: { group: Cluster; sit: Situation; weights: Weights;
   onClose: () => void }) {
@@ -347,8 +363,7 @@ function GroupPanel({ group, sit, weights, onClose }: { group: Cluster; sit: Sit
 }
 
 export function MapView(props: Props) {
-  const { sit, focus, selected, onSelect, onExpand, centre, alert, filter, overview, layer = "auto",
-    weights = DEFAULT_WEIGHTS } = props;
+  const { sit, focus, selected, onSelect, onExpand, centre, alert, filter, overview, layer = "auto" } = props;
   const box = useRef<HTMLDivElement>(null);
   const markers = useRef<Markers>(new Map());
   const [map, setMap] = useState<L.Map | null>(null);
@@ -357,6 +372,11 @@ export function MapView(props: Props) {
   const [layers, setLayers] = useState<Layers>({ drones: true, motion: true, uncertainty: true, truth: false,
     groups: true, density: false });
   const [pickedGroup, setPickedGroup] = useState<string | null>(null);
+  const [weights, setWeights] = useState<Weights>(loadWeights);
+  const changeWeights = (w: Weights) => {
+    setWeights(w);
+    saveWeights(w);
+  };
   const [showLayers, setShowLayers] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [centredOn, setCentredOn] = useState<string | undefined>(); // the map the view was last centred on
@@ -471,6 +491,7 @@ export function MapView(props: Props) {
                 {name}
               </label>
             ))}
+            {(layers.groups || layers.density) && <WeightPicker weights={weights} onWeights={changeWeights} />}
           </div>
         )}
       </div>
