@@ -1,6 +1,6 @@
 """A replay pushes a recorded stream.ts into ingest (POST /push/{sid}) and its truth into the truth port
-under a new stream id; from ingest onwards it is a live stream. Pacing: realtime | max. Delivery:
-latest | all (every frame through every stage). Control: pause, speed, seek, step N frames."""
+under a new stream id; from ingest onwards it is a live stream. It is sent at its recorded pace (times the speed).
+Control: pause, speed, seek, step N frames, loop."""
 from __future__ import annotations
 
 import asyncio
@@ -31,8 +31,6 @@ class Replay:
     speed: float = 1.0
     loop: bool = False
     offset_s: float = 0.0
-    pacing: str = "realtime"
-    delivery: str = "latest"
     send_truth: bool = True
     state: str = "starting"
     position_s: float = 0.0
@@ -91,7 +89,7 @@ class Replay:
         return {"sid": self.sid, "recording": self.recording, "wid": self.wid, "state": self.state,
                 "position_s": round(self.position_s, 3), "duration_s": round(self.duration_s, 2),
                 "speed": self.speed, "paused": self.paused, "loop": self.loop, "loops": self.loops,
-                "pacing": self.pacing, "delivery": self.delivery, "error": self.error}
+                "error": self.error}
 
     def _send_truth(self, r: dict) -> None:
         msg = {"sid": self.sid, "kind": r["kind"], "t": time.time(), "rec": r["rec"], "wid": self.wid}
@@ -172,20 +170,17 @@ class Replay:
                     self.state = "playing"
                     i = self._chunk_at(byte)
                     t_media = self.times[i]
-                    if self.pacing == "realtime":
-                        if self.speed != speed0:  # changed while not sleeping, so no wake-up re-planned it
-                            clock0, media0, speed0 = time.monotonic(), t_media, self.speed
-                        delay = clock0 + (t_media - media0) / self.speed - time.monotonic()
-                        if delay > 0 and await self._sleep_or_wake(delay):
-                            clock0, media0 = time.monotonic(), self._time_at(byte)
-                            continue  # seek / pause / speed changed: re-plan
+                    if self.speed != speed0:  # changed while not sleeping, so no wake-up re-planned it
+                        clock0, media0, speed0 = time.monotonic(), t_media, self.speed
+                    delay = clock0 + (t_media - media0) / self.speed - time.monotonic()
+                    if delay > 0 and await self._sleep_or_wake(delay):
+                        clock0, media0 = time.monotonic(), self._time_at(byte)
+                        continue  # seek / pause / speed changed: re-plan
                     truth_until(t_media)
                     end = self.offsets[i] + self.index[i]["n"]
                     yield read(byte, end)
                     byte = end
                     self.position_s = t_media
-                if not self.loop and self.pacing == "max":  # a batch run: done
-                    break
                 if not self.loop:  # the end: paused like a player until a seek, Play (from the start) or Loop
                     self.paused, self.state = True, "paused"
                     while self.paused and self._seek is None and not self.loop:
@@ -200,7 +195,7 @@ class Replay:
 
     async def _run(self) -> None:
         url = f"{self.ingest_url}/push/{self.sid}"
-        params = {"wid": self.wid, "delivery": self.delivery}
+        params = {"wid": self.wid}
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(None, connect=5)) as client:
                 r = await client.post(url, params=params, content=self._body())

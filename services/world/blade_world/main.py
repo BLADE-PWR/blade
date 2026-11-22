@@ -1,4 +1,4 @@
-"""world-model: geo.<sid> -> world.<wid>.objects / .events (+ ack.<sid> for delivery "all"). Fusion is in
+"""world-model: geo.<sid> -> world.<wid>.objects / .events. Fusion is in
 fusion.py; streams of different worlds never merge. Unseen objects stay "stale" for EXPIRE_S. Each world runs on
 its own clock (clock.py): the wall clock live, the recording's time in a replay, published as WorldObjectsData.t.
 A world is on one map, set by the first drone that reports into it; drones on another map are left out (map
@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 
 from blade_common import ports
-from blade_common.bus import close, connect, decode, forward, jdump, now, publish
+from blade_common.bus import close, connect, decode, forward, now, publish
 from blade_common.contracts import Envelope, WorldEventsData, WorldObjectsData
 from blade_common.service import Diag, env_float, env_int, env_str, run_app
 
@@ -81,7 +81,6 @@ async def on_geo(msg) -> None:
     env, _ = decode(msg)
     wid = env.wid
     if not await on_map(wid, env.sid, env.data["map"], time.time()):
-        await ack(env)
         return
     w = world(wid)
     t, rewind = clocks[wid].frame(env.sid, env.ts.get("media"), t_in)
@@ -98,13 +97,6 @@ async def on_geo(msg) -> None:
     if events:
         data = WorldEventsData.model_validate({"events": events}).model_dump()
         await publish(state["nc"], f"world.{wid}.events", forward(env, data, "world", t_in))
-    await ack(env)
-
-
-async def ack(env: Envelope) -> None:
-    if env.delivery == "all" and env.frame is not None:
-        await state["nc"].publish(f"ack.{env.sid}", jdump({"v": 1, "sid": env.sid, "frame": env.frame,
-                                                           "data": {"frame": env.frame}}))
 
 
 async def sweep_once(wall: float) -> None:

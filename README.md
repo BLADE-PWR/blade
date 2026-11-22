@@ -40,7 +40,6 @@ Every message is one envelope (`v`, `sid`, `frame`, `wid`, `ts`, `data`). Payloa
 | `world.<wid>.objects`, `world.<wid>.events` | world | fused objects, events (explosions) |
 | `alerts.<wid>` | decision | active alerts |
 | `eval.<wid>` | evaluator | CEP and detection rate |
-| `ack.<sid>` | world | frame done (replays with `delivery: all`) |
 | `diag.<service>` | all | per-stream fps, latency, drops |
 
 `sid` is a stream (one drone), `wid` is a world (streams in the same world are fused together).

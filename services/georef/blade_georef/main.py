@@ -33,7 +33,7 @@ async def on_detections(msg) -> None:
     data = env.data
     name = data["tel"]["map"]
     pkg = packages.get(name)
-    if pkg is None:  # still published (no points), so the world sees the drone and replays get their ack
+    if pkg is None:  # still published (no points), so the world sees the drone
         if name not in missing:
             missing.add(name)
             log.warning("%s is on map %s, which has no package in %s: its detections are not placed",

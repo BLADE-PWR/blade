@@ -51,7 +51,6 @@ For any map client (the frontend does this, `frontend/src/MapView.tsx`):
 | subscribes | `geo.<sid>` |
 | publishes | `world.<wid>.objects`: changed objects, expired and forgotten ids, counts per group, the world's clock `t` |
 | publishes | `world.<wid>.events`: events such as explosions |
-| publishes | `ack.<sid>`: frame done, for replays with `delivery: all` |
 
 ## REST
 

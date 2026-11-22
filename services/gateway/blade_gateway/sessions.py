@@ -28,8 +28,6 @@ class StreamSpec(BaseModel):
     speed: float = 1.0
     loop: bool = False
     offset_s: float = 0.0
-    pacing: str = "realtime"
-    delivery: str = "latest"
 
 
 class SessionSpec(BaseModel):
@@ -124,7 +122,7 @@ class Orchestrator:
                 await self._call(c, s, "DELETE", "sessions", f"/replays/{st.sid}", ok404=True)
                 await self._call(c, s, "POST", "sessions", "/replays", json={
                     "recording": st.recording, "sid": st.sid, "wid": st.wid, "speed": st.speed, "loop": st.loop,
-                    "offset_s": st.offset_s, "pacing": st.pacing, "delivery": st.delivery})
+                    "offset_s": st.offset_s})
         s.state, s.started = "running", time.time()
         return s
 

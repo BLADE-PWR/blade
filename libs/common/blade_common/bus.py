@@ -55,7 +55,7 @@ def stamp(env: Envelope, stage: str, t_in: float, t_out: float | None = None) ->
 
 def forward(src: Envelope, data: dict, stage: str, t_in: float) -> Envelope:
     """New envelope for the next subject: same key and timings, new payload, this stage stamped."""
-    env = Envelope(sid=src.sid, frame=src.frame, wid=src.wid, delivery=src.delivery, ts=dict(src.ts), data=data)
+    env = Envelope(sid=src.sid, frame=src.frame, wid=src.wid, ts=dict(src.ts), data=data)
     return stamp(env, stage, t_in)
 
 

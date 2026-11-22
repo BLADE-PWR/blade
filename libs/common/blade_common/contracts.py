@@ -27,7 +27,6 @@ class Envelope(BaseModel):
     sid: str | None = None
     frame: int | None = None
     wid: str | None = None
-    delivery: str | None = Field(None, description="'all': a replay that waits for every frame (ack.<sid>)")
     ts: dict[str, float | list[float]] = Field(
         default_factory=dict,
         description="capture: epoch s; every stage appends [t_in, t_out] under its own name, on its own clock; "
@@ -227,10 +226,6 @@ class EvalData(BaseModel):
     false_objects: list[str] = Field(default_factory=list, description="active world objects with no truth nearby")
 
 
-class AckData(BaseModel):
-    frame: int
-
-
 class StreamDiag(BaseModel):
     fps_in: float = 0.0
     fps_out: float = 0.0
@@ -259,7 +254,6 @@ SUBJECTS: dict[str, type[BaseModel]] = {
     "world.events": WorldEventsData,
     "alerts": AlertsData,
     "eval": EvalData,
-    "ack": AckData,
     "diag": DiagData,
 }
 

@@ -121,7 +121,6 @@ class Source:
     key: str  # "udp:<ip>:<port>", "tcp:..." or "push:<sid>"
     kind: str  # live | replay
     sid_override: str | None = None
-    delivery: str = "latest"
     wid: str | None = None
     jpeg_w: int = 1280
     jpeg_h: int = 720

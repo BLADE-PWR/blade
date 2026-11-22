@@ -135,8 +135,6 @@ class ReplayReq(BaseModel):
     speed: float = 1.0
     loop: bool = False
     offset_s: float = 0.0
-    pacing: str = "realtime"
-    delivery: str = "latest"
     truth: bool = True
 
 
@@ -150,10 +148,6 @@ class ReplayPatch(BaseModel):
 
 @app.post("/replays")
 async def start_replay(req: ReplayReq):
-    if req.pacing not in ("realtime", "max"):
-        raise HTTPException(400, "pacing: realtime | max")
-    if req.delivery not in ("latest", "all"):
-        raise HTTPException(400, "delivery: latest | all")
     old = replays.get(req.sid)
     if old and old.state in ("starting", "playing", "paused"):
         raise HTTPException(409, f"{req.sid} is already playing")
@@ -164,7 +158,7 @@ async def start_replay(req: ReplayReq):
     try:
         r = Replay(sid=req.sid, recording=req.recording, dir=d, ingest_url=INGEST_URL,
                    truth_addr=INGEST_TRUTH, wid=req.wid, speed=req.speed, loop=req.loop, offset_s=req.offset_s,
-                   pacing=req.pacing, delivery=req.delivery, send_truth=req.truth)
+                   send_truth=req.truth)
     except FileNotFoundError as e:
         raise HTTPException(400, f"{req.recording}: {e}") from e
     replays[req.sid] = r

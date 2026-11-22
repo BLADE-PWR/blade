@@ -45,7 +45,6 @@ class Detector:
         self.trackers: dict[tuple[str, str], StreamTracker] = {}
         self.top_tid: dict[str, int] = {}  # sid -> highest track id sent, where its next tracker continues
         self.slots: dict[str, tuple] = {}  # sid -> (env, jpeg, t_in), newest wins
-        self.fifo: dict[str, list] = {}  # sid -> frames of delivery "all" streams, in order
         self.ready = asyncio.Event()
         self.oracle = Oracle()
         self.diag = Diag("detector")
@@ -81,16 +80,13 @@ class Detector:
         t = now()
         self.diag.got(sid)
         self.last_frame[sid] = t
-        if env.delivery == "all":
-            self.fifo.setdefault(sid, []).append((env, jpeg, t))
-        else:
-            if MAX_FPS > 0 and t - self.accepted.get(sid, 0.0) < 1.0 / MAX_FPS:
-                self.diag.drop(sid)
-                return
-            self.accepted[sid] = t
-            if sid in self.slots:
-                self.diag.drop(sid)
-            self.slots[sid] = (env, jpeg, t)
+        if MAX_FPS > 0 and t - self.accepted.get(sid, 0.0) < 1.0 / MAX_FPS:
+            self.diag.drop(sid)
+            return
+        self.accepted[sid] = t
+        if sid in self.slots:
+            self.diag.drop(sid)
+        self.slots[sid] = (env, jpeg, t)
         self.ready.set()
 
     async def on_truth(self, msg) -> None:
@@ -105,11 +101,6 @@ class Detector:
             await self.ready.wait()
             self.ready.clear()
             work, self.slots = self.slots, {}
-            for sid, q in list(self.fifo.items()):
-                if q and sid not in work:
-                    work[sid] = q.pop(0)
-                if q:
-                    self.ready.set()  # more queued: come round again
             by_model: dict[str, list] = {}
             for sid, item in work.items():
                 by_model.setdefault(self.model_for(sid), []).append((sid, *item))

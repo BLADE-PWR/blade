@@ -39,10 +39,8 @@ Replay body:
 | `sid` | required | Stream id the replay appears under |
 | `wid` | required | World it plays into (not the mission it was recorded with) |
 | `speed` | 1.0 | Playback speed |
-| `loop` | false | Start again at the end; else a `realtime` replay pauses there (a seek goes on from the target, Play starts over) and a `max` one finishes. Can be changed with PATCH |
+| `loop` | false | Start again at the end; else the replay pauses there (a seek goes on from the target, Play starts over). Can be changed with PATCH |
 | `offset_s` | 0 | Start position |
-| `pacing` | `realtime` | `realtime`, or `max` to send as fast as the pipeline takes it |
-| `delivery` | `latest` | `latest` lets stages drop frames; `all` sends every frame through every stage (repeatable experiments) |
 | `truth` | true | Also replay the sim truth |
 
 The dataset generator's pictures can be turned into a replayable recording:
