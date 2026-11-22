@@ -41,8 +41,7 @@ closed; drones still flying start it afresh. Or click Replay next to a recording
 creates and starts one with a looping replay of every drone in it (a recording is a whole mission on one map), on
 one timeline (under new ids, so it never mixes
 with the live mission or other replays). Replay
-sessions are shared: every tab on one sees, and controls, the same playback. In the top bar,
-Live goes back to the picker and Replay to the newest running replay session. The dev server listens on all interfaces, so other
+sessions are shared: every tab on one sees, and controls, the same playback. In the top bar, Live and Replay switch without leaving the views: Live shows a dropdown of the live missions, Replay one of the recordings; Operator / Command and Map / Video stay as they are. Blade (top left) goes back to the start page. The dev server listens on all interfaces, so other
 devices on the LAN open http://<server-ip>:5173 (port 5173 must be open in the firewall).
 
 In dev, Vite forwards `/api`, `/sessions`, `/detectors`, `/streams` and the `/ws` WebSocket to the gateway on

@@ -24,8 +24,9 @@ export type FrameHeader = {
 
 export type Frame = { header: FrameHeader; jpeg: Blob };
 
-// a mission: every live world of it (one per map) and every drone in them, also ones starting or joining later
-export type Target = { session: string } | { mission: string };
+// a mission: every live world of it (one per map) and every drone in them, also ones starting or joining later;
+// choose: Live or Replay switched to, nothing chosen in it yet (no connection)
+export type Target = { session: string } | { mission: string } | { choose: "live" | "replay" };
 
 export function parseFrame(buf: ArrayBuffer): Frame {
   const magic = new TextDecoder().decode(new Uint8Array(buf, 0, 4));
@@ -35,7 +36,7 @@ export function parseFrame(buf: ArrayBuffer): Frame {
   return { header, jpeg: new Blob([new Uint8Array(buf, 8 + n)], { type: "image/jpeg" }) };
 }
 
-function wsUrl(target: Target): string {
+function wsUrl(target: { session: string } | { mission: string }): string {
   const q = "session" in target
     ? new URLSearchParams({ session: target.session })
     : new URLSearchParams({ mission: target.mission });
@@ -76,7 +77,7 @@ export async function startReplay(rec: Recording): Promise<string> {
 }
 
 /** Opens the WebSocket; returns a function that closes it. */
-export function connect(target: Target, h: Handlers): () => void {
+export function connect(target: { session: string } | { mission: string }, h: Handlers): () => void {
   const ws = new WebSocket(wsUrl(target));
   ws.binaryType = "arraybuffer";
   ws.onmessage = (e: MessageEvent<string | ArrayBuffer>) => {

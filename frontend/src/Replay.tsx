@@ -40,7 +40,6 @@ export function ReplayBar({ session, onSwitch, onSeek, onState }: Props) {
   const [replays, setReplays] = useState<Replay[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<number | null>(null); // while the slider is dragged
-  const [recordings, setRecordings] = useState<Recording[]>([]);
   const seen = useRef(new Map<string, { generation: number; position: number }>()); // wid -> as last read
   const seekRef = useRef(onSeek);
   seekRef.current = onSeek; // the latest: it knows every drone shown now
@@ -65,11 +64,6 @@ export function ReplayBar({ session, onSwitch, onSeek, onState }: Props) {
   }, [wids]);
 
   useEffect(() => onState(replays), [replays, onState]);
-
-  useEffect(() => {
-    getJSON<Recording[]>("/api/recordings").then(setRecordings)
-      .catch((e: Error) => setError(`Cannot list the recordings (${e.message}).`));
-  }, []);
 
   const first = replays[0];
   if (!first) {
@@ -110,17 +104,7 @@ export function ReplayBar({ session, onSwitch, onSeek, onState }: Props) {
 
   return (
     <div className="replaybar">
-      <label>
-        <span className="muted">Recording </span>
-        <select value={first.recording} onChange={(e) => switchTo(recordings.find((r) => r.id === e.target.value)!)}>
-          {!recordings.some((r) => r.id === first.recording) && (
-            <option value={first.recording}>{first.recording}</option>
-          )}
-          {recordings.map((r) => (
-            <option key={r.id} value={r.id} disabled={r.recording}>{recordingName(r)}</option>
-          ))}
-        </select>
-      </label>
+      <RecordingSelect current={first.recording} onPick={switchTo} />
       <div className="replay-buttons">
         <button onClick={() => jump(-JUMP_S)}>Back {JUMP_S} s</button>
         <button className="primary" onClick={() => control(() => ({ paused: !first.paused }))}>
@@ -151,5 +135,30 @@ export function ReplayBar({ session, onSwitch, onSeek, onState }: Props) {
       </label>
       {error && <span className="error">{error}</span>}
     </div>
+  );
+}
+
+/** The recordings to replay; current: the one playing (none when Replay was just switched to). */
+export function RecordingSelect({ current, onPick }: { current?: string; onPick: (rec: Recording) => void }) {
+  const [recordings, setRecordings] = useState<Recording[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getJSON<Recording[]>("/api/recordings").then(setRecordings)
+      .catch((e: Error) => setError(`Cannot list the recordings (${e.message}).`));
+  }, []);
+
+  return (
+    <label>
+      <span className="muted">Recording </span>
+      <select value={current ?? ""} onChange={(e) => onPick(recordings.find((r) => r.id === e.target.value)!)}>
+        {!current && <option value="" disabled>{recordings.length ? "choose a recording" : "no recordings"}</option>}
+        {current && !recordings.some((r) => r.id === current) && <option value={current}>{current}</option>}
+        {recordings.map((r) => (
+          <option key={r.id} value={r.id} disabled={r.recording}>{recordingName(r)}</option>
+        ))}
+      </select>
+      {error && <span className="error"> {error}</span>}
+    </label>
   );
 }
