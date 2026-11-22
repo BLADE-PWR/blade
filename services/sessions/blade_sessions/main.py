@@ -145,6 +145,7 @@ class ReplayPatch(BaseModel):
     speed: float | None = None
     seek_s: float | None = None
     step: int | None = None
+    loop: bool | None = None
 
 
 @app.post("/replays")
@@ -175,7 +176,7 @@ async def list_replays():
 @app.patch("/replays/{sid}")
 async def patch_replay(sid: str, body: ReplayPatch):
     r = replays.get(sid) or _404(sid)
-    r.patch(body.paused, body.speed, body.seek_s, body.step)
+    r.patch(body.paused, body.speed, body.seek_s, body.step, body.loop)
     return r.info()
 
 

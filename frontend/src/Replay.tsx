@@ -108,7 +108,10 @@ export function ReplayBar({ session, onSwitch, onSeek }: Props) {
           </button>
         ))}
       </div>
-      <label className="inline muted"><input type="checkbox" checked={first.loop} disabled />Loop</label>
+      <label className="inline">
+        <input type="checkbox" checked={first.loop} onChange={(e) => void control(() => ({ loop: e.target.checked }))} />
+        Loop
+      </label>
       {error && <span className="error">{error}</span>}
     </div>
   );

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import time
 import types
@@ -450,3 +451,24 @@ async def test_replay_speed_change_while_sending_replans_from_there(tmp_path):
     await body.aclose()
     r.patch(seek_s=2.5)
     assert r.info()["position_s"] == 2.5  # the reply to a seek shows where it goes, not where it was
+    r.patch(loop=True)
+    assert r.info()["loop"] is True
+
+
+async def test_replay_without_loop_waits_at_the_end_for_a_seek(tmp_path):
+    from blade_sessions.replay import Replay
+
+    n = 20  # chunk k is the single byte k, one every 0.1 s of recording
+    (tmp_path / "stream.ts").write_bytes(bytes(range(n)))
+    (tmp_path / "index.jsonl").write_text("".join(json.dumps({"o": k, "n": 1, "t": 100 + k / 10}) + "\n"
+                                                  for k in range(n)))
+    r = Replay(sid="rp", recording="rec", dir=tmp_path, ingest_url="http://unused", truth_addr=("127.0.0.1", 9),
+               wid="rp", send_truth=False, speed=100.0)
+    body = r._body()
+    assert [await anext(body) for _ in range(n)] == [bytes([k]) for k in range(n)]
+    nxt = asyncio.ensure_future(anext(body))
+    await asyncio.sleep(0.1)
+    assert not nxt.done() and r.paused and r.state == "paused"  # at the end: waiting, not finished
+    r.patch(seek_s=1.0)
+    assert await asyncio.wait_for(nxt, 2) == bytes([10]) and not r.paused  # goes on from the seek and plays
+    await body.aclose()

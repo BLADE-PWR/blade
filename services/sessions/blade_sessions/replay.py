@@ -71,7 +71,9 @@ class Replay:
         self.state = "stopped"
 
     def patch(self, paused: bool | None = None, speed: float | None = None, seek_s: float | None = None,
-              step: int | None = None) -> None:
+              step: int | None = None, loop: bool | None = None) -> None:
+        if loop is not None:  # checked at the end of each pass
+            self.loop = loop
         if speed is not None and speed > 0:
             self.speed = speed
         if seek_s is not None:
@@ -182,8 +184,15 @@ class Replay:
                     yield read(byte, end)
                     byte = end
                     self.position_s = t_media
-                if not self.loop:
+                if not self.loop and self.pacing == "max":  # a batch run: done
                     break
+                if not self.loop:  # the end: paused like a player until a seek, Play (from the start) or Loop
+                    self.paused, self.state = True, "paused"
+                    while self.paused and self._seek is None and not self.loop:
+                        await self._sleep_or_wake(1.0)
+                    byte = self._byte_at(self._seek) if self._seek is not None else 0
+                    self._seek, self.paused = None, False
+                    continue
                 self.loops += 1
                 byte = 0
         finally:

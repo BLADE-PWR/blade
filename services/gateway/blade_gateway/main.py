@@ -116,6 +116,7 @@ class ReplayPatch(BaseModel):
     speed: float | None = None
     seek_s: float | None = None
     step: int | None = None
+    loop: bool | None = None
 
 
 @app.patch("/sessions/{sess_id}/replays/{sid}")
