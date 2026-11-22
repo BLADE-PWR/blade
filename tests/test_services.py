@@ -427,3 +427,26 @@ async def test_session_is_paused_when_nobody_watches_and_stays_paused(monkeypatc
     assert paused["rp"]  # nobody: paused
     orch.viewers[s.id] += 1  # a tab opens it again
     assert paused["rp"]  # still paused: whoever opened it presses play
+
+
+async def test_replay_speed_change_while_sending_replans_from_there(tmp_path):
+    from blade_sessions.replay import Replay
+
+    n = 40  # one 1-byte chunk every 0.1 s of recording
+    (tmp_path / "stream.ts").write_bytes(b"x" * n)
+    (tmp_path / "index.jsonl").write_text("".join(json.dumps({"o": k, "n": 1, "t": 100 + k / 10}) + "\n"
+                                                  for k in range(n)))
+    r = Replay(sid="rp", recording="rec", dir=tmp_path, ingest_url="http://unused", truth_addr=("127.0.0.1", 9),
+               wid="rp", send_truth=False)
+    body = r._body()
+    for _ in range(11):  # 1.0 s of recording at x1
+        await anext(body)
+    r.patch(speed=0.5)  # arrives while the replay hands over a chunk, not while it sleeps
+    t1 = time.monotonic()
+    await anext(body)
+    assert time.monotonic() - t1 < 0.1  # not 1.2 s: 1.1 s of recording planned at x0.5 from the start
+    await anext(body)
+    assert time.monotonic() - t1 == pytest.approx(0.2, abs=0.08)  # then 0.1 s of recording takes 0.2 s
+    await body.aclose()
+    r.patch(seek_s=2.5)
+    assert r.info()["position_s"] == 2.5  # the reply to a seek shows where it goes, not where it was

@@ -75,7 +75,7 @@ class Replay:
         if speed is not None and speed > 0:
             self.speed = speed
         if seek_s is not None:
-            self._seek = max(0.0, min(seek_s, self.duration_s))
+            self._seek = self.position_s = max(0.0, min(seek_s, self.duration_s))  # the reply shows where it goes
         if step:
             paused = True
             self._steps += max(int(step), 0)
@@ -144,6 +144,7 @@ class Replay:
                         self._send_truth(r)
                 j = bisect.bisect_left(self.truth_times, self._time_at(byte))
                 clock0, media0 = time.monotonic(), self._time_at(byte)
+                speed0 = self.speed  # the speed clock0 / media0 were planned at
                 self.state = "paused" if self.paused else "playing"
                 while byte < self.size:
                     if self._seek is not None:
@@ -170,6 +171,8 @@ class Replay:
                     i = self._chunk_at(byte)
                     t_media = self.times[i]
                     if self.pacing == "realtime":
+                        if self.speed != speed0:  # changed while not sleeping, so no wake-up re-planned it
+                            clock0, media0, speed0 = time.monotonic(), t_media, self.speed
                         delay = clock0 + (t_media - media0) / self.speed - time.monotonic()
                         if delay > 0 and await self._sleep_or_wake(delay):
                             clock0, media0 = time.monotonic(), self._time_at(byte)

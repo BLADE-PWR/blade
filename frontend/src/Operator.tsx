@@ -14,6 +14,7 @@ import {
   droneName,
   type Filter,
   offMap,
+  seeking,
   shownFrame,
   type Situation,
   stageTimes,
@@ -74,7 +75,7 @@ export function Operator({ sit, sid, main, onMain, onDrone, filter, onFilter }: 
       </div>
       {sid && (
         <Video sid={sid} shown={shown} geo={drone?.geo} objects={sit.objects} selected={selected} filter={filter}
-          offMap={offMap(sit, drone)} />
+          offMap={offMap(sit, drone)} seeking={seeking(drone, Date.now() / 1000)} />
       )}
     </section>
   );

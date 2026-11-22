@@ -13,6 +13,7 @@ import {
   type Filter,
   latencyS,
   offMap,
+  seeking,
   shownFrame,
   shownMap,
   type Situation,
@@ -137,7 +138,7 @@ function DroneVideo({ sit, sid, thumb = false }: { sit: Situation; sid: string; 
   const d = sit.drones.get(sid);
   const shown = d ? shownFrame(d) : { preview: null, dets: null };
   return <Video sid={sid} shown={shown} geo={thumb ? null : d?.geo} objects={sit.objects} labels={!thumb}
-    offMap={offMap(sit, d)} />;
+    offMap={offMap(sit, d)} seeking={seeking(d, Date.now() / 1000)} />;
 }
 
 function DroneThumb({ sit, sid }: { sit: Situation; sid: string }) {

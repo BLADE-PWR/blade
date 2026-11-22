@@ -28,9 +28,11 @@ type Props = {
   filter?: Filter;
   labels?: boolean;
   offMap?: boolean;
+  seeking?: boolean;
 };
 
-export function Video({ sid, shown, geo, objects, selected, filter, labels = true, offMap = false }: Props) {
+export function Video({ sid, shown, geo, objects, selected, filter, labels = true, offMap = false,
+  seeking = false }: Props) {
   const { preview, dets } = shown;
   if (!preview) return <div className="video empty">No picture from drone {sid}</div>;
   const oids = trackOids(objects);
@@ -39,6 +41,9 @@ export function Video({ sid, shown, geo, objects, selected, filter, labels = tru
   return (
     <div className="video">
       <img src={preview.url} alt={`Video from drone ${sid}, frame ${preview.frame ?? "?"}`} />
+      {seeking && (
+        <div className="seeking" role="status"><span className="spinner" aria-hidden="true" />Jumping in the recording…</div>
+      )}
       {offMap && <p className="off-map">This drone is on another map, so detections are not put on the map</p>}
       {dets?.dets.filter((d) => !filter || boxVisible(d, filter)).map((d, i) => {
         const oid = d.tid === null ? undefined : oids.get(`${sid}:${d.tid}`);

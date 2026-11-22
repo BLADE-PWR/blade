@@ -8,7 +8,7 @@ import { connect, getJSON, startReplay, type Target } from "./gateway";
 import { Operator } from "./Operator";
 import { ReplayBar } from "./Replay";
 import {
-  addPreview, apply, dispose, droneName, emptySituation, type Filter, latencyS, transmitting,
+  addPreview, apply, dispose, droneName, emptySituation, type Filter, latencyS, seek, transmitting,
 } from "./situation";
 
 const CLOCK_MS = 1000;
@@ -201,7 +201,8 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
       {closed && <p className="error banner">WebSocket closed: {closed}</p>}
       {error && <p className="error banner">{error}</p>}
       {replay && sit.session && (
-        <ReplayBar session={sit.session} onSwitch={(id) => onPick({ session: id })} />
+        <ReplayBar session={sit.session} onSwitch={(id) => onPick({ session: id })}
+          onSeek={(delta) => seek(sit, sids, delta)} />
       )}
       {view === "operator"
         ? <Operator sit={sit} sid={sid} main={main} onMain={setMain} onDrone={setPicked} filter={filter}

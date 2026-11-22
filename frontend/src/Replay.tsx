@@ -11,9 +11,9 @@ const SPEEDS = [0.5, 1, 2, 4];
 
 const mmss = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${(s % 60).toFixed(1).padStart(4, "0")}`;
 
-type Props = { session: Session; onSwitch: (sessionId: string) => void };
+type Props = { session: Session; onSwitch: (sessionId: string) => void; onSeek: (deltaS: number) => void };
 
-export function ReplayBar({ session, onSwitch }: Props) {
+export function ReplayBar({ session, onSwitch, onSeek }: Props) {
   const sids = session.streams.map((st) => st.sid).join(",");
   const [replays, setReplays] = useState<Replay[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -48,17 +48,19 @@ export function ReplayBar({ session, onSwitch }: Props) {
 
   const control = (body: (r: Replay) => object) => {
     setError(null);
-    Promise.all(replays.map((r) => send<Replay>("PATCH", `/sessions/${session.id}/replays/${r.sid}`, body(r))))
+    return Promise.all(replays.map((r) => send<Replay>("PATCH", `/sessions/${session.id}/replays/${r.sid}`,
+      body(r))))
       .then(setReplays)
       .catch((e: Error) => setError(`Replay control failed (${e.message}).`));
   };
   const jump = (delta: number) => {
-    control((r) => ({ seek_s: Math.max(0, r.position_s + delta) }));
+    const done = control((r) => ({ seek_s: Math.max(0, r.position_s + delta) }));
+    const to = Math.min(Math.max(0, first.position_s + delta), first.duration_s);
+    if (!first.paused) onSeek(to - first.position_s); // paused, no frame comes until Play: nothing to wait for
+    return done;
   };
-  const commit = () => {
-    if (draft === null) return;
-    jump(draft - first.position_s);
-    setDraft(null);
+  const commit = (value: number) => {
+    void jump(value - first.position_s).finally(() => setDraft(null)); // until the reply, show where it goes
   };
   const position = draft ?? first.position_s;
   const switchTo = (rec: Recording) => {
@@ -91,9 +93,14 @@ export function ReplayBar({ session, onSwitch }: Props) {
         {first.paused && <button onClick={() => control(() => ({ step: 1 }))}>Next frame</button>}
       </div>
       <span className="mono nowrap">{mmss(position)} of {mmss(first.duration_s)}</span>
-      <input className="timeline" type="range" min="0" max={first.duration_s} step="0.1" value={position}
-        aria-label="Position in the recording" onChange={(e) => setDraft(Number(e.target.value))} onPointerUp={commit}
-        onKeyUp={commit} />
+      <input className="timeline" type="range" min="0" max={first.duration_s} step="any" value={position}
+        aria-label="Position in the recording" onChange={(e) => setDraft(Number(e.target.value))}
+        ref={(el) => { // the native change event comes once, when the value is let go (React's onChange is "input")
+          if (!el) return;
+          const done = () => commit(Number(el.value));
+          el.addEventListener("change", done);
+          return () => el.removeEventListener("change", done);
+        }} />
       <div className="switch" role="group" aria-label="Speed">
         {SPEEDS.map((v) => (
           <button key={v} aria-pressed={first.speed === v} onClick={() => control(() => ({ speed: v }))}>

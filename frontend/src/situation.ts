@@ -24,12 +24,16 @@ const EVENTS_KEPT = 50;
 const DETS_FRESH_S = 1; // s
 const MATCH_FRAMES = 2;
 const SILENT_S = 3; // s
+const SEEK_MATCH_S = 2; // a frame this close to a seek's target ends the wait
+const SEEK_GIVE_UP_S = 15;
 
-export type Preview = { frame: number | null; url: string; blob: Blob; w: number; h: number; src: [number, number] };
+export type Preview = { frame: number | null; url: string; blob: Blob; w: number; h: number; src: [number, number];
+  media: number | null }; // a replay frame's time in its recording, s
 
 export type Drone = {
   sid: string;
   wid: string | null; // from its geo messages
+  seekTo: { media: number; at: number } | null; // a replay jump waiting for its first frame (recording time, wall s)
   previews: Preview[];
   lastFrameAt: number;
   dets: (DetectionsData & { frame: number | null; at: number }) | null;
@@ -67,7 +71,7 @@ export function emptySituation(): Situation {
 function drone(s: Situation, sid: string): Drone {
   let d = s.drones.get(sid);
   if (!d) {
-    d = { sid, wid: null, previews: [], lastFrameAt: 0, dets: null, geo: null, route: [], stamps: null };
+    d = { sid, wid: null, seekTo: null, previews: [], lastFrameAt: 0, dets: null, geo: null, route: [], stamps: null };
     s.drones.set(sid, d);
   }
   return d;
@@ -173,11 +177,24 @@ export function apply(s: Situation, m: Message): void {
 export function addPreview(s: Situation, f: Frame): void {
   const d = drone(s, f.header.sid);
   const src = f.header.src;
+  const media = typeof f.header.ts.media === "number" ? f.header.ts.media : null;
   d.previews.push({ frame: f.header.frame, url: URL.createObjectURL(f.jpeg), blob: f.jpeg, w: f.header.w,
-    h: f.header.h, src: src ? [src.w, src.h] : [f.header.w, f.header.h] });
+    h: f.header.h, src: src ? [src.w, src.h] : [f.header.w, f.header.h], media });
+  if (d.seekTo && media !== null && Math.abs(media - d.seekTo.media) < SEEK_MATCH_S) d.seekTo = null;
   d.lastFrameAt = Date.now() / 1000;
   while (d.previews.length > PREVIEWS_KEPT) URL.revokeObjectURL(d.previews.shift()!.url);
 }
+
+/** A replay jumps by deltaS: its drones wait for a frame from there (frames still on the way are older). */
+export function seek(s: Situation, sids: string[], deltaS: number): void {
+  for (const sid of sids) {
+    const d = s.drones.get(sid);
+    const media = d?.previews.at(-1)?.media;
+    if (d && media != null) d.seekTo = { media: media + deltaS, at: Date.now() / 1000 };
+  }
+}
+
+export const seeking = (d: Drone | undefined, now: number) => !!d?.seekTo && now - d.seekTo.at < SEEK_GIVE_UP_S;
 
 /** The map to show: the focused drone's world's, else any world's. */
 export function shownMap(s: Situation, focus: string | null): string | undefined {
