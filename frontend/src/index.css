@@ -800,6 +800,16 @@ button.primary {
   width: 72px;
 }
 
+.rules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+
+.settings-head {
+  border-top: 1px solid #3a4552;
+}
+
 .setting-note {
   margin: -6px 12px 0 94px;
   font-size: 12px;

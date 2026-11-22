@@ -209,6 +209,52 @@ function StatePanel({ sit, sid }: { sit: Situation; sid: string | null }) {
 }
 
 // The detector model of one drone; switching takes effect on its next frame and resets its box threshold.
+const RULE_NAMES: Record<string, string> = {
+  vehicle_group: "Vehicle group", lost_contact: "Lost contact", uncertain_position: "Uncertain position",
+  infantry_resolution: "Infantry resolution", explosion_near: "Explosion nearby", zone: "Zone",
+};
+
+type Rules = Record<string, { enabled?: boolean }>;
+
+/** A checkbox per decision rule of the world; shows what the server holds, so a failed change unticks nothing. */
+function RulePicker({ wid }: { wid: string }) {
+  const [rules, setRules] = useState<Rules | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const path = `/api/decision/${encodeURIComponent(wid)}/rules`;
+
+  useEffect(() => {
+    let current = true; // a late answer for the previous world must not overwrite this one
+    setRules(null);
+    setError(null);
+    getJSON<Rules>(path).then((r) => current && setRules(r))
+      .catch((e: Error) => current && setError(`Cannot read the alert rules: ${e.message}`));
+    return () => {
+      current = false;
+    };
+  }, [path]);
+
+  const toggle = (name: string, enabled: boolean) =>
+    send<Rules>("PUT", path, { [name]: { enabled } })
+      .then((r) => {
+        setRules(r);
+        setError(null);
+      })
+      .catch((e: Error) => setError(`Rule not changed: ${e.message}`));
+
+  if (rules === null) return error ? <span className="error">{error}</span> : null;
+  return (
+    <div className="rules">
+      {Object.entries(rules).map(([name, p]) => (
+        <label key={name}>
+          <input type="checkbox" checked={p.enabled !== false} onChange={(e) => toggle(name, e.target.checked)} />
+          {" "}{RULE_NAMES[name] ?? name}
+        </label>
+      ))}
+      {error && <span className="error">{error}</span>}
+    </div>
+  );
+}
+
 function ModelPicker({ sid }: { sid: string }) {
   const [models, setModels] = useState<string[]>([]);
   const [model, setModel] = useState<string | null>(null);
@@ -250,23 +296,10 @@ function ModelPicker({ sid }: { sid: string }) {
   );
 }
 
-type Rules = { vehicle_group?: { enabled: boolean; min_count: number; radius_m: number } };
-
 type SettingsProps = { sit: Situation; drone?: Drone; layer: Background; onLayer: (l: Background) => void };
 
 function Settings({ sit, drone, layer, onLayer }: SettingsProps) {
-  const [rules, setRules] = useState<Rules | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const wid = drone?.wid ?? sit.session?.streams[0]?.wid; // the shown drone's world
-
-  useEffect(() => {
-    if (!wid) return;
-    getJSON<Rules>(`/api/decision/${wid}/rules`).then(setRules)
-      .catch((e: Error) => setError(`Could not load the alert rules (${e.message}).`));
-  }, [wid]);
-
-  const group = rules?.vehicle_group;
-  const groupText = group ? `vehicle group: at least ${group.min_count} within ${group.radius_m} m` : "none";
   return (
     <section className="panel settings" aria-label="Settings">
       <div className="panel-head"><strong>Settings</strong></div>
@@ -283,14 +316,18 @@ function Settings({ sit, drone, layer, onLayer }: SettingsProps) {
         </div>
       </div>
       <div className="setting">
+        <span className="muted">Alerts</span>
+        {wid ? <RulePicker wid={wid} /> : <span className="muted">waiting for a drone</span>}
+      </div>
+      <p className="muted setting-note">Rules that raise alerts, for this world until a restart.</p>
+      <div className="panel-head settings-head">
+        <strong>Drone settings</strong>
+        {drone && <span className="mono muted">{drone.sid}</span>}
+      </div>
+      <div className="setting">
         <span className="muted">Model</span>
         {drone ? <ModelPicker sid={drone.sid} /> : <span className="muted">choose a drone</span>}
       </div>
-      <div className="setting">
-        <span className="muted">Alerts</span>
-        <span>{groupText}</span>
-      </div>
-      {error && <p className="error setting-note">{error}</p>}
     </section>
   );
 }
