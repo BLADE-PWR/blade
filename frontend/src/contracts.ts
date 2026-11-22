@@ -62,6 +62,18 @@ export type Alert = {
   state: "active" | "cleared";
 };
 
+export type Cluster = {
+  cid: string;
+  objects: string[];
+  composition: Record<string, number>;
+  centre: Vec2;
+  hull: Vec2[];
+  area_m2: number;
+  vel?: Vec2;
+};
+
+export type ClustersData = { clusters: Cluster[]; t?: number };
+
 export type TruthMatch = { truth_id: number; grp: string; xy: Vec2; oid?: string; err_m?: number };
 
 export type EvalData = { truth: TruthMatch[] };

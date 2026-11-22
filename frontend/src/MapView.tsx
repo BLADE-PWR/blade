@@ -4,7 +4,8 @@ import ms, { type Symbol as MilSymbol } from "milsymbol";
 import { useEffect, useRef, useState } from "react";
 
 import { colorOf, nameOf, SEVERITY_COLORS } from "./classes";
-import type { Alert, Prediction, Vec2, WorldObject } from "./contracts";
+import type { Alert, Cluster, Prediction, Vec2, WorldObject } from "./contracts";
+import { DEFAULT_WEIGHTS, MAX_WEIGHT, strength, type Weights, weightOf } from "./force";
 import { getJSON } from "./gateway";
 import { type Drone, droneName, type Filter, type Situation, shownMap, visible, worldNow } from "./situation";
 
@@ -22,6 +23,9 @@ const UNCERTAIN_M = 15; // m, like the uncertain_position rule
 const ALERT_RING_PX = 16;
 const STACK_ORDER = ["tank", "military_vehicle", "soldier"];
 const CIRCLE_POINTS = 24;
+const HEAT_RADIUS_M = 60;
+const HEAT_COLOR = "255, 110, 0";
+const GROUP_COLOR = "#ffd166";
 const SIDC: Record<string, string> = {
   soldier: "SHGPUCI--------",
   tank: "SHGPUCA--------",
@@ -29,11 +33,14 @@ const SIDC: Record<string, string> = {
 };
 const DRONE_SIDC = "SFAPMFQ--------";
 
-type Layers = { drones: boolean; motion: boolean; uncertainty: boolean; truth: boolean };
+type Layers = { drones: boolean; motion: boolean; uncertainty: boolean; truth: boolean; groups: boolean;
+  density: boolean };
 const LAYER_NAMES: [keyof Layers, string][] = [
   ["drones", "Drones and camera footprints"],
   ["motion", "Motion and prediction"],
   ["uncertainty", "Uncertainty"],
+  ["groups", "Force groups"],
+  ["density", "Density of forces"],
   ["truth", "True positions"],
 ];
 
@@ -181,6 +188,72 @@ function drawObjects(group: L.LayerGroup, objects: WorldObject[], selected: stri
   }
 }
 
+/** The density of forces: a soft spot per object, as strong as its class weight; overlapping spots add up. */
+class HeatLayer extends L.Layer {
+  private canvas = L.DomUtil.create("canvas", "heat") as HTMLCanvasElement;
+  private spots: { xy: Vec2; w: number }[] = [];
+  private map: L.Map | null = null;
+
+  onAdd(map: L.Map): this {
+    this.map = map;
+    map.getPanes().overlayPane.appendChild(this.canvas);
+    map.on("moveend zoomend resize", this.draw, this);
+    this.draw();
+    return this;
+  }
+
+  onRemove(map: L.Map): this {
+    map.off("moveend zoomend resize", this.draw, this);
+    this.canvas.remove();
+    this.map = null;
+    return this;
+  }
+
+  set(spots: { xy: Vec2; w: number }[]): void {
+    this.spots = spots;
+    this.draw();
+  }
+
+  private draw(): void {
+    const map = this.map;
+    if (!map) return;
+    const size = map.getSize();
+    const c = this.canvas;
+    c.width = size.x;
+    c.height = size.y;
+    L.DomUtil.setPosition(c, map.containerPointToLayerPoint([0, 0]));
+    const ctx = c.getContext("2d")!;
+    const a = map.latLngToContainerPoint(ll([0, 0]));
+    const b = map.latLngToContainerPoint(ll([1, 0]));
+    const r = Math.max(8, Math.hypot(b.x - a.x, b.y - a.y) * HEAT_RADIUS_M); // px
+    ctx.globalCompositeOperation = "lighter";
+    for (const s of this.spots) {
+      const p = map.latLngToContainerPoint(ll(s.xy));
+      if (p.x < -r || p.y < -r || p.x > size.x + r || p.y > size.y + r) continue;
+      const alpha = Math.min(1, s.w / MAX_WEIGHT) * 0.45;
+      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+      g.addColorStop(0, `rgba(${HEAT_COLOR}, ${alpha})`);
+      g.addColorStop(1, `rgba(${HEAT_COLOR}, 0)`);
+      ctx.fillStyle = g;
+      ctx.fillRect(p.x - r, p.y - r, 2 * r, 2 * r);
+    }
+  }
+}
+
+function drawClusters(group: L.LayerGroup, clusters: Cluster[], weights: Weights, picked: string | null,
+  onPick: (cid: string) => void): void {
+  const top = Math.max(1, ...clusters.map((c) => strength(c, weights)));
+  for (const c of clusters) {
+    const sel = c.cid === picked;
+    const poly = L.polygon(c.hull.map(ll), { color: GROUP_COLOR, weight: sel ? 3 : 1.5, dashArray: "6 4",
+      fillOpacity: 0.06 + 0.3 * (strength(c, weights) / top) });
+    poly.on("click", () => onPick(c.cid));
+    poly.addTo(group);
+    L.marker(ll(c.centre), { interactive: false, icon: L.divIcon({ className: "group-label", iconSize: [0, 0],
+      html: `<span class="sym-label">${c.objects.length}</span>` }) }).addTo(group);
+  }
+}
+
 function drawTruth(group: L.LayerGroup, sit: Situation): void {
   for (const t of sit.truth) {
     const match = t.oid ? sit.objects.get(t.oid) : undefined;
@@ -250,15 +323,40 @@ type Props = {
   filter: Filter;
   overview?: boolean;
   layer?: Background;
+  weights?: Weights;
 };
 
+function GroupPanel({ group, sit, weights, onClose }: { group: Cluster; sit: Situation; weights: Weights;
+  onClose: () => void }) {
+  const stale = group.objects.filter((oid) => sit.objects.get(oid)?.state === "stale").length;
+  return (
+    <div className="map-group panel" role="dialog" aria-label="Force group">
+      <div className="panel-head">
+        <strong>Group of {group.objects.length}</strong>
+        <button onClick={onClose}>Close</button>
+      </div>
+      <ul>
+        {Object.entries(group.composition).map(([grp, n]) => <li key={grp}>{nameOf(grp)}: {n}</li>)}
+      </ul>
+      <p className="muted">
+        Strength {strength(group, weights).toFixed(0)}, {(group.area_m2 / 10000).toFixed(1)} ha, centre{" "}
+        {group.centre[0].toFixed(0)}, {group.centre[1].toFixed(0)}{stale > 0 && `, ${stale} not seen lately`}
+      </p>
+    </div>
+  );
+}
+
 export function MapView(props: Props) {
-  const { sit, focus, selected, onSelect, onExpand, centre, alert, filter, overview, layer = "auto" } = props;
+  const { sit, focus, selected, onSelect, onExpand, centre, alert, filter, overview, layer = "auto",
+    weights = DEFAULT_WEIGHTS } = props;
   const box = useRef<HTMLDivElement>(null);
   const markers = useRef<Markers>(new Map());
   const [map, setMap] = useState<L.Map | null>(null);
   const [vectors] = useState(() => L.layerGroup());
-  const [layers, setLayers] = useState<Layers>({ drones: true, motion: true, uncertainty: true, truth: false });
+  const [heat] = useState(() => new HeatLayer());
+  const [layers, setLayers] = useState<Layers>({ drones: true, motion: true, uncertainty: true, truth: false,
+    groups: true, density: false });
+  const [pickedGroup, setPickedGroup] = useState<string | null>(null);
   const [showLayers, setShowLayers] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [centredOn, setCentredOn] = useState<string | undefined>(); // the map the view was last centred on
@@ -330,6 +428,14 @@ export function MapView(props: Props) {
     if (!map || !centred) return;
     const objects = [...sit.objects.values()].filter((o) => visible(o, filter));
     vectors.clearLayers();
+    const clusters = [...sit.clusters].filter(([wid]) => sit.maps.get(wid) === mapId).flatMap(([, list]) => list);
+    if (layers.density) {
+      heat.addTo(map);
+      heat.set(objects.map((o) => ({ xy: o.xy, w: weightOf(weights, o.grp) })));
+    } else {
+      heat.remove();
+    }
+    if (layers.groups) drawClusters(vectors, clusters, weights, pickedGroup, setPickedGroup);
     if (layers.drones) drawDrones(vectors, sit, focus, mapId);
     drawObjects(vectors, objects, selected, layers, now);
     if (layers.truth) drawTruth(vectors, sit);
@@ -338,6 +444,7 @@ export function MapView(props: Props) {
     syncMarkers(map, markers.current, objects, selected, onSelect);
   });
 
+  const group = [...sit.clusters.values()].flat().find((c) => c.cid === pickedGroup);
   const away = map && centred && !overview && focusGeo && layers.drones &&
     !map.getBounds().contains(ll(focusGeo.camera)) ? map.getCenter() : null;
 
@@ -345,6 +452,9 @@ export function MapView(props: Props) {
     <div className="map">
       <div ref={box} className="map-box" />
       {error && <p className="error map-error">{error}</p>}
+      {layers.groups && group && (
+        <GroupPanel group={group} sit={sit} weights={weights} onClose={() => setPickedGroup(null)} />
+      )}
       {away && focusGeo && (
         <span className="map-away">
           Drone off the map, {Math.hypot(focusGeo.camera[0] - away.lng, focusGeo.camera[1] - away.lat).toFixed(0)} m

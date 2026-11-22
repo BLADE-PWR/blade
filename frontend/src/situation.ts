@@ -1,6 +1,8 @@
 // The live picture of one gateway connection: the latest of every message type, updated in place as messages arrive.
 import type {
   Alert,
+  Cluster,
+  ClustersData,
   Det,
   DetectionsData,
   DiagData,
@@ -48,6 +50,7 @@ export type Situation = {
   objects: Map<string, WorldObject>;
   events: Map<string, WorldEvent>;
   alerts: Map<string, Alert>; // key "wid aid"
+  clusters: Map<string, Cluster[]>; // wid -> force groups
   truth: TruthMatch[];
   diag: Map<string, DiagData>; // service -> streams of all its replicas
   replicas: Map<string, DiagData & { at: number }>; // "service instance" -> that replica's last report
@@ -63,7 +66,7 @@ export const visible = (o: WorldObject, f: Filter) => !f.hidden.has(o.grp) && (f
 export const boxVisible = (d: Det, f: Filter) => !f.hidden.has(d.grp);
 
 export function emptySituation(): Situation {
-  return { session: null, drones: new Map(), objects: new Map(), events: new Map(), alerts: new Map(), truth: [],
+  return { session: null, drones: new Map(), objects: new Map(), events: new Map(), alerts: new Map(), clusters: new Map(), truth: [],
     diag: new Map(), replicas: new Map(), clocks: new Map(), maps: new Map(),
     objectWids: new Map() };
 }
@@ -94,6 +97,7 @@ function setMap(s: Situation, wid: string, map: string): void {
   if (s.maps.get(wid) && s.maps.get(wid) !== map) {
     for (const [oid, w] of s.objectWids) if (w === wid) remove(s, oid);
     for (const key of s.alerts.keys()) if (key.startsWith(`${wid} `)) s.alerts.delete(key);
+    s.clusters.delete(wid);
   }
   s.maps.set(wid, map);
 }
@@ -155,6 +159,9 @@ export function apply(s: Situation, m: Message): void {
         if (a.state === "active") s.alerts.set(`${m.wid} ${a.aid}`, a);
         else s.alerts.delete(`${m.wid} ${a.aid}`);
       }
+      break;
+    case "clusters":
+      s.clusters.set(m.wid ?? "", (m.data as ClustersData).clusters);
       break;
     case "eval":
       s.truth = (m.data as EvalData).truth;
