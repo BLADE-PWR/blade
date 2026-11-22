@@ -33,12 +33,11 @@ type Props = {
   sids: string[];
   sid: string | null;
   main: MainPanel;
-  onMain: (p: MainPanel) => void;
   onDrone: (sid: string) => void;
   onOperator: () => void;
 };
 
-export function Command({ sit, sids, sid, main, onMain, onDrone, onOperator }: Props) {
+export function Command({ sit, sids, sid, main, onDrone, onOperator }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
   const [alertId, setAlertId] = useState<string | null>(null);
   const [centre, setCentre] = useState<{ xy: Vec2; at: number } | null>(null);
@@ -67,7 +66,7 @@ export function Command({ sit, sids, sid, main, onMain, onDrone, onOperator }: P
   };
   const map = (
     <MapView sit={sit} focus={sid} selected={selected} onSelect={setSelected} centre={centre} alert={alert}
-      filter={ALL} overview layer={layer} onExpand={main === "video" ? () => onMain("map") : undefined} />
+      filter={ALL} overview layer={layer} />
   );
 
   if (main === "video") {

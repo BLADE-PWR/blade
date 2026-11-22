@@ -247,7 +247,6 @@ type Props = {
   focus: string | null;
   selected: string | null;
   onSelect: (oid: string) => void;
-  onExpand?: () => void;
   centre?: { xy: Vec2; at: number } | null;
   alert?: ShownAlert | null;
   filter: Filter;
@@ -256,7 +255,7 @@ type Props = {
 };
 
 export function MapView(props: Props) {
-  const { sit, focus, selected, onSelect, onExpand, centre, alert, filter, overview, layer = "auto" } = props;
+  const { sit, focus, selected, onSelect, centre, alert, filter, overview, layer = "auto" } = props;
   const box = useRef<HTMLDivElement>(null);
   const markers = useRef<Markers>(new Map());
   const [map, setMap] = useState<L.Map | null>(null);
@@ -368,10 +367,11 @@ export function MapView(props: Props) {
           </div>
         )}
       </div>
-      <div className="map-actions">
-        {overview && <button onClick={fitDrones}>Show all drones</button>}
-        {onExpand && <button onClick={onExpand}>Map to the main panel</button>}
-      </div>
+      {overview && (
+        <div className="map-actions">
+          <button onClick={fitDrones}>Show all drones</button>
+        </div>
+      )}
     </div>
   );
 }

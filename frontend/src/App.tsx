@@ -246,7 +246,7 @@ function Live({ target, onPick, onLeave }: { target: Target; onPick: (t: Target)
       {view === "operator"
         ? <Operator sit={sit} sid={sid} main={main} onMain={setMain} onDrone={setPicked} filter={filter}
           onFilter={setFilter} />
-        : <Command sit={sit} sids={sids} sid={sid} main={main} onMain={setMain} onDrone={setPicked}
+        : <Command sit={sit} sids={sids} sid={sid} main={main} onDrone={setPicked}
           onOperator={() => setView("operator")} />}
     </div>
   );

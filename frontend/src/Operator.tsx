@@ -88,8 +88,7 @@ export function Operator({ sit, sid, main, onMain, onDrone, filter, onFilter }: 
   const map = (
     <section className={main === "map" ? "panel map-main" : "panel map-panel"} aria-label="Map">
       <MapView sit={sit} focus={sid} selected={selected} onSelect={setSelected} centre={centre} alert={alert}
-        filter={filter}
-        onExpand={main === "video" ? () => onMain("map") : undefined} />
+        filter={filter} />
     </section>
   );
   return (
