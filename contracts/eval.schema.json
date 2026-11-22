@@ -65,6 +65,11 @@
           "title": "Grp",
           "type": "string"
         },
+        "in_view": {
+          "default": true,
+          "title": "In View",
+          "type": "boolean"
+        },
         "oid": {
           "anyOf": [
             {
@@ -122,7 +127,7 @@
       "type": "object"
     },
     "truth": {
-      "description": "true positions of objects in view, with their world match",
+      "description": "true positions of every known object: the ones in view with their world match, the others with in_view false",
       "items": {
         "$ref": "#/$defs/TruthMatch"
       },
