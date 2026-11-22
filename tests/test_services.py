@@ -530,9 +530,15 @@ async def test_a_drone_that_joined_later_starts_later_and_both_follow_one_seek(t
     r, (first, late) = replay_of((track_dir(tmp_path / "a", 30), 0.0), (track_dir(tmp_path / "b", 10), 1.0),
                                  speed=10.0)
     assert r.duration_s == pytest.approx(2.9)  # the longer of 2.9 s and 1.0 s + 0.9 s
+    # paused at 0 while both open their files: at x10 a chunk lasts 10 ms, less than a slow first read takes
+    r.patch(paused=True, seek_s=0)
+    assert await asyncio.wait_for(anext(first), 1) == bytes([0])  # the first drone starts at once
+    nxt = asyncio.ensure_future(anext(late))
+    await asyncio.sleep(0.05)
+    assert not nxt.done()  # the late drone joins at 1.0 s
+    r.patch(paused=False)
     t0 = time.monotonic()
-    assert await anext(first) == bytes([0])  # the first drone starts at once
-    assert await anext(late) == bytes([0])
+    assert await asyncio.wait_for(nxt, 1) == bytes([0])  # a slow start fails instead of hanging
     assert time.monotonic() - t0 == pytest.approx(0.1, abs=0.05)  # 1.0 s of timeline at x10: as late as live
     r.patch(seek_s=0.5)  # before the late drone joined
     assert await anext(first) == bytes([5])
