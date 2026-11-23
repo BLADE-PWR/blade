@@ -1,5 +1,5 @@
 // Where forces are concentrated: how much each class counts (the operator sets it), the strength of a group.
-import type { Cluster } from "./contracts";
+import type { Cluster, Vec2 } from "./contracts";
 
 export type Weights = Record<string, number>;
 
@@ -24,6 +24,17 @@ export function saveWeights(w: Weights): void {
   } catch {
     // kept for this tab only
   }
+}
+
+/** Is the point inside the polygon (ray casting)? */
+export function inside(poly: Vec2[], [x, y]: Vec2): boolean {
+  let in_ = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i];
+    const [xj, yj] = poly[j];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) in_ = !in_;
+  }
+  return in_;
 }
 
 export const weightOf = (w: Weights, grp: string) => w[grp] ?? 1;

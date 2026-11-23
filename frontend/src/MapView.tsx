@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { colorOf, GROUPS, nameOf, SEVERITY_COLORS } from "./classes";
 import type { Alert, Cluster, Prediction, Vec2, WorldObject } from "./contracts";
-import { loadWeights, MAX_WEIGHT, saveWeights, strength, type Weights, weightOf } from "./force";
+import { inside, loadWeights, MAX_WEIGHT, saveWeights, strength, type Weights, weightOf } from "./force";
 import { getJSON } from "./gateway";
 import { type Drone, droneName, type Filter, type Situation, shownMap, visible, worldNow } from "./situation";
 
@@ -26,6 +26,7 @@ const CIRCLE_POINTS = 24;
 const HEAT_RADIUS_M = 60;
 const HEAT_COLOR = "255, 110, 0";
 const GROUP_COLOR = "#ffd166";
+const CLICK_PX = 5; // a press and release this close are a click
 const STILL_MS = 1; // m/s, like the world model: slower is standing still
 const SIDC: Record<string, string> = {
   soldier: "SHGPUCI--------",
@@ -241,14 +242,12 @@ class HeatLayer extends L.Layer {
   }
 }
 
-function drawClusters(group: L.LayerGroup, clusters: Cluster[], weights: Weights, picked: string | null,
-  onPick: (cid: string) => void): void {
+function drawClusters(group: L.LayerGroup, clusters: Cluster[], weights: Weights, picked: string | null): void {
   const top = Math.max(1, ...clusters.map((c) => strength(c, weights)));
   for (const c of clusters) {
     const sel = c.cid === picked;
     const poly = L.polygon(c.hull.map(ll), { color: GROUP_COLOR, weight: sel ? 3 : 1.5, dashArray: "6 4",
-      fillOpacity: 0.06 + 0.3 * (strength(c, weights) / top) });
-    poly.on("click", () => onPick(c.cid));
+      fillOpacity: 0.06 + 0.3 * (strength(c, weights) / top), interactive: false }); // the map takes the click
     poly.addTo(group);
     if (c.vel && Math.hypot(...c.vel) >= STILL_MS) {
       const tip: Vec2 = [c.centre[0] + c.vel[0] * ARROW_S, c.centre[1] + c.vel[1] * ARROW_S];
@@ -357,19 +356,18 @@ function motion(c: Cluster): string {
 function GroupPanel({ group, sit, weights, onClose }: { group: Cluster; sit: Situation; weights: Weights;
   onClose: () => void }) {
   const stale = group.objects.filter((oid) => sit.objects.get(oid)?.state === "stale").length;
+  const composition = Object.entries(group.composition).map(([grp, n]) => `${nameOf(grp)} ${n}`).join(", ");
   return (
     <div className="map-group panel" role="dialog" aria-label="Force group">
       <div className="panel-head">
         <strong>Group of {group.objects.length}</strong>
         <button onClick={onClose}>Close</button>
       </div>
-      <ul>
-        {Object.entries(group.composition).map(([grp, n]) => <li key={grp}>{nameOf(grp)}: {n}</li>)}
-      </ul>
+      <p>{composition}</p>
       <p className="muted">{motion(group)}</p>
       <p className="muted">
-        Strength {strength(group, weights).toFixed(0)}, {(group.area_m2 / 10000).toFixed(1)} ha, centre{" "}
-        {group.centre[0].toFixed(0)}, {group.centre[1].toFixed(0)}{stale > 0 && `, ${stale} not seen lately`}
+        Strength {strength(group, weights).toFixed(0)}, {(group.area_m2 / 10000).toFixed(1)} ha
+        {stale > 0 && `, ${stale} not seen lately`}
       </p>
     </div>
   );
@@ -385,6 +383,7 @@ export function MapView(props: Props) {
   const [layers, setLayers] = useState<Layers>({ drones: true, motion: true, uncertainty: true, truth: false,
     groups: true, density: false });
   const [pickedGroup, setPickedGroup] = useState<string | null>(null);
+  const shownGroups = useRef<Cluster[]>([]); // the layers are redrawn all the time and lose clicks: a group is found by where the press ends
   const [weights, setWeights] = useState<Weights>(loadWeights);
   const changeWeights = (w: Weights) => {
     setWeights(w);
@@ -416,6 +415,26 @@ export function MapView(props: Props) {
       m.remove();
     };
   }, [vectors]);
+
+  useEffect(() => {
+    if (!map) return;
+    let down: L.Point | null = null;
+    const press = (e: L.LeafletMouseEvent) => {
+      down = e.containerPoint;
+    };
+    const release = (e: L.LeafletMouseEvent) => {
+      const click = down !== null && down.distanceTo(e.containerPoint) < CLICK_PX; // not a drag of the map
+      down = null;
+      const hit = click && shownGroups.current.find((c) => inside(c.hull, [e.latlng.lng, e.latlng.lat]));
+      if (hit) setPickedGroup(hit.cid);
+    };
+    map.on("mousedown", press);
+    map.on("mouseup", release);
+    return () => {
+      map.off("mousedown", press);
+      map.off("mouseup", release);
+    };
+  }, [map]);
 
   useEffect(() => {
     if (!map || !mapId) return;
@@ -468,7 +487,8 @@ export function MapView(props: Props) {
     } else {
       heat.remove();
     }
-    if (layers.groups) drawClusters(vectors, clusters, weights, pickedGroup, setPickedGroup);
+    shownGroups.current = layers.groups ? clusters : [];
+    if (layers.groups) drawClusters(vectors, clusters, weights, pickedGroup);
     if (layers.drones) drawDrones(vectors, sit, focus, mapId);
     drawObjects(vectors, objects, selected, layers, now);
     if (layers.truth) drawTruth(vectors, sit);

@@ -868,18 +868,14 @@ button.primary {
   position: absolute;
   z-index: 1000;
   left: 8px;
-  bottom: 40px;
-  min-width: 180px;
-  padding-bottom: 8px;
-}
-
-.map-group ul {
-  margin: 6px 12px;
-  padding-left: 16px;
+  bottom: 36px;
+  max-width: calc(100% - 190px);
+  min-width: 170px;
+  padding-bottom: 6px;
 }
 
 .map-group p {
-  margin: 0 12px;
+  margin: 2px 12px;
 }
 
 .weights {
