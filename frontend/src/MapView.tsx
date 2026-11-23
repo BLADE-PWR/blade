@@ -46,8 +46,8 @@ const LAYER_NAMES: [keyof Layers, string][] = [
   ["motion", "Motion and prediction"],
   ["uncertainty", "Uncertainty"],
   ["groups", "Force groups"],
-  ["density", "Density of forces"],
   ["truth", "True positions"],
+  ["density", "Density of forces"], // last: its weight sliders open right under it
 ];
 
 type Meta = { extent: [number, number, number, number] };
@@ -546,7 +546,7 @@ export function MapView(props: Props) {
                 {name}
               </label>
             ))}
-            {(layers.groups || layers.density) && <WeightPicker weights={weights} onWeights={changeWeights} />}
+            {layers.density && <WeightPicker weights={weights} onWeights={changeWeights} />}
           </div>
         )}
       </div>
