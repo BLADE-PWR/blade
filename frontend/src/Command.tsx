@@ -270,7 +270,7 @@ type StreamModel = { model: string; active?: string | null; px?: number | null }
 
 /** What "auto" runs for a stream: the model its scale picked, or why nothing runs. */
 function autoState(s: StreamModel): string {
-  if (s.model !== "auto" || s.active === undefined) return "";
+  if (s.active === undefined) return "";
   const px = s.px == null ? "" : `, ${s.px} px`;
   return s.active ? `${s.active}${px}` : `off, no model covers this scale${px}`;
 }
@@ -300,7 +300,7 @@ function ModelPicker({ sid }: { sid: string }) {
   const auto = model?.model === "auto";
   useEffect(() => {
     if (!auto) return;
-    const poll = () => getJSON<StreamModel>(path).then((m) => setModel((old) => old?.model === "auto" ? m : old))
+    const poll = () => getJSON<StreamModel>(path).then((m) => setModel((old) => old?.model === "auto" && (old.active !== m.active || old.px !== m.px) ? m : old))
       .catch(() => undefined); // the label is a hint: a missed answer leaves the last one
     const timer = setInterval(poll, 2000);
     return () => clearInterval(timer);
@@ -393,12 +393,11 @@ function AutoModels() {
         <div className="auto-model" key={r.model}>
           <span className="mono">{r.model}{!r.loaded && <span className="error"> (not loaded)</span>}</span>
           <div className="auto-row">
-            <label>min px <input type="number" min={0} value={r.min} placeholder={String(r.yaml?.min_px ?? "–")}
-              onChange={(e) => edit(i, { min: e.target.value })}
-              aria-label={`${r.model} smallest object, px`} /></label>
-            <label>max px <input type="number" min={0} value={r.max} placeholder={String(r.yaml?.max_px ?? "–")}
-              onChange={(e) => edit(i, { max: e.target.value })}
-              aria-label={`${r.model} largest object, px`} /></label>
+            {(["min", "max"] as const).map((k) => (
+              <label key={k}>{k} px <input type="number" min={0} value={r[k]}
+                placeholder={String(r.yaml?.[`${k}_px`] ?? "–")} onChange={(e) => edit(i, { [k]: e.target.value })}
+                aria-label={`${r.model} ${k === "min" ? "smallest" : "largest"} object, px`} /></label>
+            ))}
           </div>
           <div className="auto-row">
             <button onClick={() => move(i, -1)} disabled={i === 0} aria-label={`${r.model} higher priority`}>Up</button>

@@ -46,7 +46,6 @@ class WorldClock:
         self.offset = {sid: self.offset[sid]}
 
     def tick(self, wall: float) -> float:
-        """-> the world time now, for the sweeper: it follows the wall only while the world has a live stream"""
         if self._live(wall):
             self.t = max(self.t, wall + self.lead)
         return self.t

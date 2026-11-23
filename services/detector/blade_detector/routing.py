@@ -56,8 +56,6 @@ def scale_range(pkg: ModelPackage, entry: Entry) -> tuple[float, float, float]:
 
 
 def describe(routing: Routing, packages: dict[str, ModelPackage]) -> dict:
-    """The routing as the operator sees it: per model the range in force, what model.yaml says, whether it is
-    overridden, and whether the package is loaded."""
     out = []
     for e in routing.models:
         pkg = packages.get(e.model)
@@ -80,9 +78,7 @@ class Choice:
 @dataclass
 class _Stream:
     choice: Choice
-    waiting: bool = False  # the frame has pointed to `pending` instead of the running model since `since`
-    pending: str | None = None
-    since: float = 0.0
+    pending: tuple[str | None, float] | None = None  # (model, since when) the frame points to instead of the running
 
 
 def _rows(routing: Routing, packages: dict[str, ModelPackage], tel: dict, img_w: int, img_h: int) -> list[tuple]:
@@ -130,14 +126,14 @@ class Router:
         if cur in by_model:
             px, lo, hi = by_model[cur]
             if lo * (1 - routing.margin) <= px <= hi * (1 + routing.margin):
-                s.waiting = False
+                s.pending = None
                 return Choice(cur, px)
         elif first is None and cur is None:  # still no model for the scene
-            s.waiting = False
+            s.pending = None
             return Choice(None, rows[0][1])
-        if not s.waiting or s.pending != first:
-            s.waiting, s.pending, s.since = True, first, t
-        if t - s.since >= routing.hold_s:
-            s.waiting = False
+        if s.pending is None or s.pending[0] != first:
+            s.pending = (first, t)
+        if t - s.pending[1] >= routing.hold_s:
+            s.pending = None
             return Choice(first, by_model[first][0] if first else rows[0][1])
         return Choice(cur, by_model[cur][0] if cur in by_model else rows[0][1])  # still waiting

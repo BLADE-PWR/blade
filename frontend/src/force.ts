@@ -41,6 +41,5 @@ export function inside(poly: Vec2[], [x, y]: Vec2): boolean {
 
 export const weightOf = (w: Weights, grp: string) => w[grp] ?? 1;
 
-// Sum of the weights of a group's members
 export const strength = (c: Cluster, w: Weights) =>
   Object.entries(c.composition).reduce((sum, [grp, n]) => sum + n * weightOf(w, grp), 0);

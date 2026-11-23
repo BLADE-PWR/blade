@@ -74,9 +74,8 @@ class Cluster:
             await self.kv_assign.put(sid, json.dumps(a).encode())
 
     async def set_routing(self, routing: dict | None) -> None:
-        """The routing of every replica (None: back to the default). Without KV, of this replica only."""
         self.routing = routing
-        if self.kv_routing is None:
+        if self.kv_routing is None:  # no JetStream: the routing of this replica only
             return
         if routing is None:
             with contextlib.suppress(Exception):  # nothing to delete when it was never set

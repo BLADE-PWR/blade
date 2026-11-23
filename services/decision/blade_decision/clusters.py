@@ -88,7 +88,6 @@ def describe(cid: str, members: list[dict]) -> dict:
 
 @dataclass
 class Grouper:
-    """Groups a world's objects and keeps a group's id while its members change a little."""
     params: Params = field(default_factory=Params)
     prev: dict[str, set[str]] = field(default_factory=dict)  # cid -> members at the last update
     made: int = 0  # group ids given so far

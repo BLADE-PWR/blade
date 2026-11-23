@@ -58,7 +58,7 @@ export type WorldView = {
   events: Map<string, WorldEvent>;
   truth: TruthMatch[];
   alerts: Map<string, Alert>; // aid -> active alert
-  clusters: Cluster[]; // force groups
+  clusters: Cluster[];
   info: WorldInfo | null;
 };
 

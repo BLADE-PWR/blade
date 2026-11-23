@@ -152,12 +152,10 @@ def zone(ws: WorldState, p: dict, t: float) -> list[Cue]:
 
 
 def bearing(v: tuple[float, float]) -> float:
-    """Compass direction of a map east / north vector, degrees."""
     return math.degrees(math.atan2(v[0], v[1])) % 360
 
 
 def _by_object(samples: list[dict]) -> dict[str, tuple[float, float]]:
-    """Mean velocity of each object over the samples."""
     seen: dict[str, list] = {}
     for sample in samples:
         for oid, v in sample.items():

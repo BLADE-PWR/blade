@@ -110,7 +110,6 @@ class Detector:
         return (c.model or NO_MODEL) if c else self.first_model()
 
     def conf_for(self, sid: str) -> float:
-        """The stream's box confidence threshold; by default the model's tracker threshold (conf.track)."""
         conf, pkg = self.cluster.conf(sid), self.packages.get(self.active_model(sid))
         return conf if conf is not None else pkg.conf_track if pkg else 0.0
 
@@ -185,23 +184,22 @@ class Detector:
             for sid in work:
                 self.diag.queue(sid, int(sid in self.slots))
 
+    @staticmethod
+    def frame_of(env, model: str, dets: list, t_in: float):
+        tel = env.data["tel"]
+        data = DetectionsData(model=model, img=(tel["image"]["w"], tel["image"]["h"]), dets=dets, tel=tel)
+        return forward(env, data.model_dump(exclude_none=True), "detector", t_in)
+
     def process(self, model_id: str, items: list) -> list:
         out = []
         if model_id == NO_MODEL:  # no model covers the scale: say so with a frame that has no boxes
             for sid, env, _jpeg, t_in in items:
-                tel = env.data["tel"]
-                data = DetectionsData(model=NO_MODEL, img=(tel["image"]["w"], tel["image"]["h"]), dets=[], tel=tel)
-                out.append(forward(env, data.model_dump(exclude_none=True), "detector", t_in))
+                out.append(self.frame_of(env, NO_MODEL, [], t_in))
                 self.diag.skip(sid)
             return out
         if model_id in ORACLE_IDS:
-            for sid, env, _jpeg, t_in in items:
-                tel = env.data["tel"]
-                dets = self.oracle.detect(sid, tel)
-                data = DetectionsData(model=Oracle.id, img=(tel["image"]["w"], tel["image"]["h"]),
-                                      dets=dets, tel=tel)
-                out.append(forward(env, data.model_dump(exclude_none=True), "detector", t_in))
-            return out
+            return [self.frame_of(env, Oracle.id, self.oracle.detect(sid, env.data["tel"]), t_in)
+                    for sid, env, _jpeg, t_in in items]
         pkg = self.packages.get(model_id)
         if pkg is None:
             raise RuntimeError(f"no model package {model_id} in {MODELS_DIR}")
@@ -373,7 +371,6 @@ async def set_routing(body: RoutingBody):
 
 @app.delete("/routing")
 async def reset_routing():
-    """Back to AUTO_MODELS and the ranges of model.yaml."""
     await svc.cluster.set_routing(None)
     return describe(svc.routing(), svc.packages)
 

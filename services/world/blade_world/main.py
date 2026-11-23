@@ -86,7 +86,6 @@ async def on_geo(msg) -> None:
 
 
 async def sweep_once(wall: float) -> None:
-    """Age every world on its own clock; publish what went stale or expired, and the clock whenever it moved"""
     for wid, w in list(worlds.items()):
         t = clocks[wid].tick(wall)
         stale, expired = w.sweep(t)

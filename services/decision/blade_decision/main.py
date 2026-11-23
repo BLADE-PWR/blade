@@ -58,7 +58,6 @@ class Engine:
         return out
 
     def track_groups(self, t: float) -> None:
-        """The force groups now, and the velocity of each member over the last window of the group_motion rule."""
         self.ws.groups = self.grouper.update(self.ws.objects, t)
         keep = self.rules["group_motion"]["window_s"] + 5.0
         motion = {}
