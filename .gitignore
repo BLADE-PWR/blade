@@ -5,14 +5,11 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# Generated data: map packages, recordings, local service state
-maps/
-recordings/
-state/
-# *.ts is MPEG-TS video; TypeScript in frontend/ stays in git
-*.ts
-!frontend/**/*.ts
+# Recordings: only the example one is tracked
+recordings/*
+!recordings/2026-11-23_101743_live_altis/
 
+state/
 *.pt
 
 # Frontend

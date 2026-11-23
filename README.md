@@ -52,16 +52,37 @@ the gateway on `127.0.0.1:8000` (`GATEWAY_URL` for another machine). Its top bar
 the running missions) and Replay (a dropdown of the recordings); below are the drones' video with boxes and the map.
 How to draw object motion (arrows, prediction cones): `services/world/README.md`.
 
+## Clone
+
+Map packages (`maps/`), model weights (`*.onnx`) and the example recording are stored with
+[Git LFS](https://git-lfs.com) (~740 MB). Install it once per machine before cloning (`brew install git-lfs` on
+macOS; Git for Windows already includes it):
+
+```bash
+git lfs install
+git clone https://github.com/BLADE-PWR/blade.git
+```
+
+If the repo was cloned before Git LFS was installed, files in `maps/` and `models/` are small text pointers instead of
+the real data. To download them, run inside the repo:
+
+```bash
+git lfs install && git lfs pull
+```
+
 ## Run
 
-Needs a map package in `maps/<map name>` and, for replays, a recording in `recordings/`.
+Needs a map package in `maps/<map name>` (altis and stratis are included) and, for replays, a recording in
+`recordings/` (one example is included; new recordings are git-ignored).
 
 ```bash
 uv sync
 ```
+
 ```bash
 brew install nats-server
 ```
+
 ```bash
 uv run python tools/dev.py
 ```
@@ -94,9 +115,11 @@ uv run pytest
 
 To support a new map, export it with grad_meh in the game, then run these commands to build a map package in
 `maps/<map name>`:
+
 ```bash
 uv run python terrain/build_dem.py "<Arma 3 path>/grad_meh/<map name>" --out maps/<map name>
 ```
+
 ```bash
 uv run python terrain/build_ortho.py "<Arma 3 path>/grad_meh/<map name>" --out maps/<map name>
 ```
@@ -111,7 +134,9 @@ libs/        common (envelope, NATS helpers, KLV), geometry (camera, terrain, si
 services/    one folder per service, each with a README
 frontend/    operator web app (React + TypeScript, Vite); not part of the uv workspace
 tools/       dev.py, busmon.py, eval_report.py, pixel_error.py, world_score.py
-models/      model packages
+models/      model packages (weights in Git LFS)
+maps/        map packages: altis, stratis (Git LFS)
+recordings/  one example recording (Git LFS); others are git-ignored
 terrain/     map package builders
 deploy/      Dockerfile, compose.yaml, compose.gpu.yaml, nats.conf
 docs/        architecture.mmd (Mermaid source) and the rendered architecture.png
