@@ -213,6 +213,7 @@ function StatePanel({ sit, sid }: { sit: Situation; sid: string | null }) {
 const RULE_NAMES: Record<string, string> = {
   vehicle_group: "Vehicle group", lost_contact: "Lost contact", uncertain_position: "Uncertain position",
   infantry_resolution: "Infantry resolution", explosion_near: "Explosion nearby", zone: "Zone",
+  group_motion: "Group motion",
 };
 
 type Rules = Record<string, { enabled?: boolean }>;

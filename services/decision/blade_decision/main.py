@@ -42,6 +42,7 @@ class Engine:
         self.map: str | None = None  # the world's map, from its object updates
         self.grouper = Grouper(CLUSTER_PARAMS)
         self.clusters: list[dict] = []
+        self.had_clusters = False  # the last publication had groups: an empty one must follow when they are gone
         self._ids = itertools.count(1)
 
     def now(self) -> float:
@@ -57,10 +58,25 @@ class Engine:
             out.append(a)
         return out
 
+    def track_groups(self, t: float) -> None:
+        """The force groups now, and how each has moved over the last window of the group_motion rule."""
+        self.clusters = self.ws.groups = self.grouper.update(self.ws.objects, t)
+        keep = self.rules["group_motion"]["window_s"] + 5.0
+        motion = {}
+        for g in self.clusters:
+            hist = self.ws.motion.get(g["cid"], deque())
+            if g["vel"] is not None:
+                hist.append((t, g["vel"]))
+            while hist and t - hist[0][0] > keep:
+                hist.popleft()
+            motion[g["cid"]] = hist
+        self.ws.motion = motion
+
     def step(self, t: float) -> list[Alert]:
         """Run every enabled rule; -> alerts raised or cleared now."""
         self.ws.events = [e for e in self.ws.events if t - e["t"] < 30]
         self.ws.gone = {k: v for k, v in self.ws.gone.items() if t - v["last"] < GONE_KEEP_S}
+        self.track_groups(t)
         cues = {}
         for name, fn in RULES.items():
             p = self.rules.get(name, {})
@@ -179,10 +195,9 @@ async def loop() -> None:
             changed = eng.step(eng.now())
             if changed:
                 await send_alerts(wid, changed, wall)
-            had = bool(eng.clusters)
-            eng.clusters = eng.grouper.update(eng.ws.objects, eng.now())
-            if eng.clusters or had:  # an empty list tells the clients the last group is gone
+            if eng.clusters or eng.had_clusters:  # an empty list tells the clients the last group is gone
                 await send_clusters(wid, eng, wall)
+            eng.had_clusters = bool(eng.clusters)
 
 
 @asynccontextmanager

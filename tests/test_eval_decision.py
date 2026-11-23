@@ -128,6 +128,29 @@ async def test_clusters_are_published_and_cleared_when_the_last_goes(monkeypatch
     assert sent[-1][1]["clusters"] == []
 
 
+def test_group_motion_alerts_on_a_turn_and_on_speeding_up():
+    e = Engine("w")
+    for t in range(0, 12):  # three tanks go east at 3 m/s
+        e.ws.objects = {f"t{i}": obj(f"t{i}", "tank", 3.0 * t, 20.0 * i, vel=(3.0, 0.0), last=float(t))
+                        for i in range(3)}
+        assert not [x for x in e.step(float(t)) if x.rule == "group_motion"]
+    for t in range(12, 24):  # then north at 9 m/s: a turn of 90 degrees and three times the speed
+        e.ws.objects = {f"t{i}": obj(f"t{i}", "tank", 36.0, 20.0 * i + 9.0 * (t - 12), vel=(0.0, 9.0), last=float(t))
+                        for i in range(3)}
+        e.step(float(t))
+    rules = {a.title for a in e.active.values() if a.rule == "group_motion"}
+    assert rules == {"Group of 3 changed direction", "Group of 3 speeds up"}
+
+
+def test_group_moving_steadily_raises_no_motion_alert():
+    e = Engine("w")
+    for t in range(0, 30):
+        e.ws.objects = {f"t{i}": obj(f"t{i}", "tank", 5.0 * t, 20.0 * i, vel=(5.0, 0.0), last=float(t))
+                        for i in range(3)}
+        e.step(float(t))
+    assert not [a for a in e.active.values() if a.rule == "group_motion"]
+
+
 class ObjectsMsg:
     def __init__(self, wid, data):
         self.subject, self.headers = f"world.{wid}.objects", None

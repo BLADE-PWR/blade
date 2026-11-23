@@ -3,6 +3,7 @@ to look and why. A rule is (WorldState, params, now) -> [Cue]; a cue's key is st
 from __future__ import annotations
 
 import math
+from collections import deque
 from dataclasses import dataclass, field
 
 from blade_common.util import inside
@@ -20,7 +21,9 @@ DEFAULTS: dict[str, dict] = {
     "explosion_near": {"enabled": True, "radius_m": 100.0},
     "zone": {"enabled": True, "zones": [], "eta_s": 60.0,
              "groups": ["tank", "military_vehicle", "soldier"]},
+    "group_motion": {"enabled": True, "window_s": 10.0, "turn_deg": 40.0, "speedup": 1.5, "min_speed": 2.0},
 }
+RECENT_S = 3.0  # s, the group's motion "now" is its mean over this long
 
 
 @dataclass
@@ -41,6 +44,8 @@ class WorldState:
     gone: dict[str, dict] = field(default_factory=dict)  # oid -> last state of expired objects
     events: list[dict] = field(default_factory=list)  # recent world events
     cameras: dict[str, dict] = field(default_factory=dict)  # sid -> {"gsd_m", "centre", "t"}
+    groups: list[dict] = field(default_factory=list)  # force groups now (clusters.py)
+    motion: dict[str, deque] = field(default_factory=dict)  # cid -> (t, vel) of the group, newest last
 
 
 def _conf(objs: list[dict]) -> float:
@@ -145,5 +150,41 @@ def zone(ws: WorldState, p: dict, t: float) -> list[Cue]:
     return out
 
 
+def _mean(vels: list[tuple[float, float]]) -> tuple[float, float] | None:
+    return (sum(v[0] for v in vels) / len(vels), sum(v[1] for v in vels) / len(vels)) if vels else None
+
+
+def group_motion(ws: WorldState, p: dict, t: float) -> list[Cue]:
+    """A group that turned or sped up: its mean motion over the last RECENT_S against window_s ago."""
+    out = []
+    for g in ws.groups:
+        hist = ws.motion.get(g["cid"], ())
+        now = _mean([v for s, v in hist if t - s <= RECENT_S])
+        before = _mean([v for s, v in hist if p["window_s"] - RECENT_S <= t - s <= p["window_s"]])
+        if now is None or before is None:
+            continue
+        a, b = math.hypot(*before), math.hypot(*now)
+        n = len(g["objects"])
+        xy = tuple(g["centre"])
+        if a >= p["min_speed"] and b >= p["min_speed"]:
+            turn = abs((bearing(now) - bearing(before) + 180) % 360 - 180)
+            if turn >= p["turn_deg"]:
+                out.append(Cue(f"group_motion:{g['cid']}:turn", "group_motion", "notice",
+                               f"Group of {n} changed direction",
+                               f"The group moved at {bearing(before):.0f} deg and now moves at {bearing(now):.0f} deg "
+                               f"(about {p['window_s']:.0f} s apart).", g["objects"], None, xy))
+        if b >= p["min_speed"] and b >= p["speedup"] * max(a, 1.0):
+            out.append(Cue(f"group_motion:{g['cid']}:speed", "group_motion", "notice", f"Group of {n} speeds up",
+                           f"The group went from {a * 3.6:.0f} to {b * 3.6:.0f} km/h in about {p['window_s']:.0f} s.",
+                           g["objects"], None, xy))
+    return out
+
+
+def bearing(v: tuple[float, float]) -> float:
+    """Compass direction of a map east / north vector, degrees."""
+    return math.degrees(math.atan2(v[0], v[1])) % 360
+
+
 RULES = {"vehicle_group": vehicle_group, "lost_contact": lost_contact, "uncertain_position": uncertain_position,
-         "infantry_resolution": infantry_resolution, "explosion_near": explosion_near, "zone": zone}
+         "infantry_resolution": infantry_resolution, "explosion_near": explosion_near, "zone": zone,
+         "group_motion": group_motion}

@@ -26,6 +26,7 @@ const CIRCLE_POINTS = 24;
 const HEAT_RADIUS_M = 60;
 const HEAT_COLOR = "255, 110, 0";
 const GROUP_COLOR = "#ffd166";
+const STILL_MS = 1; // m/s, like the world model: slower is standing still
 const SIDC: Record<string, string> = {
   soldier: "SHGPUCI--------",
   tank: "SHGPUCA--------",
@@ -249,6 +250,10 @@ function drawClusters(group: L.LayerGroup, clusters: Cluster[], weights: Weights
       fillOpacity: 0.06 + 0.3 * (strength(c, weights) / top) });
     poly.on("click", () => onPick(c.cid));
     poly.addTo(group);
+    if (c.vel && Math.hypot(...c.vel) >= STILL_MS) {
+      const tip: Vec2 = [c.centre[0] + c.vel[0] * ARROW_S, c.centre[1] + c.vel[1] * ARROW_S];
+      L.polyline([ll(c.centre), ll(tip)], { color: GROUP_COLOR, weight: 4, interactive: false }).addTo(group);
+    }
     L.marker(ll(c.centre), { interactive: false, icon: L.divIcon({ className: "group-label", iconSize: [0, 0],
       html: `<span class="sym-label">${c.objects.length}</span>` }) }).addTo(group);
   }
@@ -342,6 +347,13 @@ function WeightPicker({ weights, onWeights }: { weights: Weights; onWeights: (w:
   );
 }
 
+function motion(c: Cluster): string {
+  const speed = c.vel ? Math.hypot(...c.vel) : 0;
+  if (!c.vel || speed < STILL_MS) return "Standing still";
+  const heading = (Math.atan2(c.vel[0], c.vel[1]) * 180 / Math.PI + 360) % 360;
+  return `Moving ${(speed * 3.6).toFixed(0)} km/h, heading ${heading.toFixed(0)} deg`;
+}
+
 function GroupPanel({ group, sit, weights, onClose }: { group: Cluster; sit: Situation; weights: Weights;
   onClose: () => void }) {
   const stale = group.objects.filter((oid) => sit.objects.get(oid)?.state === "stale").length;
@@ -354,6 +366,7 @@ function GroupPanel({ group, sit, weights, onClose }: { group: Cluster; sit: Sit
       <ul>
         {Object.entries(group.composition).map(([grp, n]) => <li key={grp}>{nameOf(grp)}: {n}</li>)}
       </ul>
+      <p className="muted">{motion(group)}</p>
       <p className="muted">
         Strength {strength(group, weights).toFixed(0)}, {(group.area_m2 / 10000).toFixed(1)} ha, centre{" "}
         {group.centre[0].toFixed(0)}, {group.centre[1].toFixed(0)}{stale > 0 && `, ${stale} not seen lately`}
