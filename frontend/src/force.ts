@@ -26,19 +26,19 @@ export function saveWeights(w: Weights): void {
   }
 }
 
-/** Is the point inside the polygon (ray casting)? */
+// Is the point inside the polygon (ray casting)?
 export function inside(poly: Vec2[], [x, y]: Vec2): boolean {
-  let in_ = false;
+  let result = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
     const [xi, yi] = poly[i];
     const [xj, yj] = poly[j];
-    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) in_ = !in_;
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) result = !result;
   }
-  return in_;
+  return result;
 }
 
 export const weightOf = (w: Weights, grp: string) => w[grp] ?? 1;
 
-/** Sum of the weights of a group's members. */
+// Sum of the weights of a group's members
 export const strength = (c: Cluster, w: Weights) =>
   Object.entries(c.composition).reduce((sum, [grp, n]) => sum + n * weightOf(w, grp), 0);

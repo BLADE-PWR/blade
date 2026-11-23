@@ -24,6 +24,8 @@ const ALERT_RING_PX = 16;
 const STACK_ORDER = ["tank", "military_vehicle", "soldier"];
 const CIRCLE_POINTS = 24;
 const HEAT_RADIUS_M = 60;
+const HEAT_ALPHA = 0.45; // of the strongest class weight
+const HEAT_MIN_PX = 8;
 const HEAT_COLOR = "255, 110, 0";
 const GROUP_COLOR = "#ffd166";
 const CLICK_PX = 5; // a press and release this close are a click
@@ -190,7 +192,7 @@ function drawObjects(group: L.LayerGroup, objects: WorldObject[], selected: stri
   }
 }
 
-/** The density of forces: a soft spot per object, as strong as its class weight; overlapping spots add up. */
+// The density of forces: a soft spot per object, as strong as its class weight; overlapping spots add up
 class HeatLayer extends L.Layer {
   private canvas = L.DomUtil.create("canvas", "heat") as HTMLCanvasElement;
   private spots: { xy: Vec2; w: number }[] = [];
@@ -227,12 +229,12 @@ class HeatLayer extends L.Layer {
     const ctx = c.getContext("2d")!;
     const a = map.latLngToContainerPoint(ll([0, 0]));
     const b = map.latLngToContainerPoint(ll([1, 0]));
-    const r = Math.max(8, Math.hypot(b.x - a.x, b.y - a.y) * HEAT_RADIUS_M); // px
+    const r = Math.max(HEAT_MIN_PX, Math.hypot(b.x - a.x, b.y - a.y) * HEAT_RADIUS_M); // px
     ctx.globalCompositeOperation = "lighter";
     for (const s of this.spots) {
       const p = map.latLngToContainerPoint(ll(s.xy));
       if (p.x < -r || p.y < -r || p.x > size.x + r || p.y > size.y + r) continue;
-      const alpha = Math.min(1, s.w / MAX_WEIGHT) * 0.45;
+      const alpha = Math.min(1, s.w / MAX_WEIGHT) * HEAT_ALPHA;
       const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
       g.addColorStop(0, `rgba(${HEAT_COLOR}, ${alpha})`);
       g.addColorStop(1, `rgba(${HEAT_COLOR}, 0)`);
@@ -329,7 +331,7 @@ type Props = {
   layer?: Background;
 };
 
-/** How much each class counts in the strength of a group and in the density of forces. */
+// How much each class counts in the strength of a group and in the density of forces
 function WeightPicker({ weights, onWeights }: { weights: Weights; onWeights: (w: Weights) => void }) {
   return (
     <div className="weights" role="group" aria-label="Class weights">
@@ -383,7 +385,8 @@ export function MapView(props: Props) {
   const [layers, setLayers] = useState<Layers>({ drones: true, motion: true, uncertainty: true, truth: false,
     groups: true, density: false });
   const [pickedGroup, setPickedGroup] = useState<string | null>(null);
-  const shownGroups = useRef<Cluster[]>([]); // the layers are redrawn all the time and lose clicks: a group is found by where the press ends
+  // the layers are redrawn all the time and lose clicks, so a group is found by where the press ends
+  const shownGroups = useRef<Cluster[]>([]);
   const [weights, setWeights] = useState<Weights>(loadWeights);
   const changeWeights = (w: Weights) => {
     setWeights(w);
@@ -480,7 +483,9 @@ export function MapView(props: Props) {
     if (!map || !centred) return;
     const objects = [...sit.objects.values()].filter((o) => visible(o, filter));
     vectors.clearLayers();
-    const clusters = [...sit.clusters].filter(([wid]) => sit.maps.get(wid) === mapId).flatMap(([, list]) => list);
+    const shown = new Set(objects.map((o) => o.oid)); // a group of classes the filter hides is hidden too
+    const clusters = [...sit.clusters].filter(([wid]) => sit.maps.get(wid) === mapId).flatMap(([, list]) => list)
+      .filter((c) => c.objects.some((oid) => shown.has(oid)));
     if (layers.density) {
       heat.addTo(map);
       heat.set(objects.map((o) => ({ xy: o.xy, w: weightOf(weights, o.grp) })));

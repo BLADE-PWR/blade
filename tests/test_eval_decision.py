@@ -231,3 +231,25 @@ async def test_rewind_clears_the_alerts_of_forgotten_objects_at_once(monkeypatch
     await dm.on_objects(ObjectsMsg("w1", {"forgotten": ["t1"], "t": 261.0}))  # its replay looped
     assert sent == [[{**lost["t1"].model_dump(exclude_none=True), "state": "cleared", "t": 261.0}]]
     assert [a.objects for a in e.active.values()] == [["t2"]]  # seen by a stream that did not go back
+
+
+async def test_clusters_drop_forgotten_objects_and_a_new_map_starts_afresh(monkeypatch):
+    monkeypatch.setattr(dm, "engines", {})
+
+    async def publish(nc, subject, env):
+        pass
+
+    monkeypatch.setattr(dm, "publish", publish)
+    tanks = [obj("t1", "tank", 0, 0, last=200.0), obj("t2", "tank", 50, 0, last=200.0),
+             obj("t3", "tank", 100, 0, last=200.0)]
+    await dm.on_objects(ObjectsMsg("w1", {"objects": tanks, "t": 200.0}))
+    e = dm.engines["w1"]
+    (a,) = e.grouper.update(e.ws.objects, e.now())
+    assert a["objects"] == ["t1", "t2", "t3"]
+    await dm.on_objects(ObjectsMsg("w1", {"forgotten": ["t1", "t2"], "t": 200.0}))  # its replay went back
+    assert e.grouper.update(e.ws.objects, e.now()) == []  # t3 is alone
+    await dm.on_objects(ObjectsMsg("w1", {"objects": tanks, "t": 201.0}))
+    e.clusters = e.grouper.update(e.ws.objects, e.now())
+    assert len(e.clusters) == 1
+    await dm.on_objects(ObjectsMsg("w1", {"map": "other", "t": 202.0}))
+    assert e.clusters == [] and e.grouper.prev == {}

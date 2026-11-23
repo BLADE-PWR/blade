@@ -26,8 +26,9 @@ log = logging.getLogger("decision")
 PERIOD_S = env_float("PERIOD_S", 1.0)
 CLEAR_AFTER_S = env_float("CLEAR_AFTER_S", 5.0)
 GONE_KEEP_S = env_float("GONE_KEEP_S", 600.0)
-CLUSTER_PARAMS = Params(env_float("CLUSTER_RADIUS_M", 150.0), int(env_float("CLUSTER_MIN_COUNT", 2)),
-                        env_float("CLUSTER_MAX_AGE_S", 60.0))
+CLUSTER_PARAMS = Params(env_float("CLUSTER_RADIUS_M", Params.radius_m),
+                        int(env_float("CLUSTER_MIN_COUNT", Params.min_count)),
+                        env_float("CLUSTER_MAX_AGE_S", Params.max_age_s))
 
 
 class Engine:

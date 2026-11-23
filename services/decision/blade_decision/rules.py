@@ -154,6 +154,11 @@ def _mean(vels: list[tuple[float, float]]) -> tuple[float, float] | None:
     return (sum(v[0] for v in vels) / len(vels), sum(v[1] for v in vels) / len(vels)) if vels else None
 
 
+def bearing(v: tuple[float, float]) -> float:
+    """Compass direction of a map east / north vector, degrees."""
+    return math.degrees(math.atan2(v[0], v[1])) % 360
+
+
 def group_motion(ws: WorldState, p: dict, t: float) -> list[Cue]:
     """A group that turned or sped up: its mean motion over the last RECENT_S against window_s ago."""
     out = []
@@ -178,11 +183,6 @@ def group_motion(ws: WorldState, p: dict, t: float) -> list[Cue]:
                            f"The group went from {a * 3.6:.0f} to {b * 3.6:.0f} km/h in about {p['window_s']:.0f} s.",
                            g["objects"], None, xy))
     return out
-
-
-def bearing(v: tuple[float, float]) -> float:
-    """Compass direction of a map east / north vector, degrees."""
-    return math.degrees(math.atan2(v[0], v[1])) % 360
 
 
 RULES = {"vehicle_group": vehicle_group, "lost_contact": lost_contact, "uncertain_position": uncertain_position,
