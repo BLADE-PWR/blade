@@ -28,7 +28,7 @@ from .cluster import Cluster
 from .ground import auto_imgsz, too_big
 from .oracle import Oracle
 from .package import ModelPackage, detect_batch, find_packages
-from .routing import Entry, Router, Routing, describe
+from .routing import Entry, Router, Routing, describe, scale_range
 from .tracking import StreamTracker
 
 log = logging.getLogger("detector")
@@ -359,6 +359,9 @@ async def set_routing(body: RoutingBody):
     for e in routing.models:
         if e.model not in svc.packages:
             _404(e.model)
+        _, lo, hi = scale_range(svc.packages[e.model], e)  # one limit alone can cross the other from model.yaml
+        if lo >= hi:
+            raise HTTPException(400, f"{e.model}: min_px {lo:g} must be below max_px {hi:g} (empty = model.yaml)")
     await svc.cluster.set_routing(routing.to_dict())
     return describe(routing, svc.packages)
 

@@ -185,4 +185,7 @@ async def test_routing_is_set_read_and_reset_through_rest(monkeypatch):
     with pytest.raises(HTTPException) as e:
         await det.set_routing(det.RoutingBody(models=[det.RoutingEntry(model="far@1", min_px=9, max_px=5)]))
     assert e.value.status_code == 400
+    with pytest.raises(HTTPException) as e:  # max below the min_px of model.yaml (14) leaves no scale to cover
+        await det.set_routing(det.RoutingBody(models=[det.RoutingEntry(model="near@1", max_px=10)]))
+    assert e.value.status_code == 400
     assert (await det.reset_routing())["models"][0]["model"] == det.AUTO_MODELS[0]
