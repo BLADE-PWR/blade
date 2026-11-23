@@ -20,7 +20,7 @@ from blade_common.contracts import Alert, AlertsData, ClustersData, Envelope
 from blade_common.service import env_float, run_app
 
 from .clusters import Grouper, Params, same_group
-from .rules import DEFAULTS, RULES, WorldState
+from .rules import DEFAULTS, MEMBER_KEYED, RULES, WorldState
 
 log = logging.getLogger("decision")
 PERIOD_S = env_float("PERIOD_S", 1.0)
@@ -42,7 +42,6 @@ class Engine:
         self.clock: float | None = None  # the world's time, s, from its object updates
         self.map: str | None = None  # the world's map, from its object updates
         self.grouper = Grouper(CLUSTER_PARAMS)
-        self.clusters: list[dict] = []
         self.had_clusters = False  # the last publication had groups: an empty one must follow when they are gone
         self._ids = itertools.count(1)
 
@@ -61,10 +60,10 @@ class Engine:
 
     def track_groups(self, t: float) -> None:
         """The force groups now, and the velocity of each member over the last window of the group_motion rule."""
-        self.clusters = self.ws.groups = self.grouper.update(self.ws.objects, t)
+        self.ws.groups = self.grouper.update(self.ws.objects, t)
         keep = self.rules["group_motion"]["window_s"] + 5.0
         motion = {}
-        for g in self.clusters:
+        for g in self.ws.groups:
             hist = self.ws.motion.get(g["cid"], deque())
             vels = {oid: o["vel"] for oid in g["objects"] if (o := self.ws.objects.get(oid)) and o.get("vel")}
             if vels and (not hist or t > hist[-1][0]):  # a paused world clock adds nothing
@@ -90,7 +89,7 @@ class Engine:
                     log.exception("rule %s", name)
         # a group whose members changed a little is the same group: carry its alert over to the new key
         for key, c in list(cues.items()):
-            if key in self.active or not c.objects:
+            if key in self.active or not c.objects or c.rule not in MEMBER_KEYED:
                 continue
             for old_key, a in list(self.active.items()):
                 if a.rule == c.rule and old_key not in cues and same_group(set(a.objects), set(c.objects)):
@@ -139,7 +138,7 @@ async def send_alerts(wid: str, alerts: list[Alert], t0: float) -> None:
 
 
 async def send_clusters(wid: str, eng: Engine, t0: float) -> None:
-    data = ClustersData(clusters=eng.clusters, t=eng.clock).model_dump(exclude_none=True)
+    data = ClustersData(clusters=eng.ws.groups, t=eng.clock).model_dump(exclude_none=True)
     await publish(state["nc"], f"clusters.{wid}", Envelope(wid=wid, ts={"decision": [t0, time.time()]}, data=data))
 
 
@@ -150,9 +149,9 @@ async def on_objects(msg) -> None:
     if env.data["map"] != eng.map:  # a new map: nothing from the old one applies any more
         if eng.map is not None:
             cleared = eng.clear_now(list(eng.active))
+            had_groups = bool(eng.ws.groups)
             eng.ws, eng.clock = WorldState(), None  # the world's clock restarts too
-            had_groups = bool(eng.clusters)
-            eng.grouper, eng.clusters = Grouper(CLUSTER_PARAMS), []
+            eng.grouper = Grouper(CLUSTER_PARAMS)
             if had_groups:
                 await send_clusters(wid, eng, time.time())
             if cleared:
@@ -200,9 +199,9 @@ async def loop() -> None:
             changed = eng.step(eng.now())
             if changed:
                 await send_alerts(wid, changed, wall)
-            if eng.clusters or eng.had_clusters:  # an empty list tells the clients the last group is gone
+            if eng.ws.groups or eng.had_clusters:  # an empty list tells the clients the last group is gone
                 await send_clusters(wid, eng, wall)
-            eng.had_clusters = bool(eng.clusters)
+            eng.had_clusters = bool(eng.ws.groups)
 
 
 @asynccontextmanager
@@ -245,7 +244,7 @@ async def put_rules(wid: str, body: dict):
 @app.get("/worlds/{wid}/clusters")
 async def clusters(wid: str):
     eng = engines.get(wid)
-    return [] if eng is None else eng.clusters
+    return [] if eng is None else eng.ws.groups
 
 
 @app.get("/worlds/{wid}/alerts")

@@ -2,7 +2,6 @@
 rule, no severity. Same single-linkage grouping as the vehicle_group rule."""
 from __future__ import annotations
 
-import itertools
 import math
 from dataclasses import dataclass, field
 
@@ -35,6 +34,10 @@ def link(objs: list[dict], radius_m: float) -> list[list[dict]]:
                     todo.append(b)
         groups.append(group)
     return groups
+
+
+def mean_vel(vels: list[tuple[float, float]]) -> tuple[float, float] | None:
+    return (sum(v[0] for v in vels) / len(vels), sum(v[1] for v in vels) / len(vels)) if vels else None
 
 
 def same_group(a: set[str], b: set[str]) -> bool:
@@ -76,8 +79,7 @@ def describe(cid: str, members: list[dict]) -> dict:
     comp: dict[str, int] = {}
     for o in members:
         comp[o["grp"]] = comp.get(o["grp"], 0) + 1
-    moving = [o["vel"] for o in members if o.get("vel")]
-    vel = (sum(v[0] for v in moving) / len(moving), sum(v[1] for v in moving) / len(moving)) if moving else None
+    vel = mean_vel([o["vel"] for o in members if o.get("vel")])
     return {"cid": cid, "objects": sorted(o["oid"] for o in members), "composition": comp,
             "centre": (round(sum(x for x, _ in xys) / len(xys), 1), round(sum(y for _, y in xys) / len(xys), 1)),
             "hull": [(round(x, 1), round(y, 1)) for x, y in hull], "area_m2": round(area(hull)),
@@ -89,7 +91,7 @@ class Grouper:
     """Groups a world's objects and keeps a group's id while its members change a little."""
     params: Params = field(default_factory=Params)
     prev: dict[str, set[str]] = field(default_factory=dict)  # cid -> members at the last update
-    _ids: itertools.count = field(default_factory=lambda: itertools.count(1))
+    made: int = 0  # group ids given so far
 
     def update(self, objects: dict[str, dict], t: float) -> list[dict]:
         p = self.params
@@ -101,7 +103,9 @@ class Grouper:
             ids = {o["oid"] for o in g}
             best = max((c for c, m in free.items() if same_group(ids, m)), key=lambda c: len(ids & free[c]),
                        default=None)
-            cid = best if best is not None else f"g-{next(self._ids):04d}"
+            if best is None:
+                self.made += 1
+            cid = best if best is not None else f"g-{self.made:04d}"
             free.pop(cid, None)
             now[cid] = ids
             out.append(describe(cid, g))

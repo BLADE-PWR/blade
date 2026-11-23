@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 
 from blade_common.util import inside
 
-from .clusters import link
+from .clusters import link, mean_vel
 
 VEHICLES = {"tank", "military_vehicle"}
 
@@ -23,6 +23,7 @@ DEFAULTS: dict[str, dict] = {
              "groups": ["tank", "military_vehicle", "soldier"]},
     "group_motion": {"enabled": True, "window_s": 10.0, "turn_deg": 40.0, "speedup": 1.5, "min_speed": 2.0},
 }
+MEMBER_KEYED = {"vehicle_group"}  # rules whose alert key is a member: the alert follows the group
 RECENT_S = 3.0  # s, the group's motion "now" is its mean over this long
 
 
@@ -150,10 +151,6 @@ def zone(ws: WorldState, p: dict, t: float) -> list[Cue]:
     return out
 
 
-def _mean(vels: list[tuple[float, float]]) -> tuple[float, float] | None:
-    return (sum(v[0] for v in vels) / len(vels), sum(v[1] for v in vels) / len(vels)) if vels else None
-
-
 def bearing(v: tuple[float, float]) -> float:
     """Compass direction of a map east / north vector, degrees."""
     return math.degrees(math.atan2(v[0], v[1])) % 360
@@ -165,7 +162,7 @@ def _by_object(samples: list[dict]) -> dict[str, tuple[float, float]]:
     for sample in samples:
         for oid, v in sample.items():
             seen.setdefault(oid, []).append(v)
-    return {oid: _mean(vs) for oid, vs in seen.items()}
+    return {oid: mean_vel(vs) for oid, vs in seen.items()}
 
 
 def group_motion(ws: WorldState, p: dict, t: float) -> list[Cue]:
@@ -179,7 +176,7 @@ def group_motion(ws: WorldState, p: dict, t: float) -> list[Cue]:
         both = now.keys() & before.keys()
         if len(both) < min(2, len(g["objects"])):
             continue
-        now, before = _mean([now[o] for o in both]), _mean([before[o] for o in both])
+        now, before = mean_vel([now[o] for o in both]), mean_vel([before[o] for o in both])
         a, b = math.hypot(*before), math.hypot(*now)
         n = len(g["objects"])
         xy = tuple(g["centre"])
@@ -188,8 +185,8 @@ def group_motion(ws: WorldState, p: dict, t: float) -> list[Cue]:
             if turn >= p["turn_deg"]:
                 out.append(Cue(f"group_motion:{g['cid']}:turn", "group_motion", "notice",
                                f"Group of {n} changed direction",
-                               f"The group moved at {bearing(before):.0f} deg and now moves at {bearing(now):.0f} deg "
-                               f"(about {p['window_s']:.0f} s apart).", g["objects"], None, xy))
+                               f"The group's heading changed by {turn:.0f} deg in about {p['window_s']:.0f} s.",
+                               g["objects"], None, xy))
         if b >= p["min_speed"] and b >= p["speedup"] * max(a, 1.0):
             out.append(Cue(f"group_motion:{g['cid']}:speed", "group_motion", "notice", f"Group of {n} speeds up",
                            f"The group went from {a * 3.6:.0f} to {b * 3.6:.0f} km/h in about {p['window_s']:.0f} s.",

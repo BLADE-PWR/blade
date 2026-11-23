@@ -66,8 +66,8 @@ export const visible = (o: WorldObject, f: Filter) => !f.hidden.has(o.grp) && (f
 export const boxVisible = (d: Det, f: Filter) => !f.hidden.has(d.grp);
 
 export function emptySituation(): Situation {
-  return { session: null, drones: new Map(), objects: new Map(), events: new Map(), alerts: new Map(), clusters: new Map(), truth: [],
-    diag: new Map(), replicas: new Map(), clocks: new Map(), maps: new Map(),
+  return { session: null, drones: new Map(), objects: new Map(), events: new Map(), alerts: new Map(),
+    clusters: new Map(), truth: [], diag: new Map(), replicas: new Map(), clocks: new Map(), maps: new Map(),
     objectWids: new Map() };
 }
 

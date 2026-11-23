@@ -101,7 +101,8 @@ def test_cluster_id_survives_membership_change_and_a_split_gets_a_new_one():
     objs.update({o["oid"]: o for o in [obj("v4", "tank", 120, 0), obj("v5", "tank", 140, 0)]})
     (b,) = g.update(objs, 2.0)
     assert b["cid"] == a["cid"] and b["objects"] == ["v2", "v3", "v4", "v5"]
-    objs.pop("v3")  # v2 | v4 v5 are 70 m apart: still one; move v2 away to split off
+    objs.pop("v3")
+    # v2 moves away: v4 and v5 stay together and keep the id
     objs["v2"]["xy"] = [-500.0, 0.0]
     (c,) = g.update(objs, 3.0)
     assert c["objects"] == ["v4", "v5"] and c["cid"] == a["cid"]
@@ -118,12 +119,12 @@ async def test_clusters_are_published_and_cleared_when_the_last_goes(monkeypatch
     dm.engines.pop("w", None)
     eng = dm.engine("w")
     eng.ws.objects = {o["oid"]: o for o in [obj("a", "tank", 0, 0), obj("b", "soldier", 40, 0)]}
-    eng.clusters = eng.grouper.update(eng.ws.objects, 1.0)
+    eng.ws.groups = eng.grouper.update(eng.ws.objects, 1.0)
     await dm.send_clusters("w", eng, 1.0)
     subject, data = sent[-1]
     assert subject == "clusters.w" and data["clusters"][0]["objects"] == ["a", "b"]
     eng.ws.objects.clear()
-    eng.clusters = eng.grouper.update(eng.ws.objects, 2.0)
+    eng.ws.groups = eng.grouper.update(eng.ws.objects, 2.0)
     await dm.send_clusters("w", eng, 2.0)
     assert sent[-1][1]["clusters"] == []
 
@@ -140,6 +141,20 @@ def test_group_motion_alerts_on_a_turn_and_on_speeding_up():
         e.step(float(t))
     rules = {a.title for a in e.active.values() if a.rule == "group_motion"}
     assert rules == {"Group of 3 changed direction", "Group of 3 speeds up"}
+
+
+def test_a_speed_up_after_a_turn_is_its_own_alert():
+    e = Engine("w")
+    x = y = 0.0
+    for t, vel in [(t, (5.0, 0.0) if t < 12 else (0.0, 5.0) if t < 26 else (0.0, 15.0)) for t in range(40)]:
+        x, y = x + vel[0], y + vel[1]
+        e.ws.objects = {f"t{i}": obj(f"t{i}", "tank", x, y + 20.0 * i, vel=vel, last=float(t)) for i in range(3)}
+        e.step(float(t))
+    titles = {a.title: a.explanation for a in e.active.values() if a.rule == "group_motion"}
+    assert list(titles) == ["Group of 3 speeds up"]
+    assert "km/h" in titles["Group of 3 speeds up"]
+    assert any(a.title == "Group of 3 changed direction" and a.explanation.startswith("The group's heading changed")
+               for a in e.history)  # the turn was raised on its own, 12 s earlier
 
 
 def test_group_moving_steadily_raises_no_motion_alert():
@@ -271,8 +286,8 @@ async def test_clusters_drop_forgotten_objects_and_a_new_map_starts_afresh(monke
     await dm.on_objects(ObjectsMsg("w1", {"forgotten": ["t1", "t2"], "t": 200.0}))  # its replay went back
     assert e.grouper.update(e.ws.objects, e.now()) == []  # t3 is alone
     await dm.on_objects(ObjectsMsg("w1", {"objects": tanks, "t": 201.0}))
-    e.clusters = e.grouper.update(e.ws.objects, e.now())
-    assert len(e.clusters) == 1
+    e.ws.groups = e.grouper.update(e.ws.objects, e.now())
+    assert len(e.ws.groups) == 1
     await dm.on_objects(ObjectsMsg("w1", {"map": "other", "t": 202.0}))
-    assert e.clusters == [] and e.grouper.prev == {}
+    assert e.ws.groups == [] and e.grouper.prev == {}
     assert sent[-1] == []  # the clients are told at once
