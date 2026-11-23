@@ -95,7 +95,8 @@ class Cluster:
                     dets = await kv_read(self.kv_det)
                     self.live = sorted(k for k, v in dets.items() if t - v.get("t", 0) < 3 * HEARTBEAT_S) or [self.me]
                     self.assign = await kv_read(self.kv_assign)
-                    self.routing = (await kv_read(self.kv_routing)).get(ROUTING_KEY)
+                    if self.kv_routing is not None:  # else what PUT /routing set stays
+                        self.routing = (await kv_read(self.kv_routing)).get(ROUTING_KEY)
                 except Exception:
                     log.exception("cluster refresh")
             await asyncio.sleep(HEARTBEAT_S)

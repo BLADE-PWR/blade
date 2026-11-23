@@ -1,3 +1,4 @@
+import asyncio
 import types
 
 import pytest
@@ -189,3 +190,27 @@ async def test_routing_is_set_read_and_reset_through_rest(monkeypatch):
         await det.set_routing(det.RoutingBody(models=[det.RoutingEntry(model="near@1", max_px=10)]))
     assert e.value.status_code == 400
     assert (await det.reset_routing())["models"][0]["model"] == det.AUTO_MODELS[0]
+
+
+async def test_routing_set_without_its_kv_bucket_survives_the_refresh(monkeypatch):
+    from blade_detector.cluster import Cluster
+
+    class Kv:
+        async def put(self, *_):
+            pass
+
+    async def stop(_):
+        raise asyncio.CancelledError
+
+    cl = Cluster("me")
+    cl.kv_det = cl.kv_assign = Kv()
+    cl.routing = {"models": [{"model": "far@1"}]}
+    monkeypatch.setattr("blade_detector.cluster.kv_read", lambda kv: _empty())
+    monkeypatch.setattr("blade_detector.cluster.asyncio.sleep", stop)
+    with pytest.raises(asyncio.CancelledError):
+        await cl.run(dict)
+    assert cl.routing == {"models": [{"model": "far@1"}]}
+
+
+async def _empty():
+    return {}

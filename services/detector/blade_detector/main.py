@@ -247,6 +247,10 @@ svc = Detector()
 async def lifespan(app: FastAPI):
     svc.packages = find_packages(MODELS_DIR)
     log.info("model packages: %s; default %s", list(svc.packages) or "none", DEFAULT_MODEL)
+    if DEFAULT_MODEL == AUTO and svc.packages and not any(m in svc.packages for m in AUTO_MODELS):
+        AUTO_MODELS[:] = list(svc.packages)[:1]  # none of them is here: better one model than empty frames
+        svc._routing = (None, default_routing())
+        log.error("no AUTO_MODELS package found in %s: auto uses %s", MODELS_DIR, AUTO_MODELS[0])
     for m in AUTO_MODELS if DEFAULT_MODEL == AUTO else [DEFAULT_MODEL]:
         if m in svc.packages:
             await asyncio.to_thread(svc.packages[m].session)
