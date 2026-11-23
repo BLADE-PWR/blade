@@ -36,7 +36,8 @@ URLS = {
 PREVIEW_FPS = env_float("PREVIEW_FPS", 15.0)
 PREVIEW_W = env_int("PREVIEW_W", 960)
 SESSION_IDLE_S = env_float("SESSION_IDLE_S", 30.0)  # a session nobody watches this long is deleted
-PROXIES = {"models": ("detector", "/models"), "detector": ("detector", "/streams"), "missions": ("ingest", "/missions"),
+PROXIES = {"models": ("detector", "/models"), "detector": ("detector", "/streams"), "routing": ("detector", "/routing"),
+           "missions": ("ingest", "/missions"),
            "recordings": ("sessions", "/recordings"), "replays": ("sessions", "/replays"), "maps": ("terrain", "/maps"),
            "worlds": ("world", "/worlds"), "decision": ("decision", "/worlds"), "eval": ("evaluator", "/worlds")}
 

@@ -56,7 +56,7 @@ export async function getJSON<T>(path: string): Promise<T> {
   return (await r.json()) as T;
 }
 
-export async function send<T>(method: "POST" | "PUT" | "PATCH", path: string, body: object = {}): Promise<T> {
+export async function send<T>(method: "POST" | "PUT" | "PATCH" | "DELETE", path: string, body: object = {}): Promise<T> {
   const r = await fetch(path, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   if (!r.ok) throw new Error(`${method} ${path}: ${r.status} ${await r.text()}`);
   return (await r.json()) as T;

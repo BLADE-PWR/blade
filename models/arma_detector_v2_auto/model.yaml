@@ -9,6 +9,8 @@ groups: {soldier: [0, 1, 2]}
 events: [explosion, tank_fire]   # world-model treats these as events, not objects
 conf: {detect: 0.25, track: 0.1}
 nms_iou: 0.5
+scale: {object_m: 1.8, min_px: 15}   # auto model choice: a 1.8 m soldier at the aim point >= 15 px at the input
+                                     # (dataset_v2 train: standing soldier long side p2 = 15.5 px at 1536)
 max_size_m: {soldier: 3, tank: 25, military_vehicle: 25}   # longer box side on the ground; dropped before tracking
 preprocess: {enhance: false}
 license: AGPL-3.0

@@ -266,6 +266,7 @@ class StreamDiag(BaseModel):
     clock_ms: float | None = Field(None, description="min(arrival - capture) over 1 s: network delay + clock offset")
     queue: int = 0
     dropped: int = 0
+    skipped: int = Field(0, description="frames taken without running a model: none covers the scene's scale")
     latency_ms: float | None = None
 
 

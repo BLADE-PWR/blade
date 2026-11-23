@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import json
+import math
 import time
 import types
 
@@ -226,6 +227,22 @@ def test_auto_imgsz_brings_small_objects_to_min_px():
     assert auto_imgsz(1280, auto, dict(tel, range_m=float("nan")), 1280, 720) == 1280
 
 
+def test_px_on_target_follows_zoom_and_range():
+    from blade_detector.ground import px_on_target
+
+    flat = types.SimpleNamespace(height=lambda x, y: 0.0)
+    tel = look_at_tel(flat, (0.0, 0.0), 0, w=1280, h=720, hfov=34.0, dist_m=300.0, alt_m=120.0)
+    px = px_on_target(tel, 1.8, 1280, 1280, 720)
+    px_per_m = 1 / (Camera(tel).ifov_rad() * tel["range_m"])
+    assert px == pytest.approx(1.8 * px_per_m)
+    assert px_on_target(tel, 1.8, 1920, 1280, 720) == pytest.approx(1.5 * px)  # the model input scales it
+    assert px_on_target(tel, 1.8, 1280, 640, 360) == pytest.approx(px)  # the stream's resolution does not
+    zoomed = dict(tel, camera=dict(tel["camera"], hfov_deg=17.0))
+    assert px_on_target(zoomed, 1.8, 1280, 1280, 720) > 1.9 * px
+    assert px_on_target(dict(tel, range_m=2 * tel["range_m"]), 1.8, 1280, 1280, 720) == pytest.approx(px / 2)
+    assert math.isnan(px_on_target(dict(tel, range_m=None), 1.8, 1280, 1280, 720))
+
+
 def test_rendezvous_is_stable():
     from blade_detector.cluster import rendezvous
 
@@ -244,14 +261,14 @@ async def test_stream_threshold_defaults_to_the_model_and_can_be_set(monkeypatch
     from blade_detector.cluster import Cluster
 
     monkeypatch.setattr(det.svc, "cluster", Cluster("one"))
-    monkeypatch.setattr(det.svc, "packages", {det.DEFAULT_MODEL: types.SimpleNamespace(conf_track=0.1)})
+    monkeypatch.setattr(det.svc, "packages", {det.AUTO_MODELS[0]: types.SimpleNamespace(conf_track=0.1)})
     assert (await det.get_conf("s1"))["conf"] == 0.1
     await det.set_conf("s1", det.StreamConf(conf=0.0))
     assert (await det.get_conf("s1"))["conf"] == 0.0
     assert (await det.get_conf("s2"))["conf"] == 0.1
     with pytest.raises(ValidationError):
         det.StreamConf(conf=1.5)
-    await det.set_model("s1", det.StreamModel(model=det.DEFAULT_MODEL))
+    await det.set_model("s1", det.StreamModel(model=det.AUTO_MODELS[0]))
     assert (await det.get_conf("s1"))["conf"] == 0.1
 
 

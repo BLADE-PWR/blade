@@ -4,6 +4,7 @@ stream goes to the replica rendezvous hashing picks; without JetStream a replica
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import json
 import logging
@@ -15,6 +16,7 @@ from blade_common.bus import kv_bucket, kv_read
 
 log = logging.getLogger("detector.cluster")
 HEARTBEAT_S = 2.0
+ROUTING_KEY = "auto"
 
 
 def rendezvous(sid: str, instances: list[str]) -> str | None:
@@ -28,12 +30,15 @@ class Cluster:
         self.assign: dict[str, dict] = {}
         self.kv_det = None
         self.kv_assign = None
+        self.kv_routing = None
+        self.routing: dict | None = None  # the auto routing as the operator set it, None: the default
 
     async def connect(self, nc) -> None:
         try:
             js = nc.jetstream()
             self.kv_det = await kv_bucket(js, "detectors", ttl=10)
             self.kv_assign = await kv_bucket(js, "assign")
+            self.kv_routing = await kv_bucket(js, "routing")
         except Exception as e:
             log.warning("JetStream KV unavailable (%s): this replica runs every stream", e)
 
@@ -68,6 +73,17 @@ class Cluster:
         if self.kv_assign is not None:
             await self.kv_assign.put(sid, json.dumps(a).encode())
 
+    async def set_routing(self, routing: dict | None) -> None:
+        """The routing of every replica (None: back to the default). Without KV, of this replica only."""
+        self.routing = routing
+        if self.kv_routing is None:
+            return
+        if routing is None:
+            with contextlib.suppress(Exception):  # nothing to delete when it was never set
+                await self.kv_routing.delete(ROUTING_KEY)
+        else:
+            await self.kv_routing.put(ROUTING_KEY, json.dumps(routing).encode())
+
     async def run(self, status) -> None:
         """Heartbeat and refresh; status() -> dict with this replica's models and streams."""
         while True:
@@ -79,6 +95,7 @@ class Cluster:
                     dets = await kv_read(self.kv_det)
                     self.live = sorted(k for k, v in dets.items() if t - v.get("t", 0) < 3 * HEARTBEAT_S) or [self.me]
                     self.assign = await kv_read(self.kv_assign)
+                    self.routing = (await kv_read(self.kv_routing)).get(ROUTING_KEY)
                 except Exception:
                     log.exception("cluster refresh")
             await asyncio.sleep(HEARTBEAT_S)

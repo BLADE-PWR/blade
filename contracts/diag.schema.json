@@ -46,6 +46,12 @@
           "default": 0,
           "title": "Queue",
           "type": "integer"
+        },
+        "skipped": {
+          "default": 0,
+          "description": "frames taken without running a model: none covers the scene's scale",
+          "title": "Skipped",
+          "type": "integer"
         }
       },
       "title": "StreamDiag",

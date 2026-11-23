@@ -49,7 +49,7 @@ services:
   detector:
     <<: *service
     build: {context: .., dockerfile: deploy/Dockerfile, args: {SERVICE: detector}}
-    environment: {<<: *env, PORT: "8003", MODEL: "${MODEL:-arma_detector_v1@1}"}
+    environment: {<<: *env, PORT: "8003", MODEL: "${MODEL:-auto}"}
     volumes: ["../models:/data/models"]
     # no host port: replicas scale (--scale detector=N); reach them through the gateway (/api/models, /detectors)
 

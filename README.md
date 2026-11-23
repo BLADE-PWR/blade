@@ -87,8 +87,9 @@ brew install nats-server
 uv run python tools/dev.py
 ```
 
-`tools/dev.py` starts NATS and every service in one terminal. It uses arma_detector_v1@1 model by default, but you can
-pick another one with `--model <model name>` (see `models/`).
+`tools/dev.py` starts NATS and every service in one terminal. Detectors run in `auto` mode by default: each frame goes to
+the model whose size range covers the scene (zoom and range decide it; see `services/detector/README.md`, "Auto model"),
+and nothing is detected where none does. Pick one model for all streams with `--model <model name>` (see `models/`).
 
 Watch in the browser (Node.js 22+): start the frontend, open http://localhost:5173 and pick a live mission or a
 recording to replay:

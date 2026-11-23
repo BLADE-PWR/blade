@@ -28,6 +28,7 @@ class ModelPackage:
     tracker_args: types.SimpleNamespace
     max_size_m: dict = field(default_factory=dict)  # group -> longest box side on the ground [m]
     auto_imgsz: dict = field(default_factory=dict)  # {max, object_m, min_px}: input size from the range
+    scale: dict = field(default_factory=dict)  # {object_m, min_px, max_px}: scales the auto model choice may use it at
     meta: dict = field(repr=False, default_factory=dict)
     _session: object = field(default=None, repr=False)
 
@@ -51,7 +52,12 @@ class ModelPackage:
                    conf_detect=float(conf.get("detect", 0.25)), conf_track=float(conf.get("track", 0.1)),
                    nms_iou=float(m.get("nms_iou", 0.7)), enhance=bool((m.get("preprocess") or {}).get("enhance")),
                    tracker_args=types.SimpleNamespace(**tr), max_size_m=dict(m.get("max_size_m") or {}),
-                   auto_imgsz=dict(m.get("auto_imgsz") or {}), meta=m)
+                   auto_imgsz=dict(m.get("auto_imgsz") or {}), scale=dict(m.get("scale") or {}), meta=m)
+
+    @property
+    def imgsz_max(self) -> int:
+        """The largest model input auto_imgsz may pick."""
+        return int(self.auto_imgsz.get("max", self.imgsz))
 
     @property
     def max_m(self) -> np.ndarray:
@@ -77,7 +83,7 @@ class ModelPackage:
         return {"id": self.id, "name": self.name, "version": self.version, "imgsz": self.imgsz,
                 "classes": self.classes, "events": sorted(self.events), "conf": {"detect": self.conf_detect,
                 "track": self.conf_track}, "enhance": self.enhance, "max_size_m": self.max_size_m,
-                "auto_imgsz": self.auto_imgsz, "license": self.meta.get("license"),
+                "auto_imgsz": self.auto_imgsz, "scale": self.scale, "license": self.meta.get("license"),
                 "loaded": self._session is not None}
 
 

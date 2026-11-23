@@ -266,9 +266,18 @@ function RulePicker({ wid }: { wid: string }) {
   );
 }
 
+type StreamModel = { model: string; active?: string | null; px?: number | null };
+
+/** What "auto" runs for a stream: the model its scale picked, or why nothing runs. */
+function autoState(s: StreamModel): string {
+  if (s.model !== "auto" || s.active === undefined) return "";
+  const px = s.px == null ? "" : `, ${s.px} px`;
+  return s.active ? `${s.active}${px}` : `off, no model covers this scale${px}`;
+}
+
 function ModelPicker({ sid }: { sid: string }) {
   const [models, setModels] = useState<string[]>([]);
-  const [model, setModel] = useState<string | null>(null);
+  const [model, setModel] = useState<StreamModel | null>(null);
   const [error, setError] = useState<string | null>(null);
   const path = `/api/detector/${encodeURIComponent(sid)}/model`;
 
@@ -276,11 +285,11 @@ function ModelPicker({ sid }: { sid: string }) {
     let current = true; // a late answer for the previous drone must not overwrite this one
     setModel(null);
     setError(null);
-    Promise.all([getJSON<{ id: string }[]>("/api/models"), getJSON<{ model: string }>(path)])
+    Promise.all([getJSON<{ id: string }[]>("/api/models"), getJSON<StreamModel>(path)])
       .then(([all, mine]) => {
         if (!current) return;
         setModels(all.map((m) => m.id));
-        setModel(mine.model);
+        setModel(mine);
       })
       .catch((e: Error) => current && setError(`Cannot read the models: ${e.message}`));
     return () => {
@@ -288,10 +297,19 @@ function ModelPicker({ sid }: { sid: string }) {
     };
   }, [path]);
 
+  const auto = model?.model === "auto";
+  useEffect(() => {
+    if (!auto) return;
+    const poll = () => getJSON<StreamModel>(path).then((m) => setModel((old) => old?.model === "auto" ? m : old))
+      .catch(() => undefined); // the label is a hint: a missed answer leaves the last one
+    const timer = setInterval(poll, 2000);
+    return () => clearInterval(timer);
+  }, [auto, path]);
+
   const choose = (id: string) =>
-    send<{ model: string }>("PUT", path, { model: id })
+    send<StreamModel>("PUT", path, { model: id })
       .then((r) => {
-        setModel(r.model);
+        setModel(r);
         setError(null);
       })
       .catch((e: Error) => setError(`Model not switched: ${e.message}`));
@@ -299,11 +317,108 @@ function ModelPicker({ sid }: { sid: string }) {
   if (model === null) return error ? <span className="error">{error}</span> : null;
   return (
     <>
-      <select value={model} onChange={(e) => choose(e.target.value)} aria-label="Detector model">
+      <select value={model.model} onChange={(e) => choose(e.target.value)} aria-label="Detector model">
+        <option value="auto">auto (by scale)</option>
         {models.map((m) => <option key={m}>{m}</option>)}
       </select>
+      {auto && <span className="muted mono">{autoState(model)}</span>}
       {error && <span className="error">{error}</span>}
     </>
+  );
+}
+
+type RouteRow = {
+  model: string;
+  loaded: boolean;
+  min_px?: number;
+  max_px?: number | null;
+  yaml?: { min_px: number | null; max_px: number | null };
+};
+type Route = { models: RouteRow[]; margin: number; hold_s: number };
+type Draft = { model: string; loaded: boolean; yaml?: RouteRow["yaml"]; min: string; max: string };
+
+// An empty field is the model.yaml value, so only what differs from it is an override.
+const overridden = (value: number | null | undefined, fromYaml: number | null | undefined) =>
+  value != null && value !== fromYaml ? String(value) : "";
+
+function toDraft(r: RouteRow): Draft {
+  return { model: r.model, loaded: r.loaded, yaml: r.yaml, min: overridden(r.min_px, r.yaml?.min_px),
+    max: overridden(r.max_px, r.yaml?.max_px) };
+}
+
+const orNull = (text: string) => (text.trim() === "" ? null : Number(text));
+
+/** The models "auto" chooses from, in priority order, with the object size range (px on the model input) of each. */
+function AutoModels() {
+  const [rows, setRows] = useState<Draft[] | null>(null);
+  const [margin, setMargin] = useState("");
+  const [holdS, setHoldS] = useState("");
+  const [available, setAvailable] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const show = (r: Route) => {
+    setRows(r.models.map(toDraft));
+    setMargin(String(r.margin));
+    setHoldS(String(r.hold_s));
+    setError(null);
+  };
+  useEffect(() => {
+    Promise.all([getJSON<Route>("/api/routing"), getJSON<{ id: string }[]>("/api/models")])
+      .then(([r, all]) => {
+        show(r);
+        setAvailable(all.map((m) => m.id).filter((id) => !id.startsWith("oracle")));
+      })
+      .catch((e: Error) => setError(`Cannot read the auto models: ${e.message}`));
+  }, []);
+
+  if (rows === null) return error ? <span className="error">{error}</span> : null;
+  const edit = (i: number, patch: Partial<Draft>) => setRows(rows.map((r, k) => (k === i ? { ...r, ...patch } : r)));
+  const move = (i: number, by: number) => {
+    const next = [...rows];
+    [next[i], next[i + by]] = [next[i + by], next[i]];
+    setRows(next);
+  };
+  const apply = () =>
+    send<Route>("PUT", "/api/routing", {
+      models: rows.map((r) => ({ model: r.model, min_px: orNull(r.min), max_px: orNull(r.max) })),
+      margin: Number(margin), hold_s: Number(holdS),
+    }).then(show).catch((e: Error) => setError(`Not saved: ${e.message}`));
+  const reset = () =>
+    send<Route>("DELETE", "/api/routing").then(show).catch((e: Error) => setError(`Not reset: ${e.message}`));
+  const addable = available.filter((id) => !rows.some((r) => r.model === id));
+
+  return (
+    <div className="auto-models">
+      {rows.map((r, i) => (
+        <div className="auto-row" key={r.model}>
+          <span className="mono auto-name">{r.model}{!r.loaded && <span className="error"> (not loaded)</span>}</span>
+          <input type="number" min={0} value={r.min} placeholder={String(r.yaml?.min_px ?? "–")}
+            onChange={(e) => edit(i, { min: e.target.value })} aria-label={`${r.model} smallest object, px`} />
+          <input type="number" min={0} value={r.max} placeholder={String(r.yaml?.max_px ?? "–")}
+            onChange={(e) => edit(i, { max: e.target.value })} aria-label={`${r.model} largest object, px`} />
+          <button onClick={() => move(i, -1)} disabled={i === 0} aria-label={`${r.model} higher priority`}>Up</button>
+          <button onClick={() => move(i, 1)} disabled={i === rows.length - 1}
+            aria-label={`${r.model} lower priority`}>Down</button>
+          <button onClick={() => setRows(rows.filter((_, k) => k !== i))} aria-label={`Remove ${r.model}`}>Remove</button>
+        </div>
+      ))}
+      <div className="auto-row">
+        <select value="" onChange={(e) => e.target.value && setRows([...rows, { model: e.target.value, loaded: true,
+          min: "", max: "" }])} aria-label="Add a model" disabled={addable.length === 0}>
+          <option value="">Add a model</option>
+          {addable.map((id) => <option key={id}>{id}</option>)}
+        </select>
+        <label>margin <input type="number" min={0} max={0.99} step={0.05} value={margin}
+          onChange={(e) => setMargin(e.target.value)} /></label>
+        <label>hold s <input type="number" min={0} step={0.5} value={holdS}
+          onChange={(e) => setHoldS(e.target.value)} /></label>
+      </div>
+      <div className="auto-row">
+        <button onClick={apply}>Apply</button>
+        <button onClick={reset}>Default</button>
+        {error && <span className="error">{error}</span>}
+      </div>
+    </div>
   );
 }
 
@@ -333,6 +448,15 @@ function Settings({ sit, drone, layer, onLayer }: SettingsProps) {
       <p className="muted setting-note">
         Rules that raise alerts. Live, they are the mission's: every map of it, also when it starts again, until the
         server restarts.
+      </p>
+      <div className="setting setting-top">
+        <span className="muted">Auto models</span>
+        <AutoModels />
+      </div>
+      <p className="muted setting-note">
+        What a drone on "auto" chooses from, first match wins. The columns are the smallest and largest size, in
+        pixels on the model's input, of a 1.8 m object where the camera aims: zoom and range decide it. Empty is the
+        model's own range (grey). When no model covers the scale, nothing is detected, so no flickering boxes.
       </p>
       <div className="panel-head settings-head">
         <strong>Drone settings</strong>

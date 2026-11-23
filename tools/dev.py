@@ -39,7 +39,7 @@ OWN_GROUP = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name ==
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--model", default="arma_detector_v1@1", help="model id, or 'oracle'")
+    ap.add_argument("--model", default="auto", help="model id, 'auto' (by the scale of the scene) or 'oracle'")
     ap.add_argument("--only", help="comma-separated subset of: " + ",".join(SERVICES))
     ap.add_argument("--no-record", action="store_true", help="do not record live streams by default")
     ap.add_argument("--detectors", type=int, default=1, help="detector replicas (streams are split between them)")

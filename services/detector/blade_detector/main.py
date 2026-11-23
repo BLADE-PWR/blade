@@ -1,6 +1,7 @@
 """detector: frames.<sid> -> detections.<sid>. ONNX Runtime YOLO, one BoT-SORT per stream.
 One slot per stream (newest frame wins); waiting frames of several streams form one batch.
-MODEL=oracle uses sim truth instead (oracle.py)."""
+MODEL=oracle uses sim truth instead (oracle.py). MODEL=auto (the default) picks the model per frame from the scale
+of the scene (routing.py); a stream gets empty detections (model "none") while no model covers it."""
 from __future__ import annotations
 
 import asyncio
@@ -27,16 +28,25 @@ from .cluster import Cluster
 from .ground import auto_imgsz, too_big
 from .oracle import Oracle
 from .package import ModelPackage, detect_batch, find_packages
+from .routing import Entry, Router, Routing, describe
 from .tracking import StreamTracker
 
 log = logging.getLogger("detector")
 
 MODELS_DIR = Path(env_str("MODELS_DIR", "models"))
-DEFAULT_MODEL = env_str("MODEL", "arma_detector_v1@1")
+DEFAULT_MODEL = env_str("MODEL", "auto")
+# the models auto mode chooses from until the operator sets them
+AUTO_MODELS = [m for m in env_str("AUTO_MODELS", "arma_detector_v2_auto@2").split(",") if m]
 MAX_BATCH = env_int("MAX_BATCH", 8)
 SUBJECTS = env_str("STREAMS", "frames.>")
 MAX_FPS = env_float("MAX_FPS", 0.0)  # live streams: at most this many frames/s per stream (0 = all)
 ORACLE_IDS = ("oracle", Oracle.id)
+AUTO = "auto"
+NO_MODEL = "none"  # what an auto stream runs while no model covers its scale
+
+
+def default_routing() -> Routing:
+    return Routing([Entry(m) for m in AUTO_MODELS])
 
 
 class Detector:
@@ -50,15 +60,55 @@ class Detector:
         self.diag = Diag("detector")
         self.nc = None
         self.cluster = Cluster()
+        self.router = Router()
+        self._routing: tuple[dict | None, Routing] = (None, default_routing())
         self.last_frame: dict[str, float] = {}
         self.accepted: dict[str, float] = {}  # sid -> when the last live frame was taken
 
     def model_for(self, sid: str) -> str:
         return self.cluster.model(sid) or DEFAULT_MODEL
 
+    def routing(self) -> Routing:
+        """The operator's auto routing (KV, refreshed by the cluster), else the one from AUTO_MODELS."""
+        raw = self.cluster.routing
+        if raw != self._routing[0]:
+            try:
+                self._routing = (raw, Routing.from_dict(raw) if raw else default_routing())
+            except (KeyError, TypeError, ValueError):
+                log.exception("bad routing in KV: keeping the previous one")
+                self._routing = (raw, self._routing[1])
+        return self._routing[1]
+
+    def resolve(self, sid: str, env, t: float) -> str:
+        """The model that runs this frame: the stream's own, or in auto mode what the scale of the scene picks."""
+        mid = self.model_for(sid)
+        if mid != AUTO:
+            return mid
+        tel = env.data["tel"]
+        size = env.data.get("jpeg") or tel["image"]
+        before = self.router.current(sid)
+        pick = self.router.choose(self.routing(), self.packages, sid, tel, size["w"], size["h"], t)
+        if before is not None and before.model != pick.model:
+            log.info("%s: auto model %s -> %s", sid, before.model, pick.model)
+            for key in [k for k in self.trackers if k[0] == sid]:
+                del self.trackers[key]  # its ids go on from top_tid; stale tracks must not match new objects
+        return pick.model or NO_MODEL
+
+    def first_model(self) -> str:
+        """The first loaded model of the auto routing: what auto starts a stream with."""
+        return next((e.model for e in self.routing().models if e.model in self.packages), NO_MODEL)
+
+    def active_model(self, sid: str) -> str:
+        """The model running the stream now (the one auto last picked, if the stream is in auto mode)."""
+        mid = self.model_for(sid)
+        if mid != AUTO:
+            return mid
+        c = self.router.current(sid)
+        return (c.model or NO_MODEL) if c else self.first_model()
+
     def conf_for(self, sid: str) -> float:
         """The stream's box confidence threshold; by default the model's tracker threshold (conf.track)."""
-        conf, pkg = self.cluster.conf(sid), self.packages.get(self.model_for(sid))
+        conf, pkg = self.cluster.conf(sid), self.packages.get(self.active_model(sid))
         return conf if conf is not None else pkg.conf_track if pkg else 0.0
 
     def status(self) -> dict:
@@ -102,6 +152,7 @@ class Detector:
                     del self.trackers[key]
                 for d in (self.top_tid, self.slots, self.last_frame, self.accepted):
                     d.pop(sid, None)
+                self.router.forget(sid)
 
     async def on_truth(self, msg) -> None:
         env, _ = decode(msg)
@@ -117,7 +168,7 @@ class Detector:
             work, self.slots = self.slots, {}
             by_model: dict[str, list] = {}
             for sid, item in work.items():
-                by_model.setdefault(self.model_for(sid), []).append((sid, *item))
+                by_model.setdefault(self.resolve(sid, item[0], item[2]), []).append((sid, *item))
             for model_id, items in by_model.items():
                 for k in range(0, len(items), MAX_BATCH):
                     try:
@@ -133,6 +184,13 @@ class Detector:
 
     def process(self, model_id: str, items: list) -> list:
         out = []
+        if model_id == NO_MODEL:  # no model covers the scale: say so with a frame that has no boxes
+            for sid, env, _jpeg, t_in in items:
+                tel = env.data["tel"]
+                data = DetectionsData(model=NO_MODEL, img=(tel["image"]["w"], tel["image"]["h"]), dets=[], tel=tel)
+                out.append(forward(env, data.model_dump(exclude_none=True), "detector", t_in))
+                self.diag.skip(sid)
+            return out
         if model_id in ORACLE_IDS:
             for sid, env, _jpeg, t_in in items:
                 tel = env.data["tel"]
@@ -189,10 +247,11 @@ svc = Detector()
 async def lifespan(app: FastAPI):
     svc.packages = find_packages(MODELS_DIR)
     log.info("model packages: %s; default %s", list(svc.packages) or "none", DEFAULT_MODEL)
-    if DEFAULT_MODEL in svc.packages:
-        await asyncio.to_thread(svc.packages[DEFAULT_MODEL].session)
-    elif DEFAULT_MODEL not in ORACLE_IDS:
-        log.warning("default model %s not found in %s", DEFAULT_MODEL, MODELS_DIR)
+    for m in AUTO_MODELS if DEFAULT_MODEL == AUTO else [DEFAULT_MODEL]:
+        if m in svc.packages:
+            await asyncio.to_thread(svc.packages[m].session)
+        elif m not in ORACLE_IDS:
+            log.warning("model %s not found in %s", m, MODELS_DIR)
     svc.nc = await connect("detector")
     await svc.cluster.connect(svc.nc)
     await svc.nc.subscribe(SUBJECTS, cb=svc.on_frame)
@@ -213,7 +272,7 @@ app = FastAPI(title="blade detector", lifespan=lifespan)
 @app.get("/health")
 async def health():
     return {"ok": True, "default_model": DEFAULT_MODEL, "models": list(svc.packages),
-            "streams": {sid: svc.model_for(sid) for sid in {k[0] for k in svc.trackers}}}
+            "streams": {sid: svc.active_model(sid) for sid in {k[0] for k in svc.trackers}}}
 
 
 @app.get("/models")
@@ -255,17 +314,60 @@ class StreamModel(BaseModel):
 
 @app.get("/streams/{sid}/model")
 async def get_model(sid: str):
-    return {"sid": sid, "model": svc.model_for(sid)}
+    out = {"sid": sid, "model": svc.model_for(sid)}
+    c = svc.router.current(sid) if out["model"] == AUTO else None  # only the replica that runs the stream knows
+    if c is not None:
+        out |= {"active": c.model, "px": None if c.px is None else round(c.px, 1)}
+    return out
 
 
 @app.put("/streams/{sid}/model")
 async def set_model(sid: str, body: StreamModel):
-    if body.model not in svc.packages and body.model not in ORACLE_IDS:
+    if body.model not in svc.packages and body.model not in (*ORACLE_IDS, AUTO):
         _404(body.model)
     await svc.cluster.set(sid, model=body.model, conf=None)  # a threshold belongs to its model
+    svc.router.forget(sid)
     for key in [k for k in svc.trackers if k[0] == sid]:
         del svc.trackers[key]
     return {"sid": sid, "model": body.model}
+
+
+class RoutingEntry(BaseModel):
+    model: str
+    min_px: float | None = Field(None, ge=0, description="overrides scale.min_px of model.yaml")
+    max_px: float | None = Field(None, ge=0, description="overrides scale.max_px of model.yaml")
+
+
+class RoutingBody(BaseModel):
+    models: list[RoutingEntry]
+    margin: float = Field(0.15, ge=0.0, lt=1.0)
+    hold_s: float = Field(1.0, ge=0.0)
+
+
+@app.get("/routing")
+async def get_routing():
+    return describe(svc.routing(), svc.packages)
+
+
+@app.put("/routing")
+async def set_routing(body: RoutingBody):
+    """The models the auto mode chooses from, in priority order, with the ranges (min_px, max_px) it uses."""
+    try:
+        routing = Routing.from_dict(body.model_dump())
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    for e in routing.models:
+        if e.model not in svc.packages:
+            _404(e.model)
+    await svc.cluster.set_routing(routing.to_dict())
+    return describe(routing, svc.packages)
+
+
+@app.delete("/routing")
+async def reset_routing():
+    """Back to AUTO_MODELS and the ranges of model.yaml."""
+    await svc.cluster.set_routing(None)
+    return describe(svc.routing(), svc.packages)
 
 
 class StreamConf(BaseModel):
@@ -292,7 +394,8 @@ async def cluster():
 
 @app.post("/detect")
 async def detect_one(file: UploadFile, model: str | None = None, conf: float | None = None):
-    pkg = svc.packages.get(model or DEFAULT_MODEL) or _404(model or DEFAULT_MODEL)
+    mid = model or (svc.first_model() if DEFAULT_MODEL == AUTO else DEFAULT_MODEL)
+    pkg = svc.packages.get(mid) or _404(mid)
     img = cv2.imdecode(np.frombuffer(await file.read(), np.uint8), cv2.IMREAD_COLOR)
     if img is None:
         raise HTTPException(400, "not an image")

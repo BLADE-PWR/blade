@@ -47,6 +47,7 @@ class _Counter:
     n_in: int = 0
     n_out: int = 0
     dropped: int = 0
+    skipped: int = 0
     queue: int = 0
     latency: list[float] = field(default_factory=list)
     clock: float | None = None
@@ -77,6 +78,9 @@ class Diag:
     def drop(self, sid: str, n: int = 1) -> None:
         self._c[sid].dropped += n
 
+    def skip(self, sid: str, n: int = 1) -> None:
+        self._c[sid].skipped += n
+
     def queue(self, sid: str, depth: int) -> None:
         self._c[sid].queue = depth
 
@@ -88,7 +92,7 @@ class Diag:
         for sid, c in self._c.items():
             lat = sorted(c.latency)
             streams[sid] = StreamDiag(fps_in=round(c.n_in / dt, 1), fps_out=round(c.n_out / dt, 1),
-                                      queue=c.queue, dropped=c.dropped,
+                                      queue=c.queue, dropped=c.dropped, skipped=c.skipped,
                                       latency_ms=round(lat[len(lat) // 2] * 1000, 1) if lat else None,
                                       clock_ms=None if c.clock is None else round(c.clock * 1000, 1))
         self._c = defaultdict(_Counter, {sid: _Counter(queue=c.queue) for sid, c in self._c.items()

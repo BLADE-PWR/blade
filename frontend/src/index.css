@@ -830,6 +830,34 @@ button.danger {
   gap: 4px 14px;
 }
 
+.setting-top {
+  align-items: flex-start;
+}
+
+.auto-models {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.auto-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.auto-name {
+  flex: 1 1 140px;
+  overflow-wrap: anywhere;
+}
+
+.auto-row input[type="number"] {
+  width: 64px;
+}
+
 .settings-head {
   border-top: 1px solid #3a4552;
 }

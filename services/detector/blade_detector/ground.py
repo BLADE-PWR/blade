@@ -44,12 +44,21 @@ def too_big(max_m: np.ndarray, tel: dict, xyxy: np.ndarray, conf: np.ndarray, cl
     return big
 
 
+def px_on_target(tel: dict, object_m: float, imgsz: int, img_w: int, img_h: int) -> float:
+    """Pixels an object of object_m metres at the rangefinder point takes at a model input of imgsz (the frame's
+    longer side scaled to it). NaN without a range. Depends on the zoom (hfov) and the range, not on the stream's
+    resolution, which the model's input size replaces."""
+    rng = tel.get("range_m") or 0.0
+    if not rng > 0:
+        return math.nan
+    px_per_m = img_w / tel["image"]["w"] / (Camera(tel).ifov_rad() * rng)  # decoded image px per metre
+    return object_m * px_per_m * imgsz / max(img_w, img_h)
+
+
 def auto_imgsz(base: int, auto: dict, tel: dict, img_w: int, img_h: int) -> int:
     """Model input size (multiple of 128, base..auto["max"]) at which an object of auto["object_m"] metres at the
     rangefinder point is auto["min_px"] px. base without a range."""
-    rng = tel.get("range_m") or 0.0
-    if not auto or not rng > 0:
+    unit = px_on_target(tel, auto["object_m"], 1, img_w, img_h) if auto else math.nan
+    if not unit > 0:
         return base
-    px_per_m = img_w / tel["image"]["w"] / (Camera(tel).ifov_rad() * rng)  # decoded image px per metre
-    need = max(img_w, img_h) * auto["min_px"] / (auto["object_m"] * px_per_m)
-    return int(min(max(base, 128 * math.ceil(need / 128)), auto["max"]))
+    return int(min(max(base, 128 * math.ceil(auto["min_px"] / unit / 128)), auto["max"]))
