@@ -60,14 +60,15 @@ class Engine:
         return out
 
     def track_groups(self, t: float) -> None:
-        """The force groups now, and how each has moved over the last window of the group_motion rule."""
+        """The force groups now, and the velocity of each member over the last window of the group_motion rule."""
         self.clusters = self.ws.groups = self.grouper.update(self.ws.objects, t)
         keep = self.rules["group_motion"]["window_s"] + 5.0
         motion = {}
         for g in self.clusters:
             hist = self.ws.motion.get(g["cid"], deque())
-            if g["vel"] is not None:
-                hist.append((t, g["vel"]))
+            vels = {oid: o["vel"] for oid in g["objects"] if (o := self.ws.objects.get(oid)) and o.get("vel")}
+            if vels and (not hist or t > hist[-1][0]):  # a paused world clock adds nothing
+                hist.append((t, vels))
             while hist and t - hist[0][0] > keep:
                 hist.popleft()
             motion[g["cid"]] = hist
@@ -150,7 +151,10 @@ async def on_objects(msg) -> None:
         if eng.map is not None:
             cleared = eng.clear_now(list(eng.active))
             eng.ws, eng.clock = WorldState(), None  # the world's clock restarts too
+            had_groups = bool(eng.clusters)
             eng.grouper, eng.clusters = Grouper(CLUSTER_PARAMS), []
+            if had_groups:
+                await send_clusters(wid, eng, time.time())
             if cleared:
                 await send_alerts(wid, cleared, time.time())
         eng.map = env.data["map"]

@@ -214,8 +214,10 @@ class HeatLayer extends L.Layer {
   }
 
   set(spots: { xy: Vec2; w: number }[]): void {
+    const same = spots.length === this.spots.length &&
+      spots.every((s, i) => s.w === this.spots[i].w && s.xy.every((v, k) => v === this.spots[i].xy[k]));
     this.spots = spots;
-    this.draw();
+    if (!same) this.draw();
   }
 
   private draw(): void {
@@ -426,7 +428,8 @@ export function MapView(props: Props) {
       down = e.containerPoint;
     };
     const release = (e: L.LeafletMouseEvent) => {
-      const click = down !== null && down.distanceTo(e.containerPoint) < CLICK_PX; // not a drag of the map
+      const onMarker = (e.originalEvent.target as Element).closest(".leaflet-marker-icon") !== null;
+      const click = down !== null && down.distanceTo(e.containerPoint) < CLICK_PX && !onMarker; // not a drag
       down = null;
       const hit = click && shownGroups.current.find((c) => inside(c.hull, [e.latlng.lng, e.latlng.lat]));
       if (hit) setPickedGroup(hit.cid);

@@ -159,15 +159,27 @@ def bearing(v: tuple[float, float]) -> float:
     return math.degrees(math.atan2(v[0], v[1])) % 360
 
 
+def _by_object(samples: list[dict]) -> dict[str, tuple[float, float]]:
+    """Mean velocity of each object over the samples."""
+    seen: dict[str, list] = {}
+    for sample in samples:
+        for oid, v in sample.items():
+            seen.setdefault(oid, []).append(v)
+    return {oid: _mean(vs) for oid, vs in seen.items()}
+
+
 def group_motion(ws: WorldState, p: dict, t: float) -> list[Cue]:
-    """A group that turned or sped up: its mean motion over the last RECENT_S against window_s ago."""
+    """A group that turned or sped up: the mean motion of its members over the last RECENT_S against window_s ago.
+    Only members seen in both windows count, so objects joining or leaving do not look like a change."""
     out = []
     for g in ws.groups:
         hist = ws.motion.get(g["cid"], ())
-        now = _mean([v for s, v in hist if t - s <= RECENT_S])
-        before = _mean([v for s, v in hist if p["window_s"] - RECENT_S <= t - s <= p["window_s"]])
-        if now is None or before is None:
+        now = _by_object([v for s, v in hist if t - s <= RECENT_S])
+        before = _by_object([v for s, v in hist if p["window_s"] - RECENT_S <= t - s <= p["window_s"]])
+        both = now.keys() & before.keys()
+        if len(both) < min(2, len(g["objects"])):
             continue
+        now, before = _mean([now[o] for o in both]), _mean([before[o] for o in both])
         a, b = math.hypot(*before), math.hypot(*now)
         n = len(g["objects"])
         xy = tuple(g["centre"])

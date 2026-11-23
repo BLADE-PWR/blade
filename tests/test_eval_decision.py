@@ -151,6 +151,27 @@ def test_group_moving_steadily_raises_no_motion_alert():
     assert not [a for a in e.active.values() if a.rule == "group_motion"]
 
 
+def test_group_motion_ignores_members_joining_and_leaving():
+    e = Engine("w")
+    for t in range(0, 30):  # two tanks at 8 m/s; two standing soldiers are with them from 12 s to 24 s
+        objs = [obj(f"t{i}", "tank", 8.0 * t, 20.0 * i, vel=(8.0, 0.0), last=float(t)) for i in range(2)]
+        if 12 <= t < 24:
+            objs += [obj(f"s{i}", "soldier", 8.0 * t, 40.0 + 20.0 * i, vel=(0.0, 0.01), last=float(t))
+                     for i in range(2)]
+        e.ws.objects = {o["oid"]: o for o in objs}
+        e.step(float(t))
+    assert not [a for a in e.active.values() if a.rule == "group_motion"]
+
+
+def test_a_paused_clock_adds_no_motion_history():
+    e = Engine("w")
+    e.ws.objects = {f"t{i}": obj(f"t{i}", "tank", 20.0 * i, 0.0, vel=(5.0, 0.0)) for i in range(3)}
+    for _ in range(20):
+        e.step(100.0)
+    (hist,) = e.ws.motion.values()
+    assert len(hist) == 1
+
+
 class ObjectsMsg:
     def __init__(self, wid, data):
         self.subject, self.headers = f"world.{wid}.objects", None
@@ -235,9 +256,10 @@ async def test_rewind_clears_the_alerts_of_forgotten_objects_at_once(monkeypatch
 
 async def test_clusters_drop_forgotten_objects_and_a_new_map_starts_afresh(monkeypatch):
     monkeypatch.setattr(dm, "engines", {})
+    sent = []
 
     async def publish(nc, subject, env):
-        pass
+        sent.append(env.data["clusters"])
 
     monkeypatch.setattr(dm, "publish", publish)
     tanks = [obj("t1", "tank", 0, 0, last=200.0), obj("t2", "tank", 50, 0, last=200.0),
@@ -253,3 +275,4 @@ async def test_clusters_drop_forgotten_objects_and_a_new_map_starts_afresh(monke
     assert len(e.clusters) == 1
     await dm.on_objects(ObjectsMsg("w1", {"map": "other", "t": 202.0}))
     assert e.clusters == [] and e.grouper.prev == {}
+    assert sent[-1] == []  # the clients are told at once
