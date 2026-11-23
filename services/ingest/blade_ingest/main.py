@@ -1,6 +1,6 @@
 """ingest: the server's only way in for video, live or replayed: MPEG-TS over UDP/TCP :9000 or
-POST /push/{sid} (?delivery=all waits for ack.<sid> of the previous frame), sim truth over UDP :9100.
-Publishes frames/truth/registry/events.<sid> and raw.<sid> (live bytes, for recording)."""
+POST /push/{sid}, sim truth over UDP :9100. Gives each live drone its world and stream id (worlds.py).
+Publishes frames/truth/registry/events.<sid>, raw.<sid> (live bytes, for recording) and worlds.<wid>."""
 from __future__ import annotations
 
 import asyncio
@@ -16,17 +16,19 @@ from starlette.requests import ClientDisconnect
 
 from blade_common import ports
 from blade_common.bus import close, connect, kv_bucket, now, publish
-from blade_common.contracts import Envelope, FrameData
+from blade_common.contracts import Envelope, FrameData, WorldInfo
 from blade_common.service import Diag, env_float, env_int, run_app
 
 from .source import Paired, PipeReader, Source
+from .worlds import Worlds
 
 log = logging.getLogger("ingest")
 
 VIDEO_PORT = env_int("VIDEO_PORT", ports.VIDEO_UDP)
 TRUTH_PORT = env_int("TRUTH_PORT", ports.TRUTH_UDP)
 IDLE_S = env_float("SOURCE_IDLE_S", 3.0)
-ACK_TIMEOUT_S = env_float("ACK_TIMEOUT_S", 10.0)
+EXPIRE_S = env_float("EXPIRE_S", 600.0)  # a live world without frames this long ends (its objects have all expired)
+REPLAY_GRACE_S = 5.0  # a replay world with no push open this long ends (a drone briefly has none between segments)
 RAW_CHUNK = 64 * 1024
 RAW_FLUSH_S = 0.1
 
@@ -46,55 +48,87 @@ class Ingest:
         self.diag = Diag("ingest")
         self.nc = None
         self.kv = None
+        self.worlds = Worlds(alive=lambda key: (s := self.sources.get(key)) is not None and not s.done.is_set())
         self.loop: asyncio.AbstractEventLoop | None = None
         self._raw: dict[str, list] = {}  # source key -> [bytearray, t_first]
         self._raw_lock = threading.Lock()
         self._stop = threading.Event()
-        self.acked: dict[str, int] = {}
-        self._ack = threading.Condition()
 
     def _spawn(self, coro) -> None:
         asyncio.run_coroutine_threadsafe(coro, self.loop)
 
+    def assign(self, src: Source, tel: dict) -> None:
+        """Give a source its world and stream id from the names in its telemetry; a live one again when they change
+        (the drone went to another map). A replay keeps the ids it was pushed with and is only registered."""
+        mission, map_name, asked = tel.get("mission") or "default", tel.get("map") or "unknown", src.name(tel)
+        want = (mission, map_name, asked)
+        if src.joined == want or (src.kind != "live" and src.joined is not None):
+            return
+        if src.kind == "live":
+            if src.sid is not None:  # bytes buffered so far belong to the old stream id
+                self._flush_raw(src, force=True)
+            if src.joined is not None:
+                self.worlds.leave(src.wid, src.sid)
+            j = self.worlds.join_live(mission, map_name, asked, src.key)
+        else:
+            j = self.worlds.join_replay(src.wid, src.sid, mission, map_name, asked)
+        src.joined, src.sid, src.wid, src.drone = want, j.sid, j.world.wid, j.name
+        log.info("%s: drone %s is %s in world %s (mission %s, map %s)", src.key, j.name, j.sid, j.world.wid,
+                 mission, map_name)
+        if j.changed:
+            self._spawn(self.announce(j.world.info()))
+
+    async def announce(self, info: dict) -> None:
+        data = WorldInfo.model_validate(info).model_dump()
+        await publish(self.nc, f"worlds.{info['wid']}", Envelope(wid=info["wid"], data=data))
+
+    async def end_world(self, wid: str, why: str) -> bool:
+        """End a world: services drop it. Its drones still sending start a new one with their next frame."""
+        w = self.worlds.end(wid)
+        if w is None:
+            return False
+        for src in list(self.sources.values()):
+            if src.kind == "live" and src.wid == wid:
+                src.joined = None  # assigned afresh by its next frame
+        log.info("world %s (mission %s, map %s) ended: %s", wid, w.mission, w.map, why)
+        await self.announce(w.info())
+        return True
+
+    async def reap_worlds(self) -> None:
+        while True:
+            await asyncio.sleep(1.0)
+            pushed = {s.wid for s in list(self.sources.values()) if s.kind == "replay" and not s.done.is_set()}
+            for wid in self.worlds.idle(time.time(), EXPIRE_S, pushed, REPLAY_GRACE_S):
+                await self.end_world(wid, "nothing for a while")
+
     def on_frame(self, src: Source, p: Paired) -> None:
         tel = p.tel
-        if src.wid is None:  # live: the mission the uplink was started with; a replay has its own
-            src.wid = tel["mission"]
-            log.info("%s (%s) joins world %s", src.key, src.sid, src.wid)
+        self.assign(src, tel)
+        self.worlds.seen(src.wid, p.t_in)
+        tel.pop("sid", None)  # recordings made before names and ids were split
+        tel["drone"] = src.drone
         ts = frame_ts(src.kind, tel, p.t_in, p.t_out)
-        env = Envelope(sid=p.sid, frame=tel.get("frame"), wid=src.wid, ts=ts,
+        env = Envelope(sid=src.sid, frame=tel.get("frame"), wid=src.wid, ts=ts,
                        data=FrameData.model_validate({"tel": tel, "jpeg": {"w": p.jpeg_size[0],
                                                                          "h": p.jpeg_size[1]}}).model_dump(
                            exclude_none=True))
-        self.diag.got(p.sid)
-        self.diag.sent(p.sid, latency_s=p.t_out - ts["capture"])
+        self.diag.got(src.sid)
+        self.diag.sent(src.sid, latency_s=p.t_out - ts["capture"])
         if src.kind == "live" and tel.get("t_capture"):
-            self.diag.clock(p.sid, p.t_in - tel["t_capture"])
-        if src.delivery == "all":
-            env.delivery = "all"
-        self._spawn(publish(self.nc, f"frames.{p.sid}", env, p.jpeg))
-        if src.delivery == "all" and env.frame is not None:
-            with self._ack:  # demux thread waits: backpressure up to the replay
-                if not self._ack.wait_for(lambda: self.acked.get(p.sid, -1) >= env.frame, ACK_TIMEOUT_S):
-                    log.warning("%s: no ack for frame %s within %.0f s, going on", p.sid, env.frame, ACK_TIMEOUT_S)
-
-    async def on_ack(self, msg) -> None:
-        d = json.loads(msg.data)
-        with self._ack:
-            self.acked[d["sid"]] = max(self.acked.get(d["sid"], -1), int(d["frame"]))
-            self._ack.notify_all()
+            self.diag.clock(src.sid, p.t_in - tel["t_capture"])
+        self._spawn(publish(self.nc, f"frames.{src.sid}", env, p.jpeg))
 
     def on_sid(self, src: Source) -> None:
         log.info("%s is stream %s (%s)", src.key, src.sid, src.kind)
         if src.kind == "live":
             self._flush_raw(src, force=True)
 
-    def new_source(self, key: str, kind: str, sid: str | None = None, wid: str | None = None,
-                   delivery: str = "latest") -> Source:
+    def new_source(self, key: str, kind: str, sid: str | None = None, wid: str | None = None) -> Source:
         # a short pipe for replays keeps their truth close to what is being decoded
-        src = Source(key=key, kind=kind, sid_override=sid, wid=wid, delivery=delivery,
+        src = Source(key=key, kind=kind, sid_override=sid, wid=wid,
                      pipe=PipeReader(16 if kind == "replay" else 256))
         src.on_frame = lambda p, s=src: self.on_frame(s, p)
+        src.assign = self.assign
         src.on_sid = self.on_sid
         self.sources[key] = src
         return src
@@ -120,7 +154,10 @@ class Ingest:
             slot[0] = bytearray()
         for i in range(0, len(data), 512 * 1024):
             self._spawn(self.nc.publish(f"raw.{src.sid}", data[i:i + 512 * 1024],
-                                        headers={"t": f"{t:.6f}", "src": src.key}))
+                                        headers={"t": f"{t:.6f}", "src": src.key, "wid": src.wid or "",
+                                                 "drone": src.drone or src.sid,
+                                                 "mission": src.joined[0] if src.joined else "",
+                                                 "map": src.joined[1] if src.joined else ""}))
 
     def video_udp(self) -> None:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -203,13 +240,22 @@ class Ingest:
         log.info("sim truth: udp :%d", TRUTH_PORT)
         while not self._stop.is_set():
             try:
-                msg = json.loads(sock.recvfrom(65536)[0])
+                data, addr = sock.recvfrom(65536)
+                msg = json.loads(data)
             except (TimeoutError, ValueError):
                 continue
-            self._spawn(self.publish_truth(msg))
+            self._spawn(self.publish_truth(msg, addr[0]))
 
-    async def publish_truth(self, msg: dict) -> None:
-        sid, wid, kind, rec = msg.get("sid"), msg.get("wid"), msg.get("kind"), msg.get("rec") or {}
+    async def publish_truth(self, msg: dict, host: str = "") -> None:
+        """An uplink's truth names its drone and mission; a replay's carries the ids it plays under."""
+        kind, rec = msg.get("kind"), msg.get("rec") or {}
+        if msg.get("drone"):
+            ids = self.worlds.truth_ids(msg.get("mission") or "default", msg["drone"], host)
+            if ids is None:  # before the drone's first frame; the uplink resends spawns every few seconds
+                return
+            wid, sid = ids
+        else:
+            sid, wid = msg.get("sid"), msg.get("wid")
         if not sid or not wid or kind not in ("gt", "spawn", "evt"):
             return
         env = Envelope(sid=sid, frame=rec.get("frame"), wid=wid, ts={"truth_recv": round(now(), 6)}, data=rec)
@@ -233,14 +279,14 @@ async def lifespan(app: FastAPI):
         svc.kv = await kv_bucket(svc.nc.jetstream(), "registry")
     except Exception as e:
         log.warning("JetStream KV unavailable (%s): spawn registry is not persisted", e)
-    await svc.nc.subscribe("ack.>", cb=svc.on_ack)
     threading.Thread(target=svc.video_udp, name="video-udp", daemon=True).start()
     threading.Thread(target=svc.video_tcp, name="video-tcp", daemon=True).start()
     threading.Thread(target=svc.truth_udp, name="truth-udp", daemon=True).start()
-    diag = asyncio.create_task(svc.diag.run(svc.nc))
+    tasks = [asyncio.create_task(svc.diag.run(svc.nc)), asyncio.create_task(svc.reap_worlds())]
     yield
     svc._stop.set()
-    diag.cancel()
+    for t in tasks:
+        t.cancel()
     await close(svc.nc)
 
 
@@ -257,16 +303,33 @@ async def streams(all: bool = False):
     return [s.info() for s in svc.sources.values() if all or not s.done.is_set()]
 
 
+@app.get("/worlds")
+async def worlds(mission: str):
+    return svc.worlds.of_mission(mission)
+
+
+@app.get("/missions")
+async def missions():
+    return svc.worlds.missions()
+
+
+@app.post("/missions/{mission}/stop")
+async def stop_mission(mission: str):
+    """End every live world of the mission now, instead of after EXPIRE_S: services drop its objects and alerts, and
+    its recordings are closed. Drones still sending start the mission afresh, with new ids."""
+    ended = [w["wid"] for w in svc.worlds.of_mission(mission)
+             if await svc.end_world(w["wid"], "stopped by the operator")]
+    return {"mission": mission, "ended": ended}
+
+
 @app.post("/push/{sid}")
-async def push(sid: str, request: Request, wid: str, delivery: str = "latest"):
+async def push(sid: str, request: Request, wid: str):
     """Stream an MPEG-TS body in. Backpressure: the body is read only as fast as it is decoded."""
     key = f"push:{sid}"
     old = svc.sources.get(key)
     if old and not old.done.is_set():
         raise HTTPException(409, f"{sid} is already being pushed")
-    if delivery == "all":
-        svc.acked.pop(sid, None)
-    src = svc.new_source(key, "replay", sid=sid, wid=wid, delivery=delivery)
+    src = svc.new_source(key, "replay", sid=sid, wid=wid)
     n = 0
     try:
         async for chunk in request.stream():

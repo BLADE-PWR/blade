@@ -7,8 +7,9 @@ flowchart LR
         ingest -->|frames| detector
         detector -->|detections| georef
         georef -->|geo| world
-        ingest -->|raw, truth| sessions
+        ingest -->|raw, truth, worlds| sessions
         sessions -.->|replay| ingest
+        ingest -.->|worlds: start, end| world
         world -->|objects, events| decision
         world -->|objects| evaluator
         ingest -.->|truth| evaluator
@@ -21,4 +22,5 @@ flowchart LR
     decision -->|alerts| gateway
     evaluator -->|eval| gateway
     terrain -->|map crops| gateway
-    gateway -->|REST, WebSocket| frontend["frontend (React, planned)"]
+    ingest -.->|worlds, live missions| gateway
+    gateway -->|REST, WebSocket| frontend["frontend (React)"]

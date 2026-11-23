@@ -1,5 +1,6 @@
 """Message contract v1: one envelope for every bus message, one payload model per subject
-(frames.<sid>, detections.<sid>, geo.<sid>, world.<wid>.objects, alerts.<wid>, clusters.<wid>, ...).
+(frames.<sid>, detections.<sid>, geo.<sid>, world.<wid>.objects, alerts.<wid>, worlds.<wid>, clusters.<wid>, ...).
+sid (a drone's stream) and wid (a world) are ids the backend picks; people pick the names (tel.drone, tel.mission).
 `python -m blade_common.contracts` writes contracts/*.schema.json."""
 from __future__ import annotations
 
@@ -27,7 +28,6 @@ class Envelope(BaseModel):
     sid: str | None = None
     frame: int | None = None
     wid: str | None = None
-    delivery: str | None = Field(None, description="'all': a replay that waits for every frame (ack.<sid>)")
     ts: dict[str, float | list[float]] = Field(
         default_factory=dict,
         description="capture: epoch s; every stage appends [t_in, t_out] under its own name, on its own clock; "
@@ -51,13 +51,14 @@ class ImageSize(_Open):
 
 
 class Tel(_Open):
-    """Arma's tel record, as the mission emits it, plus what the uplink adds (sid, mission, t_capture)."""
+    """Arma's tel record, as the mission emits it, plus what the uplink adds (drone, mission, t_capture)."""
     frame: int = Field(description="full diag_frameNo")
     t_game: float | None = None
     t_tick: float | None = None
-    sid: str | None = None
-    mission: str | None = Field(None, description="world a live drone joins (uplink --mission); a replay plays "
-                                                  "into its own")
+    drone: str | None = Field(None, description="the drone's name (uplink --drone; ingest may add -2, -3 when "
+                                                "another uplink already flies under it)")
+    mission: str | None = Field(None, description="the mission's name (uplink --mission): drones of one mission on "
+                                                  "one map share a world")
     t_capture: float | None = Field(None, description="epoch s when the uplink grabbed the frame")
     camera: Camera
     range_m: float | None = None
@@ -226,6 +227,7 @@ class TruthMatch(BaseModel):
     xy: Vec2
     oid: str | None = None
     err_m: float | None = None
+    in_view: bool = True  # False: no drone sees it; shown on the map, not scored
 
 
 class GroupEval(BaseModel):
@@ -239,12 +241,23 @@ class GroupEval(BaseModel):
 class EvalData(BaseModel):
     window_s: float
     groups: dict[str, GroupEval]
-    truth: list[TruthMatch] = Field(description="true positions of objects in view, with their world match")
+    truth: list[TruthMatch] = Field(description="true positions of every known object: the ones in view with their "
+                                    "world match, the others with in_view false")
     false_objects: list[str] = Field(default_factory=list, description="active world objects with no truth nearby")
 
 
-class AckData(BaseModel):
-    frame: int
+class WorldInfo(BaseModel):
+    """A world and the names behind its ids, published by ingest as worlds.<wid> when it starts, when a drone joins
+    and when it ends; GET /worlds?mission= on ingest lists a mission's live ones."""
+    wid: str
+    mission: str = Field(description="the mission's name; a replay's is the recorded one")
+    map: str
+    kind: str = Field(description="live | replay")
+    started: float = Field(description="epoch s")
+    ended: float | None = Field(None, description="epoch s; set once, in the world's last message: services drop it")
+    drones: dict[str, str] = Field(default_factory=dict, description="sid -> the drone's name")
+    previous: dict[str, str] = Field(default_factory=dict, description="sid -> the sid the same drone (mission and "
+                                                                       "name) had before, whose settings it takes")
 
 
 class StreamDiag(BaseModel):
@@ -276,7 +289,7 @@ SUBJECTS: dict[str, type[BaseModel]] = {
     "alerts": AlertsData,
     "clusters": ClustersData,
     "eval": EvalData,
-    "ack": AckData,
+    "worlds": WorldInfo,
     "diag": DiagData,
 }
 

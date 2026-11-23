@@ -4,10 +4,12 @@ import ms, { type Symbol as MilSymbol } from "milsymbol";
 import { useEffect, useRef, useState } from "react";
 
 import { colorOf, GROUPS, nameOf, SEVERITY_COLORS } from "./classes";
-import type { Alert, Cluster, Prediction, Vec2, WorldObject } from "./contracts";
+import type { Cluster, Prediction, Vec2, WorldObject } from "./contracts";
 import { inside, loadWeights, MAX_WEIGHT, saveWeights, strength, type Weights, weightOf } from "./force";
 import { getJSON } from "./gateway";
-import { type Drone, droneName, type Filter, type Situation, shownMap, visible, worldNow } from "./situation";
+import {
+  type Drone, droneName, type Filter, type ShownAlert, type Situation, shownWorld, visible, type WorldView, worldNow,
+} from "./situation";
 
 const TILE_PX = 256;
 const MIN_ZOOM = -5; // 32 m/px
@@ -262,18 +264,19 @@ function drawClusters(group: L.LayerGroup, clusters: Cluster[], weights: Weights
   }
 }
 
-function drawTruth(group: L.LayerGroup, sit: Situation): void {
-  for (const t of sit.truth) {
-    const match = t.oid ? sit.objects.get(t.oid) : undefined;
+function drawTruth(group: L.LayerGroup, w: WorldView): void {
+  for (const t of w.truth) {
+    const match = t.oid ? w.objects.get(t.oid) : undefined;
     if (match) L.polyline([ll(t.xy), ll(match.xy)], { color: "#ffffff", weight: 1, dashArray: "3 3" }).addTo(group);
     const html = t.err_m === undefined ? "" : `<span class="sym-label">${t.err_m.toFixed(0)} m</span>`;
-    L.marker(ll(t.xy), { interactive: false, icon: L.divIcon({ className: "truth", iconSize: [14, 14], html }) })
+    const className = t.in_view === false ? "truth unseen" : "truth";
+    L.marker(ll(t.xy), { interactive: false, icon: L.divIcon({ className, iconSize: [14, 14], html }) })
       .addTo(group);
   }
 }
 
-function drawEvents(group: L.LayerGroup, sit: Situation, filter: Filter, now: number): void {
-  for (const e of sit.events.values()) {
+function drawEvents(group: L.LayerGroup, w: WorldView, filter: Filter, now: number): void {
+  for (const e of w.events.values()) {
     const age = now - e.t;
     if (age >= e.ttl_s || filter.hidden.has(e.kind)) continue;
     L.marker(ll(e.xy), { interactive: false, opacity: 1 - (0.7 * age) / e.ttl_s, icon: eventIcon(e.kind, age) })
@@ -281,9 +284,10 @@ function drawEvents(group: L.LayerGroup, sit: Situation, filter: Filter, now: nu
   }
 }
 
-function drawAlert(group: L.LayerGroup, sit: Situation, a: Alert): void {
+function drawAlert(group: L.LayerGroup, w: WorldView, a: ShownAlert): void {
+  if (a.wid !== w.wid) return; // on another map
   const color = SEVERITY_COLORS[a.severity];
-  const known = a.objects.map((oid) => sit.objects.get(oid)?.xy).filter((xy): xy is Vec2 => xy !== undefined);
+  const known = a.objects.map((oid) => w.objects.get(oid)?.xy).filter((xy): xy is Vec2 => xy !== undefined);
   const rings = known.length ? known : a.xy ? [a.xy] : [];
   for (const xy of rings) {
     L.circleMarker(ll(xy), { radius: ALERT_RING_PX, color, weight: 3, fill: false, interactive: false }).addTo(group);
@@ -325,9 +329,8 @@ type Props = {
   focus: string | null;
   selected: string | null;
   onSelect: (oid: string) => void;
-  onExpand?: () => void;
   centre?: { xy: Vec2; at: number } | null;
-  alert?: Alert | null;
+  alert?: ShownAlert | null;
   filter: Filter;
   overview?: boolean;
   layer?: Background;
@@ -357,9 +360,9 @@ function motion(c: Cluster): string {
   return `Moving ${(speed * 3.6).toFixed(0)} km/h, heading ${heading.toFixed(0)} deg`;
 }
 
-function GroupPanel({ group, sit, weights, onClose }: { group: Cluster; sit: Situation; weights: Weights;
+function GroupPanel({ group, world, weights, onClose }: { group: Cluster; world: WorldView; weights: Weights;
   onClose: () => void }) {
-  const stale = group.objects.filter((oid) => sit.objects.get(oid)?.state === "stale").length;
+  const stale = group.objects.filter((oid) => world.objects.get(oid)?.state === "stale").length;
   const composition = Object.entries(group.composition).map(([grp, n]) => `${nameOf(grp)} ${n}`).join(", ");
   return (
     <div className="map-group panel" role="dialog" aria-label="Force group">
@@ -378,7 +381,7 @@ function GroupPanel({ group, sit, weights, onClose }: { group: Cluster; sit: Sit
 }
 
 export function MapView(props: Props) {
-  const { sit, focus, selected, onSelect, onExpand, centre, alert, filter, overview, layer = "auto" } = props;
+  const { sit, focus, selected, onSelect, centre, alert, filter, overview, layer = "auto" } = props;
   const box = useRef<HTMLDivElement>(null);
   const markers = useRef<Markers>(new Map());
   const [map, setMap] = useState<L.Map | null>(null);
@@ -395,10 +398,21 @@ export function MapView(props: Props) {
     saveWeights(w);
   };
   const [showLayers, setShowLayers] = useState(false);
+  const layersBox = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [centredOn, setCentredOn] = useState<string | undefined>(); // the map the view was last centred on
   const [, setMoved] = useState(0);
-  const mapId = shownMap(sit, focus); // none until a world has reported
+
+  useEffect(() => { // the layer list closes on a click anywhere else (the map too)
+    if (!showLayers) return;
+    const away = (e: PointerEvent) => {
+      if (!layersBox.current?.contains(e.target as Node)) setShowLayers(false);
+    };
+    addEventListener("pointerdown", away);
+    return () => removeEventListener("pointerdown", away);
+  }, [showLayers]);
+  const world = shownWorld(sit, focus); // the focused drone's: one map, and only its objects
+  const mapId = world.map ?? undefined; // none until a world has reported
 
   useEffect(() => {
     const m = L.map(box.current!, { crs: L.CRS.Simple, minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM, zoomControl: false,
@@ -458,7 +472,7 @@ export function MapView(props: Props) {
     };
   }, [map, mapId, layer]);
 
-  const now = worldNow(sit);
+  const now = worldNow(sit, world);
   const focusGeo = focus ? sit.drones.get(focus)?.geo : null;
 
   const fit = (pts: L.LatLng[]) => {
@@ -474,7 +488,7 @@ export function MapView(props: Props) {
     if (!overview && focus) {
       if (!focusGeo?.centre || focusGeo.map !== mapId) return;
       map.setView(ll(focusGeo.centre), START_ZOOM);
-    } else if (!fitDrones() && !fit([...sit.objects.values()].map((o) => ll(o.xy)))) return;
+    } else if (!fitDrones() && !fit([...world.objects.values()].map((o) => ll(o.xy)))) return;
     setCentredOn(mapId);
   });
 
@@ -482,10 +496,9 @@ export function MapView(props: Props) {
     if (map && centred && centre) map.panTo(ll(centre.xy));
   }, [map, centred, centre]);
 
-  const objects = [...sit.objects.values()].filter((o) => visible(o, filter));
+  const objects = [...world.objects.values()].filter((o) => visible(o, filter));
   const shown = new Set(objects.map((o) => o.oid)); // a group of classes the filter hides is hidden too
-  const clusters = [...sit.clusters].filter(([wid]) => sit.maps.get(wid) === mapId).flatMap(([, list]) => list)
-    .filter((c) => c.objects.some((oid) => shown.has(oid)));
+  const clusters = world.clusters.filter((c) => c.objects.some((oid) => shown.has(oid)));
 
   useEffect(() => {
     if (!map || !centred) return;
@@ -500,9 +513,9 @@ export function MapView(props: Props) {
     if (layers.groups) drawClusters(vectors, clusters, weights, pickedGroup);
     if (layers.drones) drawDrones(vectors, sit, focus, mapId);
     drawObjects(vectors, objects, selected, layers, now);
-    if (layers.truth) drawTruth(vectors, sit);
-    drawEvents(vectors, sit, filter, now);
-    if (alert) drawAlert(vectors, sit, alert);
+    if (layers.truth) drawTruth(vectors, world);
+    drawEvents(vectors, world, filter, now);
+    if (alert) drawAlert(vectors, world, alert);
     syncMarkers(map, markers.current, objects, selected, onSelect);
   });
 
@@ -515,7 +528,7 @@ export function MapView(props: Props) {
       <div ref={box} className="map-box" />
       {error && <p className="error map-error">{error}</p>}
       {layers.groups && group && (
-        <GroupPanel group={group} sit={sit} weights={weights} onClose={() => setPickedGroup(null)} />
+        <GroupPanel group={group} world={world} weights={weights} onClose={() => setPickedGroup(null)} />
       )}
       {away && focusGeo && (
         <span className="map-away">
@@ -523,7 +536,7 @@ export function MapView(props: Props) {
           from the centre
         </span>
       )}
-      <div className="map-layers">
+      <div className="map-layers" ref={layersBox}>
         <button aria-expanded={showLayers} onClick={() => setShowLayers(!showLayers)}>Layers</button>
         {showLayers && (
           <div className="map-layer-list">
@@ -537,10 +550,11 @@ export function MapView(props: Props) {
           </div>
         )}
       </div>
-      <div className="map-actions">
-        {overview && <button onClick={fitDrones}>Show all drones</button>}
-        {onExpand && <button onClick={onExpand}>Map to the main panel</button>}
-      </div>
+      {overview && (
+        <div className="map-actions">
+          <button onClick={fitDrones}>Show all drones</button>
+        </div>
+      )}
     </div>
   );
 }

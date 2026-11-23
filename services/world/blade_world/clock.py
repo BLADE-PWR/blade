@@ -2,9 +2,9 @@
 the world runs it on that time instead: a paused replay stands still, a replay at x2 runs twice as fast, so objects
 do not go stale while paused and speeds come out the same at any replay speed. Each replayed stream joins at the
 world's current time (an offset to its recording time), and joins again when it went back in the recording (a seek
-back, a loop: a rewind, and what it saw is forgotten) or fell behind the world (paused on its own while the world
-went on). A world that has a live stream follows the wall clock for all its streams, so objects of a drone that
-stops sending still go stale. The clock never goes back."""
+back, a loop: a rewind, and what every stream of the world saw is forgotten) or fell behind the world (paused on
+its own while the world went on). A world that has a live stream follows the wall clock for all its streams, so
+objects of a drone that stops sending still go stale. The clock never goes back."""
 from __future__ import annotations
 
 JUMP_BACK_S = 0.5  # s of recording time a stream may go back before it counts as a rewind (seek back, loop)
@@ -38,6 +38,12 @@ class WorldClock:
         t = media + self.offset[sid]
         self.t = max(self.t, t)
         return t, rewind
+
+    def rejoin_all(self, sid: str) -> None:
+        """The world went back with sid: every other stream joins again at the world's time with its next frame,
+        instead of counting its next frame (earlier in its recording than its last) as a rewind of its own."""
+        self.media = {sid: self.media[sid]}
+        self.offset = {sid: self.offset[sid]}
 
     def tick(self, wall: float) -> float:
         """-> the world time now, for the sweeper: it follows the wall only while the world has a live stream"""

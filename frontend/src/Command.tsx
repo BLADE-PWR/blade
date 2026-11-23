@@ -2,24 +2,27 @@
 import { useEffect, useState } from "react";
 
 import type { MainPanel } from "./App";
-import type { Alert, Vec2 } from "./contracts";
+import type { Vec2 } from "./contracts";
 import { getJSON, send } from "./gateway";
 import { AlertList } from "./Lists";
 import { type Background, MapView } from "./MapView";
 import {
   allAlerts,
   type Drone,
+  droneIn,
   droneName,
   type Filter,
   latencyS,
-  offMap,
   seeking,
   shownFrame,
   shownMap,
+  type ShownAlert,
+  shownWorld,
   type Situation,
   stageTimes,
   transmitting,
   worldNow,
+  worldOf,
 } from "./situation";
 import { Video } from "./Video";
 
@@ -30,12 +33,11 @@ type Props = {
   sids: string[];
   sid: string | null;
   main: MainPanel;
-  onMain: (p: MainPanel) => void;
   onDrone: (sid: string) => void;
   onOperator: () => void;
 };
 
-export function Command({ sit, sids, sid, main, onMain, onDrone, onOperator }: Props) {
+export function Command({ sit, sids, sid, main, onDrone, onOperator }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
   const [alertId, setAlertId] = useState<string | null>(null);
   const [centre, setCentre] = useState<{ xy: Vec2; at: number } | null>(null);
@@ -43,22 +45,28 @@ export function Command({ sit, sids, sid, main, onMain, onDrone, onOperator }: P
   const [settings, setSettings] = useState(false);
   const now = Date.now() / 1000;
   const alerts = allAlerts(sit);
-  const alert = alerts.find((a) => a.aid === alertId) ?? null;
+  const alert = alerts.find((a) => a.key === alertId) ?? null;
   const drones = sids.map((s) => sit.drones.get(s)).filter((d): d is Drone => d !== undefined);
   const live = drones.filter((d) => transmitting(d, now)).length;
   const drone = sid ? sit.drones.get(sid) : undefined;
   const pickDrone = (s: string) => {
+    if (sit.drones.get(s)?.wid !== drone?.wid) setSelected(null); // another world: its object ids are its own
     onDrone(s);
     const c = sit.drones.get(s)?.geo?.centre;
     if (c) setCentre({ xy: [c[0], c[1]], at: Date.now() });
   };
-  const pickAlert = (a: Alert) => {
-    setAlertId(a.aid === alertId ? null : a.aid);
+  const pickAlert = (a: ShownAlert) => {
+    setAlertId(a.key === alertId ? null : a.key);
+    const other = a.wid !== drone?.wid ? droneIn(sit, a.wid) : undefined; // on another map: show that map
+    if (other) {
+      setSelected(null);
+      onDrone(other);
+    }
     if (a.xy) setCentre({ xy: a.xy, at: Date.now() });
   };
   const map = (
     <MapView sit={sit} focus={sid} selected={selected} onSelect={setSelected} centre={centre} alert={alert}
-      filter={ALL} overview layer={layer} onExpand={main === "video" ? () => onMain("map") : undefined} />
+      filter={ALL} overview layer={layer} />
   );
 
   if (main === "video") {
@@ -101,7 +109,7 @@ export function Command({ sit, sids, sid, main, onMain, onDrone, onOperator }: P
       <section className="panel command-map" aria-label="Map of all drones">
         {map}
         <div className="map-summary">
-          <span>objects: <span className="mono value">{sit.objects.size}</span></span>
+          <span>objects: <span className="mono value">{shownWorld(sit, sid).objects.size}</span></span>
           <span>drones sending: <span className="mono value">{live} of {sids.length}</span></span>
           <span>alerts: <span className="mono value">{alerts.length}</span></span>
         </div>
@@ -125,7 +133,7 @@ export function Command({ sit, sids, sid, main, onMain, onDrone, onOperator }: P
         </section>
         <section className="panel tabs" aria-label="Alerts">
           <div className="panel-head"><strong>Alerts</strong> <span className="mono muted">{alerts.length}</span></div>
-          <AlertList alerts={alerts} picked={alert?.aid ?? null} onPick={pickAlert} now={worldNow(sit)} />
+          <AlertList alerts={alerts} picked={alert?.key ?? null} onPick={pickAlert} now={worldNow(sit)} />
         </section>
         <ServiceLine sit={sit} drone={drone} onSettings={() => setSettings(!settings)} />
         {settings && <Settings sit={sit} drone={drone} layer={layer} onLayer={setLayer} />}
@@ -137,8 +145,9 @@ export function Command({ sit, sids, sid, main, onMain, onDrone, onOperator }: P
 function DroneVideo({ sit, sid, thumb = false }: { sit: Situation; sid: string; thumb?: boolean }) {
   const d = sit.drones.get(sid);
   const shown = d ? shownFrame(d) : { preview: null, dets: null };
-  return <Video sid={sid} shown={shown} geo={thumb ? null : d?.geo} objects={sit.objects} labels={!thumb}
-    offMap={offMap(sit, d)} seeking={seeking(d, Date.now() / 1000)} />;
+  return <Video sid={sid} name={droneName(sit, sid)} shown={shown} geo={thumb ? null : d?.geo}
+    objects={worldOf(sit, d).objects}
+    labels={!thumb} seeking={seeking(d, Date.now() / 1000)} />;
 }
 
 function DroneThumb({ sit, sid }: { sit: Situation; sid: string }) {
@@ -301,7 +310,7 @@ function ModelPicker({ sid }: { sid: string }) {
 type SettingsProps = { sit: Situation; drone?: Drone; layer: Background; onLayer: (l: Background) => void };
 
 function Settings({ sit, drone, layer, onLayer }: SettingsProps) {
-  const wid = drone?.wid ?? sit.session?.streams[0]?.wid; // the shown drone's world
+  const wid = drone?.wid ?? sit.session?.replays[0]?.wid; // the shown drone's world
   return (
     <section className="panel settings" aria-label="Settings">
       <div className="panel-head"><strong>Settings</strong></div>
@@ -321,7 +330,10 @@ function Settings({ sit, drone, layer, onLayer }: SettingsProps) {
         <span className="muted">Alerts</span>
         {wid ? <RulePicker wid={wid} /> : <span className="muted">waiting for a drone</span>}
       </div>
-      <p className="muted setting-note">Rules that raise alerts, for this world until a restart.</p>
+      <p className="muted setting-note">
+        Rules that raise alerts. Live, they are the mission's: every map of it, also when it starts again, until the
+        server restarts.
+      </p>
       <div className="panel-head settings-head">
         <strong>Drone settings</strong>
         {drone && <span className="mono muted">{drone.sid}</span>}

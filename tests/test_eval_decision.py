@@ -29,6 +29,10 @@ def test_truth_in_view_and_cep():
     st.footprint = [[0, 0], [20, 0], [20, 20], [0, 20]]
     assert st.in_view(12) == [(1, "soldier", (5.0, 5.0))]
     assert st.in_view(9) == []  # no truth at or before frame 9
+    assert st.known(12) == [(1, "soldier", (5.0, 5.0)), (2, "military_vehicle", (50.0, 50.0))]  # out of view too
+    st.spawn({"id": 4, "cls": "tracked_vehicle"})  # how the game names tanks
+    st.gt({"frame": 13, "objs": [[4, [7, 7, 0], 0, [0, 0, 0], ""]]})
+    assert st.in_view() == [(4, "tank", (7.0, 7.0))]
     assert inside(st.footprint, 10, 10) and not inside(st.footprint, 30, 10)
     assert cep([1, 2, 3, 4, 100]) == (3.0, 61.6)
     ev = WorldEval("w")
@@ -219,45 +223,6 @@ async def test_forgotten_objects_are_not_lost(monkeypatch):
     assert not [a for a in e.step(e.now()) if a.rule == "lost_contact"]
 
 
-async def test_new_map_clears_the_worlds_alerts_and_objects(monkeypatch):
-    monkeypatch.setattr(dm, "engines", {})
-    sent = []
-
-    async def publish(nc, subject, env):
-        sent.append((subject, env.data["alerts"]))
-
-    monkeypatch.setattr(dm, "publish", publish)
-    await dm.on_objects(ObjectsMsg("w1", {"objects": [obj("t1", "tank", 0, 0, last=200.0)], "t": 200.0}))
-    await dm.on_objects(ObjectsMsg("w1", {"expired": ["t1"], "t": 261.0}))
-    e = dm.engines["w1"]
-    (lost,) = [a for a in e.step(e.now()) if a.rule == "lost_contact"]
-    await dm.on_objects(ObjectsMsg("w1", {"map": "other", "t": 262.0}))
-    assert not e.active and not e.ws.objects and not e.ws.gone and e.map == "other"
-    assert [(s, [(a["aid"], a["state"]) for a in alerts]) for s, alerts in sent] == [
-        ("alerts.w1", [(lost.aid, "cleared")])]
-
-
-async def test_eval_leaves_out_drones_on_another_map(monkeypatch):
-    import blade_evaluator.main as em
-
-    ev = em.Evaluator()
-    sent = []
-
-    async def publish(nc, subject, env):
-        sent.append(env.data)
-
-    monkeypatch.setattr(em, "publish", publish)
-    for sid, map_name, x in (("uav1", "altis", 5), ("uav2", "stratis", 105)):
-        st = ev.truth[sid]
-        st.spawn({"id": x, "cls": "soldier"})
-        st.gt({"frame": 10, "objs": [[x, [x, x, 0], 0, [0, 0, 0], "STAND"]]})
-        st.footprint = [[x - 5, x - 5], [x + 5, x - 5], [x + 5, x + 5], [x - 5, x + 5]]
-        ev.sid_wid[sid], ev.sid_map[sid] = "m", map_name
-    ev.world_map["m"] = "altis"
-    await ev.evaluate("m", 0.0)
-    assert [x["truth_id"] for x in sent[-1]["truth"]] == [5]  # only the altis drone's soldier
-
-
 async def test_rewind_clears_the_alerts_of_forgotten_objects_at_once(monkeypatch):
     monkeypatch.setattr(dm, "engines", {})
     sent = []
@@ -276,14 +241,36 @@ async def test_rewind_clears_the_alerts_of_forgotten_objects_at_once(monkeypatch
     assert [a.objects for a in e.active.values()] == [["t2"]]  # seen by a stream that did not go back
 
 
-async def test_clusters_drop_forgotten_objects_and_a_new_map_starts_afresh(monkeypatch):
+class InfoMsg:
+    def __init__(self, **world):
+        info = {"mission": "m1", "map": "altis", "kind": "live", "started": 0.0, "drones": {}, **world}
+        self.subject, self.headers = f"worlds.{info['wid']}", None
+        self.data = Envelope(wid=info["wid"], data=info).model_dump_json().encode()
+
+
+async def test_rules_belong_to_the_mission_on_every_map_and_after_it_ends(monkeypatch):
+    for name, value in (("engines", {}), ("missions", {}), ("rules_by_mission", {}), ("ended", set()),
+                        ("sid_wid", {})):
+        monkeypatch.setattr(dm, name, value)
+    await dm.on_world_info(InfoMsg(wid="w-altis"))
+    await dm.on_world_info(InfoMsg(wid="w-stratis", map="stratis"))
+    await dm.on_world_info(InfoMsg(wid="w-replay", kind="replay"))
+    for wid in ("w-altis", "w-stratis", "w-replay"):
+        await dm.on_objects(ObjectsMsg(wid, {"t": 1.0}))
+    await dm.put_rules("w-altis", {"lost_contact": {"enabled": False}})
+    assert dm.engines["w-stratis"].rules["lost_contact"]["enabled"] is False  # the same mission on another map
+    assert dm.engines["w-replay"].rules["lost_contact"].get("enabled") is not False  # a replay keeps its own
+    await dm.on_world_info(InfoMsg(wid="w-altis", ended=2.0))
+    assert "w-altis" not in dm.engines
+    await dm.on_objects(ObjectsMsg("w-altis", {"t": 3.0}))  # still on its way when it ended
+    assert "w-altis" not in dm.engines
+    await dm.on_world_info(InfoMsg(wid="w-altis2"))  # the mission starts again on altis
+    await dm.on_objects(ObjectsMsg("w-altis2", {"t": 4.0}))
+    assert dm.engines["w-altis2"].rules["lost_contact"]["enabled"] is False
+
+
+async def test_clusters_drop_forgotten_objects(monkeypatch):
     monkeypatch.setattr(dm, "engines", {})
-    sent = []
-
-    async def publish(nc, subject, env):
-        sent.append(env.data["clusters"])
-
-    monkeypatch.setattr(dm, "publish", publish)
     tanks = [obj("t1", "tank", 0, 0, last=200.0), obj("t2", "tank", 50, 0, last=200.0),
              obj("t3", "tank", 100, 0, last=200.0)]
     await dm.on_objects(ObjectsMsg("w1", {"objects": tanks, "t": 200.0}))
@@ -292,9 +279,3 @@ async def test_clusters_drop_forgotten_objects_and_a_new_map_starts_afresh(monke
     assert a["objects"] == ["t1", "t2", "t3"]
     await dm.on_objects(ObjectsMsg("w1", {"forgotten": ["t1", "t2"], "t": 200.0}))  # its replay went back
     assert e.grouper.update(e.ws.objects, e.now()) == []  # t3 is alone
-    await dm.on_objects(ObjectsMsg("w1", {"objects": tanks, "t": 201.0}))
-    e.ws.groups = e.grouper.update(e.ws.objects, e.now())
-    assert len(e.ws.groups) == 1
-    await dm.on_objects(ObjectsMsg("w1", {"map": "other", "t": 202.0}))
-    assert e.ws.groups == [] and e.grouper.prev == {}
-    assert sent[-1] == []  # the clients are told at once

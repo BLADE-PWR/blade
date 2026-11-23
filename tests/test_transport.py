@@ -62,7 +62,7 @@ def test_tcp_stream_into_ingest_pairs_every_frame():
     w = TsWriter(sink, "tcp-uav", 320, 180, fps=30, bitrate="1M", encoder="libx264")
     t0 = time.time()
     for k in range(60):
-        tel = {"frame": 2000 + k, "sid": "tcp-uav", "image": {"w": 320, "h": 180}}
+        tel = {"frame": 2000 + k, "drone": "tcp-uav", "image": {"w": 320, "h": 180}}
         w.write(frame_image(k, 320, 180), tel, t0 + k / 30)
         time.sleep(0.005)
     time.sleep(0.5)

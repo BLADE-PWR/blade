@@ -19,18 +19,19 @@ no sessions.
 | POST | `/sessions/{id}/start` | Assign detectors, start the replays |
 | POST | `/sessions/{id}/stop` | Stop the session's replays |
 | DELETE | `/sessions/{id}` | Stop the session's replays and delete it |
-| PATCH | `/sessions/{id}/replays/{sid}` | Replay control: `{"paused", "speed", "seek_s", "step"}` |
+| PATCH | `/sessions/{id}/replays/{wid}` | Replay control: `{"paused", "speed", "seek_s", "step", "loop"}` |
 | GET | `/detectors` | Live detector replicas and stream assignments |
 | GET | `/streams` | Streams ingest is receiving |
 
 Session body:
 ```json
 {"name": "session", "model": null,
- "streams": [{"sid": "rp-1", "wid": "rp-1", "recording": "<id>",
-              "speed": 1.0, "loop": false, "offset_s": 0, "pacing": "realtime", "delivery": "latest"}]}
+ "replays": [{"recording": "<id>", "wid": "rw-1", "sids": {"uav1": "rp-1", "uav2": "rp-2"},
+              "speed": 1.0, "loop": false, "offset_s": 0}]}
 ```
-Each stream is one replay: `sid`, `wid` and `recording` are required. `sid` must be new (a live drone or another
-replay may use the recorded one, and so may `wid`); `drone` and `mission`, the recorded ones, are what the UI shows.
+Each replay plays one recording, every drone of it (`drones` in `GET /api/recordings`), into a world of its own:
+`recording`, `wid` and a new stream id per drone (`sids`) are required. The names the UI shows (mission, drones) come
+from the recording itself, through `worlds.<wid>` and each frame's telemetry.
 
 ## Proxy
 
@@ -39,6 +40,7 @@ replay may use the recorded one, and so may `wid`); `drone` and `mission`, the r
 | Prefix | Service | Path there |
 |---|---|---|
 | `/api/models` | [detector](../detector/README.md) | `/models` |
+| `/api/missions` | [ingest](../ingest/README.md) | `/missions` (the live missions; stop one) |
 | `/api/detector` | [detector](../detector/README.md) | `/streams` (model and threshold of a stream) |
 | `/api/recordings` | [sessions](../sessions/README.md) | `/recordings` |
 | `/api/replays` | [sessions](../sessions/README.md) | `/replays` |
@@ -49,13 +51,16 @@ replay may use the recorded one, and so may `wid`); `drone` and `mission`, the r
 
 ## WebSocket
 
-`/ws?session=<id>` or `/ws?wids=x,y`: every drone in those worlds, also ones that join later. The server only sends.
+`/ws?session=<id>`: the session's worlds. `/ws?mission=<name>`: every live world of that mission (one per map),
+asked from ingest (`GET /worlds?mission=`), and the ones that start later (`worlds.<wid>`). Either way every drone in
+them, also ones that join later. The server only sends.
 
 Text messages are JSON: `{"type", "sid", "wid", "frame", "ts", "data"}`.
 
 | `type` | Content |
 |---|---|
 | `session` | The session, once at the start (with `?session=`) |
+| `world` | A world's mission, map and drone names (`worlds.<wid>`): at the start, then when a drone joins, and once with `ended` when it ends (with `?mission=` it is not watched any more) |
 | `snapshot` | All current objects of a world, once at the start |
 | `detections` | Boxes of one frame |
 | `geo` | Map points of one frame |
@@ -65,7 +70,7 @@ Text messages are JSON: `{"type", "sid", "wid", "frame", "ts", "data"}`.
 | `diag` | Per-service fps, latency, drops |
 
 Binary messages are video previews: `"ZPIF"` + uint32 big-endian header length + header JSON
-(`{"type": "frame", "sid", "frame", "w", "h", "src"}`) + JPEG. Previews are limited to
+(`{"type": "frame", "sid", "drone", "frame", "w", "h", "src"}`, `drone` being its name) + JPEG. Previews are limited to
 `PREVIEW_FPS` and scaled to `PREVIEW_W` wide. A slow client loses messages instead of slowing the bus.
 
 Config: `PREVIEW_FPS` (15), `PREVIEW_W` (960), `SESSION_IDLE_S` (30), and `<SERVICE>_URL` for each service.

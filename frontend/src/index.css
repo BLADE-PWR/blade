@@ -54,14 +54,10 @@ button:disabled {
   background: #2a1615;
 }
 
-.pick {
+.crash {
   max-width: 1200px;
   margin: 0 auto;
   padding: 16px;
-}
-
-.pick label {
-  margin-right: 12px;
 }
 
 /* top bar */
@@ -169,10 +165,19 @@ button:disabled {
   gap: 4px;
 }
 
+.replay-buttons .play {
+  min-width: 64px; /* Play and Pause the same width, so the slider does not resize */
+}
+
 button.primary {
   background: #e6eaf0;
   color: #0d1015;
   font-weight: 600;
+}
+
+button.danger {
+  border-color: #b91c1c;
+  color: #fca5a5;
 }
 
 .timeline {
@@ -269,18 +274,6 @@ button.primary {
   to {
     transform: rotate(360deg);
   }
-}
-
-.off-map {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  margin: 0;
-  padding: 4px 8px;
-  background: #d97706;
-  color: #111;
-  font-weight: 600;
 }
 
 .video.empty {
@@ -663,6 +656,10 @@ button.primary {
   background:
     linear-gradient(#fff, #fff) center / 2px 100% no-repeat,
     linear-gradient(#fff, #fff) center / 100% 2px no-repeat;
+}
+
+.truth.unseen {
+  opacity: 0.35; /* no drone sees it */
 }
 
 .bottombar {

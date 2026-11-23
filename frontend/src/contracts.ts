@@ -48,6 +48,10 @@ export type WorldObjectsData = {
 
 export type WorldEvent = { eid: string; kind: string; xy: Vec2; t: number; ttl_s: number; sid: string };
 
+// worlds.<wid>, from ingest: a world's mission, map and the names of its drones
+export type WorldInfo = { wid: string; mission: string; map: string; kind: "live" | "replay"; started: number;
+  ended?: number | null; drones: Record<string, string> }; // sid -> name
+
 export type Snapshot = { objects: WorldObject[]; events: WorldEvent[]; t?: number; map?: string | null };
 
 export type Alert = {
@@ -74,7 +78,8 @@ export type Cluster = {
 
 export type ClustersData = { clusters: Cluster[]; t?: number };
 
-export type TruthMatch = { truth_id: number; grp: string; xy: Vec2; oid?: string; err_m?: number };
+// in_view false: no drone sees it (drawn faint, not scored)
+export type TruthMatch = { truth_id: number; grp: string; xy: Vec2; oid?: string; err_m?: number; in_view?: boolean };
 
 export type EvalData = { truth: TruthMatch[] };
 
@@ -82,14 +87,20 @@ export type StreamDiag = { fps_in: number; fps_out: number; dropped: number; lat
 
 export type DiagData = { service: string; instance?: string | null; streams: Record<string, StreamDiag> };
 
-export type SessionStream = { sid: string; wid: string; recording: string; drone?: string | null;
-  mission?: string | null }; // a replay
+// one mission recording played into its own world, every drone of it under a stream id of its own
+export type SessionReplay = { recording: string; wid: string; sids: Record<string, string> }; // drone name -> sid
 
-export type Session = { id: string; name: string; state: string; streams: SessionStream[] };
+export type LiveMission = { mission: string; worlds: WorldInfo[] }; // from ingest: one world per map
+
+export type Session = { id: string; name: string; state: string; replays: SessionReplay[] };
+
+export type RecordedDrone = { name: string; start_s: number }; // start_s: where it starts on the mission's timeline
 
 export type Replay = {
-  sid: string;
+  wid: string;
   recording: string;
+  drones: (RecordedDrone & { sid: string; segments: [number, number][] })[]; // segments: [from, to] on the timeline
+  generation: number; // goes up with every jump (a seek, from any tab, or a loop)
   position_s: number;
   duration_s: number;
   speed: number;
@@ -99,10 +110,12 @@ export type Replay = {
 
 export type Recording = {
   id: string;
-  sid: string; // the drone
   mission?: string | null; // its uplink --mission; none for stills, or while still recording
+  map?: string | null;
   scene: string | null;
   started: number;
   duration_s?: number; // both missing while the recording is still being written
+  recording?: boolean; // still being written: listed, but cannot be replayed yet
   has_truth?: boolean;
+  drones: RecordedDrone[]; // every drone of the mission, in the order they joined
 };

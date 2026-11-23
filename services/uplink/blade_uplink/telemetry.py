@@ -12,8 +12,8 @@ RESEND_REGISTRY_S = 10.0
 
 
 class Telemetry:
-    def __init__(self, listen: tuple[str, int], sid: str, mission: str, truth_to: tuple[str, int], wrap: int):
-        self.sid, self.mission = sid, mission
+    def __init__(self, listen: tuple[str, int], drone: str, mission: str, truth_to: tuple[str, int], wrap: int):
+        self.drone, self.mission = drone, mission
         self.wrap = wrap
         self.tel: dict[int, dict] = {}  # frame % wrap -> tel record
         self.objects: dict[int, dict] = {}  # id -> spawn record, resent periodically
@@ -75,7 +75,7 @@ class Telemetry:
                 del self._parts[f]
 
     def _send(self, kind: str, rec: dict) -> None:
-        msg = json.dumps({"sid": self.sid, "wid": self.mission, "kind": kind, "t": time.time(), "rec": rec},
+        msg = json.dumps({"drone": self.drone, "mission": self.mission, "kind": kind, "t": time.time(), "rec": rec},
                          separators=(",", ":")).encode()
         try:
             self.out.sendto(msg, self.truth_to)

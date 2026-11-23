@@ -5,19 +5,6 @@
       "title": "Data",
       "type": "object"
     },
-    "delivery": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "'all': a replay that waits for every frame (ack.<sid>)",
-      "title": "Delivery"
-    },
     "frame": {
       "anyOf": [
         {

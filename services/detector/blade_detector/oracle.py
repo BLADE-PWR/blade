@@ -12,7 +12,8 @@ from blade_geometry import Camera
 STANCE_CLS = {"STAND": "soldier_standing", "CROUCH": "soldier_kneeling", "PRONE": "soldier_prone",
               "": "soldier_standing"}
 STANCE_H = {"STAND": 1.0, "CROUCH": 0.6, "PRONE": 0.3, "": 1.0}
-VEHICLE_CLS = {"tank": "tank", "wheeled_vehicle": "military_vehicle", "military_vehicle": "military_vehicle",
+VEHICLE_CLS = {"tank": "tank", "tracked_vehicle": "tank",  # the game sends tanks as tracked_vehicle
+               "wheeled_vehicle": "military_vehicle", "military_vehicle": "military_vehicle",
                "apc": "military_vehicle", "truck": "military_vehicle"}
 
 

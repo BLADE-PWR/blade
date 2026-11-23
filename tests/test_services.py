@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 import time
 import types
@@ -55,7 +56,7 @@ def ts_bytes(pkg):
     t0 = time.time()
     for k in range(45):
         t = k / 30
-        tel = dict(look_at_tel(pkg.terrain, CENTRE, 1000 + k, bearing_deg=k), sid="t-uav1", mission="t-mission",
+        tel = dict(look_at_tel(pkg.terrain, CENTRE, 1000 + k, bearing_deg=k), drone="t-uav1", mission="t-mission",
                    t_capture=t0 + t)
         w.write(frame_image(k), tel, t0 + t)
     w.close()
@@ -290,8 +291,9 @@ async def test_model_switch_does_not_reuse_track_ids(monkeypatch):
 
 
 class _Msg:
-    def __init__(self, subject, data, t):
-        self.subject, self.data, self.headers = subject, data, {"t": str(t)}
+    def __init__(self, subject, data, t, wid="w-1", drone="uav1", src="udp:a"):
+        self.subject, self.data = subject, data
+        self.headers = {"t": str(t), "wid": wid, "drone": drone, "mission": "m1", "map": "tiny", "src": src}
 
 
 async def test_recorder_takes_no_new_recording_while_closing(tmp_path, ts_bytes):
@@ -299,10 +301,10 @@ async def test_recorder_takes_no_new_recording_while_closing(tmp_path, ts_bytes)
 
     rec = Recorder(tmp_path, record_all=True)
     await rec.on_raw(_Msg("raw.s1", ts_bytes, 1.0))
-    assert list(rec.active) == ["s1"]
-    await rec.close()  # finalizes s1
+    assert list(rec.missions) == ["w-1"]
+    await rec.close()  # finalizes w-1
     await rec.on_raw(_Msg("raw.s1", ts_bytes[-4096:], 2.0))  # ingest's tail arrives after the close
-    assert rec.active == {}
+    assert rec.missions == {}
     dirs = [d for d in tmp_path.iterdir() if d.is_dir()]
     assert len(dirs) == 1 and not json.loads((dirs[0] / "manifest.json").read_text())["recording"]
 
@@ -339,8 +341,7 @@ class GeoMsg:
 def world_service(monkeypatch):
     from blade_world import main as wm
     nc = FakeNats()
-    for name, value in (("state", {"nc": nc}), ("worlds", {}), ("clocks", {}), ("swept", {}), ("maps", {}),
-                        ("map_seen", {}), ("left_out", set())):
+    for name, value in (("state", {"nc": nc}), ("worlds", {}), ("clocks", {}), ("swept", {}), ("maps", {})):
         monkeypatch.setattr(wm, name, value)
     return wm, nc
 
@@ -373,30 +374,76 @@ async def test_live_world_ages_and_beats(monkeypatch):
     assert [o["state"] for o in beat["data"]["objects"]] == ["stale"] and beat["data"]["t"] > time.time() + 3
 
 
-def test_live_stream_joins_its_mission_and_a_replay_keeps_its_world(monkeypatch, pkg):
+def test_ingest_gives_live_drones_ids_and_a_replay_keeps_its_own(monkeypatch, pkg):
     from blade_ingest import main as im
     from blade_ingest.source import Paired, PipeReader
 
     ing, sent = im.Ingest(), []
-    monkeypatch.setattr(im, "publish", lambda nc, subject, env, blob=None: sent.append(env.wid))
-    monkeypatch.setattr(ing, "_spawn", lambda coro: None)
-    tel = dict(look_at_tel(pkg.terrain, CENTRE, 1), sid="uav1", mission="m1",
-               t_capture=time.time())
-    live = Source(key="udp:x", kind="live", pipe=PipeReader(4))
-    replay = Source(key="push:rp", kind="replay", wid="rp-1", pipe=PipeReader(4))
+    monkeypatch.setattr(im, "publish", lambda nc, subject, env, blob=None: sent.append((env.sid, env.wid, env.data)))
+    monkeypatch.setattr(ing, "_spawn", lambda coro: coro and coro.close())  # announce: not run here
+    tel = dict(look_at_tel(pkg.terrain, CENTRE, 1), drone="uav1", mission="m1", t_capture=time.time())
+    live = ing.new_source("udp:10.0.0.5:5000", "live")
+    replay = Source(key="push:rp", kind="replay", sid_override="rp-1", wid="rw-1", pipe=PipeReader(4))
     for src in (live, replay):
-        src.sid = "uav1"
-        ing.on_frame(src, Paired("uav1", tel, b"", (320, 180), time.time(), time.time()))
-    assert sent == ["m1", "rp-1"] and live.wid == "m1"  # the replay ignores the mission it was recorded with
+        ing.on_frame(src, Paired("?", dict(tel), b"", (320, 180), time.time(), time.time()))
+    (sid, wid, data), (rsid, rwid, rdata) = sent
+    assert sid.startswith("d-") and wid.startswith("w-") and (sid, wid) == (live.sid, live.wid)
+    assert data["tel"]["drone"] == "uav1" and data["tel"]["mission"] == "m1"
+    assert (rsid, rwid) == ("rp-1", "rw-1") and rdata["tel"]["drone"] == "uav1"  # its ids, the recorded names
+    assert ing.worlds.truth_ids("m1", "uav1", "10.0.0.5") == (wid, sid)
     for src in (live, replay):
         src.close()
 
 
+def test_one_world_per_mission_and_map():
+    from blade_ingest.worlds import Worlds
+
+    ws = Worlds(alive=lambda key: True)
+    a = ws.join_live("m1", "altis", "uav1", "udp:a")
+    b = ws.join_live("m1", "altis", "uav2", "udp:b")
+    c = ws.join_live("m1", "stratis", "uav3", "udp:c")
+    d = ws.join_live("m2", "altis", "uav1", "udp:d")
+    assert a.world is b.world and a.sid != b.sid  # same mission and map: one picture
+    assert c.world is not a.world and d.world is not a.world  # another map, another mission: their own
+    assert d.name == "uav1" and d.sid != a.sid  # a name is per world: uav1 of m2 is not uav1 of m1
+    assert a.changed and b.changed and not ws.join_live("m1", "altis", "uav1", "udp:a").changed
+    assert sorted(w["map"] for w in ws.of_mission("m1")) == ["altis", "stratis"]  # what a new viewer is told
+    assert [w["drones"] for w in ws.of_mission("m2")] == [{d.sid: "uav1"}]
+
+
+def test_a_name_already_flying_gets_a_suffix_and_a_reconnect_keeps_its_id():
+    from blade_ingest.worlds import Worlds
+
+    connected = {"udp:a", "udp:b"}
+    ws = Worlds(alive=lambda key: key in connected)
+    first = ws.join_live("m1", "altis", "uav1", "udp:a")
+    second = ws.join_live("m1", "altis", "uav1", "udp:b")  # another uplink, same --drone
+    assert second.name == "uav1-2" and second.sid != first.sid and second.world is first.world
+    assert ws.join_live("m1", "altis", "uav1", "udp:c").name == "uav1-3"
+    connected.discard("udp:a")  # the first uplink went away and came back on a new port
+    back = ws.join_live("m1", "altis", "uav1", "udp:a2")
+    assert back.sid == first.sid and back.name == "uav1"
+    assert ws.truth_ids("m1", "uav1", "") in {(first.world.wid, first.sid), (first.world.wid, second.sid)}
+
+
+def test_a_drone_that_changes_maps_frees_its_name_and_takes_its_truth_along():
+    from blade_ingest.worlds import Worlds
+
+    ws = Worlds(alive=lambda key: True)
+    old = ws.join_live("m1", "altis", "uav1", "udp:a")
+    ws.leave(old.world.wid, old.sid)
+    new = ws.join_live("m1", "stratis", "uav1", "udp:a")
+    assert new.world is not old.world
+    assert ws.join_live("m1", "altis", "uav1", "udp:b").sid == old.sid  # not renamed: nobody flies it there now
+    ws.leave(new.world.wid, new.sid)
+    assert ws.truth_ids("m1", "uav1", "") is not None
+
+
 async def test_session_nobody_watches_is_deleted():
-    from blade_gateway.sessions import Orchestrator, SessionSpec, StreamSpec
+    from blade_gateway.sessions import Orchestrator, ReplaySpec, SessionSpec
 
     orch = Orchestrator({"sessions": "http://127.0.0.1:9"})  # nothing listens: stopping the replay just fails
-    s = orch.create(SessionSpec(streams=[StreamSpec(sid="rp", wid="rp", recording="r")]))
+    s = orch.create(SessionSpec(replays=[ReplaySpec(recording="r", wid="rw", sids={"uav1": "rp"})]))
     await orch.reap(100.0, 30.0)
     orch.viewers[s.id] += 1  # a tab opens it
     await orch.reap(200.0, 30.0)
@@ -411,64 +458,301 @@ async def test_session_nobody_watches_is_deleted():
 
 
 async def test_session_is_paused_when_nobody_watches_and_stays_paused(monkeypatch):
-    from blade_gateway.sessions import Orchestrator, SessionSpec, StreamSpec
+    from blade_gateway.sessions import Orchestrator, ReplaySpec, SessionSpec
 
     orch = Orchestrator({"sessions": "http://sessions"})
-    paused = {"rp": False}  # the sessions service's replays
+    paused = {"rw": False}  # the sessions service's replays, by world
 
     async def call(client, s, method, svc, path, ok404=False, **kw):
         paused[path.rsplit("/", 1)[1]] = kw["json"]["paused"]
 
     monkeypatch.setattr(orch, "_call", call)
-    s = orch.create(SessionSpec(streams=[StreamSpec(sid="rp", wid="rp", recording="r")]))
+    s = orch.create(SessionSpec(replays=[ReplaySpec(recording="r", wid="rw", sids={"uav1": "rp"})]))
     orch.viewers[s.id] += 2  # two tabs
     await orch.unwatched(s)
-    assert not paused["rp"]  # one tab still watches
+    assert not paused["rw"]  # one tab still watches
     await orch.unwatched(s)
-    assert paused["rp"]  # nobody: paused
+    assert paused["rw"]  # nobody: paused
     orch.viewers[s.id] += 1  # a tab opens it again
-    assert paused["rp"]  # still paused: whoever opened it presses play
+    assert paused["rw"]  # still paused: whoever opened it presses play
+
+
+def track_dir(d, n, t0=100.0, dt=0.1):
+    """A recording folder whose chunk k is the single byte k, at t0 + k * dt."""
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "stream.ts").write_bytes(bytes(range(n)))
+    (d / "index.jsonl").write_text("".join(json.dumps({"o": k, "n": 1, "t": t0 + k * dt}) + "\n" for k in range(n)))
+    return d
+
+
+def replay_of(*tracks, **kw):
+    """A replay of tracks (folder, start on the timeline) that is driven by hand: no pushes, no truth sent."""
+    from blade_sessions.replay import Replay, Track, TrackSpec
+
+    ts = [Track(TrackSpec(f"uav{k}", d, start), f"rp-{k}", send_truth=False) for k, (d, start) in enumerate(tracks)]
+    r = Replay(recording="rec", wid="rw", tracks=ts, ingest_url="http://unused", truth_addr=("127.0.0.1", 9), **kw)
+    return r, [t.body(r.clock, r._send_truth) for t in ts]
 
 
 async def test_replay_speed_change_while_sending_replans_from_there(tmp_path):
-    from blade_sessions.replay import Replay
-
-    n = 40  # one 1-byte chunk every 0.1 s of recording
-    (tmp_path / "stream.ts").write_bytes(b"x" * n)
-    (tmp_path / "index.jsonl").write_text("".join(json.dumps({"o": k, "n": 1, "t": 100 + k / 10}) + "\n"
-                                                  for k in range(n)))
-    r = Replay(sid="rp", recording="rec", dir=tmp_path, ingest_url="http://unused", truth_addr=("127.0.0.1", 9),
-               wid="rp", send_truth=False)
-    body = r._body()
+    r, (body,) = replay_of((track_dir(tmp_path, 40), 0.0))
     for _ in range(11):  # 1.0 s of recording at x1
         await anext(body)
-    r.patch(speed=0.5)  # arrives while the replay hands over a chunk, not while it sleeps
+    r.patch(speed=0.5)  # arrives while the replay hands over a chunk, not while it waits
     t1 = time.monotonic()
     await anext(body)
-    assert time.monotonic() - t1 < 0.1  # not 1.2 s: 1.1 s of recording planned at x0.5 from the start
+    assert time.monotonic() - t1 < 0.25  # the 0.1 s left to the next chunk, now at x0.5; not 1.1 s of it
+    t2 = time.monotonic()
     await anext(body)
-    assert time.monotonic() - t1 == pytest.approx(0.2, abs=0.08)  # then 0.1 s of recording takes 0.2 s
+    assert time.monotonic() - t2 == pytest.approx(0.2, abs=0.08)  # then 0.1 s of recording takes 0.2 s
     await body.aclose()
     r.patch(seek_s=2.5)
-    assert r.info()["position_s"] == 2.5  # the reply to a seek shows where it goes, not where it was
+    assert r.info()["position_s"] == pytest.approx(2.5, abs=0.05)  # the reply to a seek shows where it goes
     r.patch(loop=True)
     assert r.info()["loop"] is True
 
 
 async def test_replay_without_loop_waits_at_the_end_for_a_seek(tmp_path):
-    from blade_sessions.replay import Replay
-
-    n = 20  # chunk k is the single byte k, one every 0.1 s of recording
-    (tmp_path / "stream.ts").write_bytes(bytes(range(n)))
-    (tmp_path / "index.jsonl").write_text("".join(json.dumps({"o": k, "n": 1, "t": 100 + k / 10}) + "\n"
-                                                  for k in range(n)))
-    r = Replay(sid="rp", recording="rec", dir=tmp_path, ingest_url="http://unused", truth_addr=("127.0.0.1", 9),
-               wid="rp", send_truth=False, speed=100.0)
-    body = r._body()
+    n = 20
+    r, (body,) = replay_of((track_dir(tmp_path, n), 0.0), speed=100.0)
+    conductor = asyncio.ensure_future(r._conduct())
     assert [await anext(body) for _ in range(n)] == [bytes([k]) for k in range(n)]
     nxt = asyncio.ensure_future(anext(body))
     await asyncio.sleep(0.1)
-    assert not nxt.done() and r.paused and r.state == "paused"  # at the end: waiting, not finished
+    assert not nxt.done() and r.clock.paused and r.info()["state"] == "paused"  # at the end: waiting, not done
     r.patch(seek_s=1.0)
-    assert await asyncio.wait_for(nxt, 2) == bytes([10]) and not r.paused  # goes on from the seek and plays
+    assert await asyncio.wait_for(nxt, 2) == bytes([10]) and not r.clock.paused  # goes on from the seek and plays
+    conductor.cancel()
     await body.aclose()
+
+
+async def test_a_drone_that_joined_later_starts_later_and_both_follow_one_seek(tmp_path):
+    r, (first, late) = replay_of((track_dir(tmp_path / "a", 30), 0.0), (track_dir(tmp_path / "b", 10), 1.0),
+                                 speed=10.0)
+    assert r.duration_s == pytest.approx(2.9)  # the longer of 2.9 s and 1.0 s + 0.9 s
+    # paused at 0 while both open their files: at x10 a chunk lasts 10 ms, less than a slow first read takes
+    r.patch(paused=True, seek_s=0)
+    assert await asyncio.wait_for(anext(first), 1) == bytes([0])  # the first drone starts at once
+    nxt = asyncio.ensure_future(anext(late))
+    await asyncio.sleep(0.05)
+    assert not nxt.done()  # the late drone joins at 1.0 s
+    r.patch(paused=False)
+    t0 = time.monotonic()
+    assert await asyncio.wait_for(nxt, 1) == bytes([0])  # a slow start fails instead of hanging
+    assert time.monotonic() - t0 == pytest.approx(0.1, abs=0.05)  # 1.0 s of timeline at x10: as late as live
+    r.patch(seek_s=0.5)  # before the late drone joined
+    assert await anext(first) == bytes([5])
+    nxt = asyncio.ensure_future(anext(late))
+    await asyncio.sleep(0.02)
+    assert not nxt.done()  # it waits for 1.0 s again
+    assert await asyncio.wait_for(nxt, 1) == bytes([0])
+    for body in (first, late):
+        await body.aclose()
+
+
+async def test_next_frame_steps_the_drones_that_have_joined(tmp_path):
+    r, (first, late) = replay_of((track_dir(tmp_path / "a", 30), 0.0), (track_dir(tmp_path / "b", 10), 1.0))
+    first_track, late_track = r.tracks
+    first_track.frames = list(range(1, 31))  # a frame ends after every byte
+    late_track.frames = list(range(1, 11))
+    assert await anext(first) == bytes([0])
+    r.patch(step=2)  # paused, two frames on
+    assert await asyncio.wait_for(anext(first), 1) == bytes([1, 2])
+    nxt = asyncio.ensure_future(anext(late))
+    await asyncio.sleep(0.05)
+    assert not nxt.done() and r.clock.paused  # the late drone has not joined at 0.2 s: nothing to step
+    nxt.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await nxt
+    for body in (first, late):
+        await body.aclose()
+
+
+async def test_a_recording_still_being_written_cannot_be_replayed(tmp_path, monkeypatch):
+    from fastapi import HTTPException
+
+    from blade_sessions import main as sm
+
+    d = tmp_path / "open"
+    d.mkdir()
+    (d / "stream.ts").write_bytes(b"x")
+    (d / "index.jsonl").write_text(json.dumps({"o": 0, "n": 1, "t": 100.0}) + "\n")
+    (d / "manifest.json").write_text(json.dumps({"id": "open", "recording": True}))
+    monkeypatch.setattr(sm, "ROOT", tmp_path)
+    with pytest.raises(HTTPException) as e:
+        await sm.start_replay(sm.ReplayReq(recording="open", wid="rw", sids={"open": "rp"}))
+    assert e.value.status_code == 409 and "rw" not in sm.replays
+    (d / "manifest.json").write_text(json.dumps({"id": "open", "sid": "uav1", "recording": False}))
+    with pytest.raises(HTTPException) as e:
+        await sm.start_replay(sm.ReplayReq(recording="open", wid="rw", sids={"uav9": "rp"}))
+    assert e.value.status_code == 400 and "uav1" in e.value.detail  # every drone of it needs a stream id
+
+
+class InfoMsg:
+    def __init__(self, **world):
+        info = {"mission": "m1", "map": "altis", "kind": "live", "started": 0.0, "drones": {}, **world}
+        self.subject, self.headers = f"worlds.{info['wid']}", None
+        self.data = Envelope(wid=info["wid"], data=info).model_dump_json().encode()
+
+
+def test_an_idle_or_stopped_world_ends_and_the_next_drone_starts_a_new_one():
+    from blade_ingest.worlds import Worlds
+
+    ws = Worlds(alive=lambda key: True)
+    a = ws.join_live("m1", "altis", "uav1", "udp:a")
+    ws.join_live("m1", "stratis", "uav2", "udp:b")
+    ws.seen(a.world.wid, time.time() - 700)  # altis: nothing for 700 s
+    assert ws.idle(time.time(), 600, set(), 5) == [a.world.wid]
+    ended = ws.end(a.world.wid)
+    assert ended.ended and ws.end(a.world.wid) is None  # ends once
+    assert [w["map"] for w in ws.of_mission("m1")] == ["stratis"]
+    again = ws.join_live("m1", "altis", "uav1", "udp:a")
+    assert again.world.wid != a.world.wid and again.sid != a.sid  # a new world, new ids
+    assert again.world.previous == {again.sid: a.sid}  # its settings come from the old id
+
+
+async def test_stop_mission_ends_its_worlds_and_its_drones_get_new_ids(monkeypatch, pkg):
+    from blade_ingest import main as im
+    from blade_ingest.source import Paired
+
+    ing, sent = im.Ingest(), []
+    monkeypatch.setattr(im, "svc", ing)
+
+    async def publish(nc, subject, env, blob=None):
+        sent.append((subject, env))
+
+    monkeypatch.setattr(im, "publish", publish)
+    monkeypatch.setattr(ing, "_spawn", lambda coro: coro and coro.close())
+    tel = dict(look_at_tel(pkg.terrain, CENTRE, 1), drone="uav1", mission="m1", t_capture=time.time())
+    src = ing.new_source("udp:10.0.0.5:5000", "live")
+    ing.on_frame(src, Paired("?", dict(tel), b"", (320, 180), time.time(), time.time()))
+    old = (src.wid, src.sid)
+    assert (await im.stop_mission("m1"))["ended"] == [old[0]]
+    ((subject, env),) = [x for x in sent if x[0].startswith("worlds.")]
+    assert subject == f"worlds.{old[0]}" and env.data["ended"] and env.data["drones"] == {old[1]: "uav1"}
+    ing.on_frame(src, Paired("?", dict(tel), b"", (320, 180), time.time(), time.time()))  # still flying
+    assert src.wid != old[0] and src.sid != old[1] and src.drone == "uav1"
+    src.close()
+
+
+async def test_world_service_drops_an_ended_world_and_ignores_its_late_geo(monkeypatch):
+    wm, nc = world_service(monkeypatch)
+    monkeypatch.setattr(wm, "ended", set())
+    for k in range(10):
+        await wm.on_geo(tank_geo(k))
+    assert "w1" in wm.worlds
+    await wm.on_world_info(InfoMsg(wid="w1", ended=time.time()))
+    assert "w1" not in wm.worlds and "w1" not in wm.clocks
+    await wm.on_geo(tank_geo(11))  # still on its way when the world ended
+    assert "w1" not in wm.worlds
+    await wm.on_world_info(InfoMsg(wid="w1", kind="replay"))  # a replay world starts again under its id
+    await wm.on_geo(tank_geo(12))
+    assert "w1" in wm.worlds
+
+
+async def test_detector_settings_move_to_the_drones_new_id():
+    from blade_detector.cluster import Cluster
+
+    c = Cluster("me")
+    await c.set("d-old", model="m2", conf=0.4, instance="me")
+    await c.move("d-old", "d-new", ("model", "conf"))
+    assert c.assign == {"d-new": {"model": "m2", "conf": 0.4}}  # where it runs is not a setting
+    await c.set("d-x", model="m3")
+    await c.set("d-y", model="m1")
+    await c.move("d-x", "d-y", ("model", "conf"))
+    assert c.model("d-y") == "m1" and "d-x" not in c.assign  # set for the new id already: kept
+
+
+async def test_one_world_is_one_recording_with_a_segment_per_connection(tmp_path, ts_bytes):
+    from blade_sessions.recorder import Recorder
+    from blade_sessions.recording import drones, list_recordings
+
+    rec = Recorder(tmp_path, record_all=True)
+    await rec.on_raw(_Msg("raw.d-1", ts_bytes, 100.0, drone="uav1", src="udp:a:1"))
+    await rec.on_raw(_Msg("raw.d-2", ts_bytes, 140.0, drone="uav2", src="udp:b:1"))  # joined 40 s later
+    await rec.on_raw(_Msg("raw.d-1", ts_bytes, 400.0, drone="uav1", src="udp:a:2"))  # its uplink came back
+    assert len(rec.missions) == 1
+    (r,) = list_recordings(tmp_path)
+    assert r["recording"]  # listed, but not to be replayed yet
+    await rec.on_world_info(InfoMsg(wid="w-1", ended=time.time()))  # ingest ended the world
+    assert rec.missions == {}
+    (r,) = list_recordings(tmp_path)
+    assert not r["recording"] and r["mission"] == "m1" and r["map"] == "tiny" and r["wid"] == "w-1"
+    by_name = {d["name"]: d for d in drones(r)}
+    assert by_name["uav1"]["start_s"] == 0 and by_name["uav2"]["start_s"] == 40
+    assert [x["dir"] for x in by_name["uav1"]["segments"]] == ["uav1/000", "uav1/001"]
+    assert [x["start_s"] for x in by_name["uav1"]["segments"]] == [0, 300]
+    assert r["duration_s"] == pytest.approx(300, abs=0.01)  # its first chunk to its last
+
+
+async def test_a_replay_world_ends_only_when_no_push_has_been_open_for_a_while():
+    from blade_ingest.worlds import Worlds
+
+    ws = Worlds(alive=lambda key: True)
+    ws.join_replay("rw", "rp-1", "m1", "tiny", "uav1")
+    now = time.time()
+    assert ws.idle(now + 100, 600, {"rw"}, 5) == []  # a push is open (playing or paused)
+    assert ws.idle(now + 103, 600, set(), 5) == []  # between two segments of a drone
+    assert ws.idle(now + 106, 600, set(), 5) == ["rw"]  # the session stopped
+
+
+async def test_a_drone_plays_its_segments_one_push_each(tmp_path):
+    from blade_sessions.replay import segment_at
+
+    r, (body_a, body_b) = replay_of((track_dir(tmp_path / "a", 5), 0.0), (track_dir(tmp_path / "b", 5), 2.0),
+                                    speed=10.0)
+    a, b = r.tracks  # one drone, two segments: 0-0.4 s and 2.0-2.4 s
+    a.name = b.name = "uav0"
+    r.__post_init__()
+    segs = r.drones["uav0"]
+    body_a = a.body(r.clock, r._send_truth, segs)
+    assert [x async for x in body_a] == [bytes([k]) for k in range(5)]  # played to its end, then its push ends
+    assert a.done_at == r.clock.generation and segment_at(segs, 1.0) is b  # the next one, in its own push
+    body_b = b.body(r.clock, r._send_truth, segs)
+    assert await anext(body_b) == bytes([0])
+    r.patch(seek_s=0.1)  # back into the first segment
+    with pytest.raises(StopAsyncIteration):
+        await anext(body_b)  # its push ends; the first segment's starts again
+    assert segment_at(segs, r.clock.position()) is a and segment_at(segs, 3.0) is None
+
+
+async def test_a_replay_going_back_forgets_what_every_drone_saw(monkeypatch):
+    wm, nc = world_service(monkeypatch)
+    monkeypatch.setattr(wm, "ended", set())
+
+    def geo(sid, k, media, x):
+        pts = [{"tid": 1, "cls": "tank", "grp": "tank", "conf": 0.9, "xyz": [x, 500.0, 5.0], "sigma_m": 1.0}]
+        return GeoMsg(Envelope(sid=sid, wid="w1", frame=k, ts={"capture": time.time(), "media": media},
+                               data={"pts": pts, "map": "tiny"}))
+
+    for k in range(10):  # 40 s into the recording both drones see a tank of their own
+        await wm.on_geo(geo("d1", k, 540 + k / 10, 100.0))
+        await wm.on_geo(geo("d2", k, 540 + k / 10, 900.0))
+    assert len(wm.worlds["w1"].published()) == 2
+    await wm.on_geo(geo("d1", 0, 500.0, 100.0))  # a seek back to before d2 joined: only d1 sends
+    assert wm.worlds["w1"].published() == [] or all(set(o.seen_by) == {"d1"} for o in wm.worlds["w1"].published())
+    assert not [o for o in wm.worlds["w1"].objects.values() if "d2" in o.seen_by]  # nothing d2 saw is left
+    forgotten = [x for _, m in nc.sent for x in m["data"].get("forgotten", [])]
+    assert len(forgotten) == 2  # both tanks, d2's too
+    _, rewind = wm.clocks["w1"].frame("d2", 540.0, time.time())  # d2 joins at 40 s again: not a rewind of its own
+    assert not rewind
+
+
+def test_the_live_missions_list_their_maps_and_drones():
+    from blade_ingest.worlds import Worlds
+
+    ws = Worlds(alive=lambda key: True)
+    ws.join_live("m1", "altis", "uav1", "udp:a")
+    ws.join_live("m1", "stratis", "uav2", "udp:b")
+    ws.join_live("m2", "altis", "uav1", "udp:c")
+    ws.join_replay("rw", "rp-1", "m1", "altis", "uav1")  # a replay is no live mission
+    (m1, m2) = ws.missions()
+    assert m1["mission"] == "m1" and sorted(w["map"] for w in m1["worlds"]) == ["altis", "stratis"]
+    assert m2["mission"] == "m2" and list(m2["worlds"][0]["drones"].values()) == ["uav1"]
+
+
+async def test_sessions_health_and_active_recordings_answer():
+    from blade_sessions import main as sm
+
+    assert (await sm.health())["ok"]
+    assert (await sm.active())["active"] == []

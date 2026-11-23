@@ -1,0 +1,66 @@
+{
+  "description": "A world and the names behind its ids, published by ingest as worlds.<wid> when it starts, when a drone joins\nand when it ends; GET /worlds?mission= on ingest lists a mission's live ones.",
+  "properties": {
+    "drones": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "sid -> the drone's name",
+      "title": "Drones",
+      "type": "object"
+    },
+    "ended": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "epoch s; set once, in the world's last message: services drop it",
+      "title": "Ended"
+    },
+    "kind": {
+      "description": "live | replay",
+      "title": "Kind",
+      "type": "string"
+    },
+    "map": {
+      "title": "Map",
+      "type": "string"
+    },
+    "mission": {
+      "description": "the mission's name; a replay's is the recorded one",
+      "title": "Mission",
+      "type": "string"
+    },
+    "previous": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "sid -> the sid the same drone (mission and name) had before, whose settings it takes",
+      "title": "Previous",
+      "type": "object"
+    },
+    "started": {
+      "description": "epoch s",
+      "title": "Started",
+      "type": "number"
+    },
+    "wid": {
+      "title": "Wid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "wid",
+    "mission",
+    "map",
+    "kind",
+    "started"
+  ],
+  "title": "WorldInfo",
+  "type": "object"
+}

@@ -1,6 +1,8 @@
-"""A replay pushes a recorded stream.ts into ingest (POST /push/{sid}) and its truth into the truth port
-under a new stream id; from ingest onwards it is a live stream. Pacing: realtime | max. Delivery:
-latest | all (every frame through every stage). Control: pause, speed, seek, step N frames."""
+"""A replay plays a mission recording back into one world, all on one clock (clock.py). Each drone is pushed into
+ingest (POST /push/{sid}?wid=) with its truth sent to the truth port: segment after segment (one per connection it
+had live, each its own MPEG-TS stream, so each its own push), each when the clock reaches it. A drone that joined
+the mission later, or came back after a gap, does so on the timeline as it did live. From ingest onwards the drones
+look like live ones. Control: pause, speed, seek, step N frames, loop."""
 from __future__ import annotations
 
 import asyncio
@@ -15,90 +17,40 @@ from pathlib import Path
 
 import httpx
 
+from .clock import ReplayClock
 from .recording import frame_ends, load_index, load_truth
 
 log = logging.getLogger("sessions.replay")
 
 
 @dataclass
-class Replay:
-    sid: str
-    recording: str
-    dir: Path
-    ingest_url: str
-    truth_addr: tuple[str, int]
-    wid: str
-    speed: float = 1.0
-    loop: bool = False
-    offset_s: float = 0.0
-    pacing: str = "realtime"
-    delivery: str = "latest"
-    send_truth: bool = True
-    state: str = "starting"
-    position_s: float = 0.0
-    loops: int = 0
-    error: str | None = None
-    paused: bool = False
-    _seek: float | None = None
-    _steps: int = 0
-    _task: asyncio.Task | None = None
-    _wake: asyncio.Event = field(default_factory=asyncio.Event)
+class TrackSpec:
+    name: str  # the drone's name in the recording
+    dir: Path  # its stream.ts, index.jsonl, truth.jsonl
+    start_s: float  # where it starts on the mission's timeline
 
-    def __post_init__(self):
+
+class Track:
+    """One segment of one drone: its recorded chunks, sent when the clock reaches their time on the mission's
+    timeline."""
+
+    def __init__(self, spec: TrackSpec, sid: str, send_truth: bool):
+        self.name, self.dir, self.start_s, self.sid = spec.name, spec.dir, spec.start_s, sid
         self.index = load_index(self.dir)
         if not self.index:
-            raise ValueError(f"{self.recording}: empty index")
+            raise ValueError(f"{self.dir}: empty index")
         t0 = self.index[0]["t"]
-        self.times = [e["t"] - t0 for e in self.index]
+        self.times = [e["t"] - t0 for e in self.index]  # s from the track's own start
         self.offsets = [e["o"] for e in self.index]
         self.size = self.index[-1]["o"] + self.index[-1]["n"]
-        self.truth = []
-        if self.send_truth:
-            self.truth = sorted((dict(r, t=r["t"] - t0) for r in load_truth(self.dir)), key=lambda r: r["t"])
+        self.truth = sorted((dict(r, t=r["t"] - t0) for r in load_truth(self.dir)), key=lambda r: r["t"]) \
+            if send_truth else []
         self.truth_times = [r["t"] for r in self.truth]
-        self.duration_s = self.times[-1]
+        self.end_s = self.start_s + self.times[-1]
         self.frames: list[int] | None = None  # frame_ends, loaded on the first step
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
-    def start(self) -> None:
-        self._task = asyncio.create_task(self._run(), name=f"replay-{self.sid}")
-
-    async def stop(self) -> None:
-        if self._task:
-            self._task.cancel()
-            with contextlib.suppress(asyncio.CancelledError, Exception):
-                await self._task
-        self.state = "stopped"
-
-    def patch(self, paused: bool | None = None, speed: float | None = None, seek_s: float | None = None,
-              step: int | None = None, loop: bool | None = None) -> None:
-        if loop is not None:  # checked at the end of each pass
-            self.loop = loop
-        if speed is not None and speed > 0:
-            self.speed = speed
-        if seek_s is not None:
-            self._seek = self.position_s = max(0.0, min(seek_s, self.duration_s))  # the reply shows where it goes
-        if step:
-            paused = True
-            self._steps += max(int(step), 0)
-        if paused is not None:
-            self.paused = paused
-            if self.state in ("playing", "paused"):
-                self.state = "paused" if paused else "playing"
-        self._wake.set()
-
-    def info(self) -> dict:
-        return {"sid": self.sid, "recording": self.recording, "wid": self.wid, "state": self.state,
-                "position_s": round(self.position_s, 3), "duration_s": round(self.duration_s, 2),
-                "speed": self.speed, "paused": self.paused, "loop": self.loop, "loops": self.loops,
-                "pacing": self.pacing, "delivery": self.delivery, "error": self.error}
-
-    def _send_truth(self, r: dict) -> None:
-        msg = {"sid": self.sid, "kind": r["kind"], "t": time.time(), "rec": r["rec"], "wid": self.wid}
-        try:
-            self.sock.sendto(json.dumps(msg, separators=(",", ":")).encode(), self.truth_addr)
-        except OSError as e:
-            log.debug("truth send: %s", e)
+        self.steps = 0  # the clock's steps this track has sent
+        self.done_at = -1  # the clock's generation when it last played to its end
+        self.error: str | None = None
 
     def _chunk_at(self, byte: int) -> int:
         return max(bisect.bisect_right(self.offsets, byte) - 1, 0)
@@ -107,109 +59,187 @@ class Replay:
         return self.times[self._chunk_at(byte)]
 
     def _byte_at(self, t: float) -> int:
-        return self.offsets[min(bisect.bisect_left(self.times, t), len(self.offsets) - 1)]
+        """The chunk playing at mission time t, the first one before the track starts (the end once it is over)."""
+        rel = t - self.start_s
+        if rel > self.times[-1]:
+            return self.size
+        return self.offsets[max(bisect.bisect_right(self.times, rel) - 1, 0)]
 
-    async def _frame_ends(self) -> list[int]:
-        if self.frames is None:
-            self.frames = await asyncio.to_thread(frame_ends, self.dir / "stream.ts")
-        return self.frames
-
-    async def _sleep_or_wake(self, delay: float) -> bool:
-        """-> True if a control change woke us up."""
-        self._wake.clear()
-        try:
-            await asyncio.wait_for(self._wake.wait(), delay)
-            return True
-        except TimeoutError:
-            return False
-
-    async def _body(self):
+    async def body(self, clock: ReplayClock, send_truth, segments: list[Track] | None = None):
+        """The segment's bytes as the clock reaches them; it ends when the clock jumps to another of the drone's
+        segments (segments, in order), or when it is done and another one follows."""
+        segments = segments or [self]
         f = open(self.dir / "stream.ts", "rb")
-        j = 0
 
         def read(a: int, b: int) -> bytes:
             f.seek(a)
             return f.read(b - a)
 
-        def truth_until(t_media: float):
+        j = 0
+
+        def truth_until(rel: float) -> None:
             nonlocal j
-            while j < len(self.truth) and self.truth[j]["t"] <= t_media:
+            while j < len(self.truth) and self.truth[j]["t"] <= rel:
                 if self.truth[j]["kind"] != "spawn":
-                    self._send_truth(self.truth[j])
+                    send_truth(self.sid, self.truth[j])
                 j += 1
 
         try:
-            byte = self._byte_at(self.offset_s)
-            while True:
+            while True:  # once per jump (the start, a seek, a loop)
+                gen = clock.generation
+                if segment_at(segments, clock.position()) is not self:
+                    return  # the jump went to another segment: its own push
+                byte = self._byte_at(clock.position())
                 for r in self.truth:  # every spawn first, before any gt mentions it
                     if r["kind"] == "spawn":
-                        self._send_truth(r)
+                        send_truth(self.sid, r)
                 j = bisect.bisect_left(self.truth_times, self._time_at(byte))
-                clock0, media0 = time.monotonic(), self._time_at(byte)
-                speed0 = self.speed  # the speed clock0 / media0 were planned at
-                self.state = "paused" if self.paused else "playing"
+                self.steps = clock.steps
                 while byte < self.size:
-                    if self._seek is not None:
-                        byte, self._seek = self._byte_at(self._seek), None
-                        j = bisect.bisect_left(self.truth_times, self._time_at(byte))
-                        clock0, media0 = time.monotonic(), self._time_at(byte)
-                        self.position_s = media0
-                    if self.paused:
-                        self.state = "paused"
-                        if self._steps:
-                            ends = await self._frame_ends()
-                            k = bisect.bisect_right(ends, byte)  # frames already complete
-                            target = ends[min(k + self._steps - 1, len(ends) - 1)]
-                            self._steps = 0
-                            truth_until(self._time_at(target))
-                            yield read(byte, target)
-                            byte = target
-                            self.position_s = self._time_at(byte)
+                    if self.steps != clock.steps:  # paused, and frames asked for: send this track's next ones
+                        n, self.steps = clock.steps - self.steps, clock.steps
+                        if self.start_s > clock.position():  # the drone has not joined the mission yet
                             continue
-                        await self._sleep_or_wake(1.0)
-                        clock0, media0 = time.monotonic(), self._time_at(byte)
+                        if self.frames is None:
+                            self.frames = await asyncio.to_thread(frame_ends, self.dir / "stream.ts")
+                        k = bisect.bisect_right(self.frames, byte)  # frames already complete
+                        if self.frames:
+                            target = self.frames[min(k + n - 1, len(self.frames) - 1)]
+                            if target > byte:
+                                truth_until(self._time_at(target))
+                                yield read(byte, target)
+                                byte = target
+                        clock.stepped_to(self.start_s + self._time_at(byte))
                         continue
-                    self.state = "playing"
                     i = self._chunk_at(byte)
-                    t_media = self.times[i]
-                    if self.pacing == "realtime":
-                        if self.speed != speed0:  # changed while not sleeping, so no wake-up re-planned it
-                            clock0, media0, speed0 = time.monotonic(), t_media, self.speed
-                        delay = clock0 + (t_media - media0) / self.speed - time.monotonic()
-                        if delay > 0 and await self._sleep_or_wake(delay):
-                            clock0, media0 = time.monotonic(), self._time_at(byte)
-                            continue  # seek / pause / speed changed: re-plan
-                    truth_until(t_media)
+                    why = await clock.wait_until(self.start_s + self.times[i], gen, self.steps)
+                    if why == "jumped":
+                        break
+                    if why == "step":
+                        continue
+                    truth_until(self.times[i])
                     end = self.offsets[i] + self.index[i]["n"]
-                    yield read(byte, end)
+                    yield read(byte, end)  # from byte: a step may have sent the start of this chunk
                     byte = end
-                    self.position_s = t_media
-                if not self.loop and self.pacing == "max":  # a batch run: done
-                    break
-                if not self.loop:  # the end: paused like a player until a seek, Play (from the start) or Loop
-                    self.paused, self.state = True, "paused"
-                    while self.paused and self._seek is None and not self.loop:
-                        await self._sleep_or_wake(1.0)
-                    byte = self._byte_at(self._seek) if self._seek is not None else 0
-                    self._seek, self.paused = None, False
-                    continue
-                self.loops += 1
-                byte = 0
+                else:
+                    if self is not segments[-1]:
+                        self.done_at = clock.generation
+                        return  # done, and the drone's next segment is another push
+                    await clock.jumped(gen)  # the drone's last: wait for a seek or a loop
         finally:
             f.close()
 
-    async def _run(self) -> None:
-        url = f"{self.ingest_url}/push/{self.sid}"
-        params = {"wid": self.wid, "delivery": self.delivery}
+
+def segment_at(segments: list[Track], t: float) -> Track | None:
+    """The drone's segment for mission time t: the one playing then, else the next one; None after its last."""
+    return next((s for s in segments if t <= s.end_s), None)
+
+
+@dataclass
+class Replay:
+    recording: str
+    wid: str
+    tracks: list[Track]  # every segment of every drone
+    ingest_url: str
+    truth_addr: tuple[str, int]
+    speed: float = 1.0
+    loop: bool = False
+    offset_s: float = 0.0
+    state: str = "playing"  # or stopped, failed; playing covers paused (info tells them apart)
+    loops: int = 0
+    error: str | None = None
+    _tasks: list[asyncio.Task] = field(default_factory=list)
+
+    def __post_init__(self):
+        self.drones: dict[str, list[Track]] = {}  # drone name -> its segments, in order
+        for t in sorted(self.tracks, key=lambda t: t.start_s):
+            self.drones.setdefault(t.name, []).append(t)
+        self.duration_s = max(t.end_s for t in self.tracks)
+        self.clock = ReplayClock(self.duration_s, self.speed, self.loop, self.offset_s)
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+    def start(self) -> None:
+        self._tasks = [asyncio.create_task(self._conduct(), name=f"replay-{self.wid}")]
+        self._tasks += [asyncio.create_task(self._push(segs), name=f"replay-{self.wid}-{segs[0].sid}")
+                        for segs in self.drones.values()]
+
+    async def stop(self) -> None:
+        for task in self._tasks:
+            task.cancel()
+        for task in self._tasks:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await task
+        self.state = "stopped"
+
+    def patch(self, paused: bool | None = None, speed: float | None = None, seek_s: float | None = None,
+              step: int | None = None, loop: bool | None = None) -> None:
+        if loop is not None:
+            self.clock.set_loop(loop)
+        if speed is not None and speed > 0:
+            self.clock.set_speed(speed)
+        if seek_s is not None:
+            self.clock.seek(seek_s)
+        if step:
+            self.clock.step(int(step))
+        elif paused is not None:
+            self.clock.set_paused(paused)
+
+    def info(self) -> dict:
+        c = self.clock
+        state = self.state if self.state in ("stopped", "failed") else "paused" if c.paused else "playing"
+        return {"wid": self.wid, "recording": self.recording, "state": state,
+                "position_s": round(c.position(), 3), "duration_s": round(self.duration_s, 2), "speed": c.speed,
+                "paused": c.paused, "loop": c.loop, "loops": self.loops, "generation": c.generation,
+                "error": self.error,
+                "drones": [{"name": name, "sid": segs[0].sid, "start_s": round(segs[0].start_s, 3),
+                            "segments": [[round(s.start_s, 3), round(s.end_s, 3)] for s in segs],
+                            "error": next((s.error for s in segs if s.error), None)}
+                           for name, segs in self.drones.items()]}
+
+    def _send_truth(self, sid: str, r: dict) -> None:
+        msg = {"sid": sid, "wid": self.wid, "kind": r["kind"], "t": time.time(), "rec": r["rec"]}
+        try:
+            self.sock.sendto(json.dumps(msg, separators=(",", ":")).encode(), self.truth_addr)
+        except OSError as e:
+            log.debug("truth send: %s", e)
+
+    async def _conduct(self) -> None:
+        """The end of the timeline: go round with loop, else wait there paused like a player."""
+        c = self.clock
+        while True:
+            gen = c.generation
+            if await c.wait_until(self.duration_s, gen) != "reached":
+                continue
+            if c.loop:
+                self.loops += 1
+                c.seek(0.0)
+            else:
+                c.end()
+                await c.jumped(gen)
+
+    async def _push(self, segments: list[Track]) -> None:
+        """One drone: each of its segments in a push of its own, the one the clock is at or comes to next."""
+        c, first = self.clock, segments[0]
+        url = f"{self.ingest_url}/push/{first.sid}"
+        seg = segment_at(segments, c.position())
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(None, connect=5)) as client:
-                r = await client.post(url, params=params, content=self._body())
-                r.raise_for_status()
-                log.info("replay %s done: %s", self.sid, r.json())
-            self.state = "finished"
+                while True:
+                    if seg is None:  # after its last segment: until a seek or a loop brings it back
+                        await c.jumped(c.generation)
+                        seg = segment_at(segments, c.position())
+                        continue
+                    r = await client.post(url, params={"wid": self.wid},
+                                          content=seg.body(c, self._send_truth, segments))
+                    r.raise_for_status()
+                    if seg.done_at == c.generation:  # it played to its end: the next one
+                        i = segments.index(seg) + 1
+                        seg = segments[i] if i < len(segments) else None
+                    else:  # the clock jumped to another segment
+                        seg = segment_at(segments, c.position())
         except asyncio.CancelledError:
-            self.state = "stopped"
             raise
         except Exception as e:
-            self.state, self.error = "failed", str(e)
-            log.exception("replay %s failed", self.sid)
+            first.error = self.error = f"{first.name}: {e}"
+            self.state = "failed"
+            log.exception("replay %s, drone %s failed", self.wid, first.name)

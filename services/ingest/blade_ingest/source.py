@@ -121,15 +121,17 @@ class Source:
     key: str  # "udp:<ip>:<port>", "tcp:..." or "push:<sid>"
     kind: str  # live | replay
     sid_override: str | None = None
-    delivery: str = "latest"
     wid: str | None = None
     jpeg_w: int = 1280
     jpeg_h: int = 720
     jpeg_quality: int = 85
     on_frame: Callable[[Paired], None] | None = None
+    assign: Callable[[Source, dict], None] | None = None  # sets sid, wid and drone from the first tel record
     on_sid: Callable[[Source], None] | None = None
     pipe: PipeReader = field(default_factory=PipeReader)
     sid: str | None = None
+    drone: str | None = None  # the drone's name shown
+    joined: tuple | None = None  # (mission, map, name asked for) its world and sid were picked by
     started: float = field(default_factory=time.time)
     last_seen: float = field(default_factory=time.time)
     frames: int = 0
@@ -218,8 +220,15 @@ class Source:
             log.info("%s (%s): ended after %d frames, %d unpaired, %d decode errors",
                      self.key, self.sid, self.frames, self.unpaired, self.decode_errors)
 
+    def name(self, tel: dict) -> str:
+        """The drone's name: the uplink's --drone (sid in recordings made before names and ids were split)."""
+        return tel.get("drone") or tel.get("sid") or self.service_name or self.key.replace(":", "-")
+
     def _set_sid(self, tel: dict) -> None:
-        self.sid = tel.get("sid") or self.service_name or self.key.replace(":", "-")
+        if self.assign:
+            self.assign(self, tel)
+        else:
+            self.sid = self.drone = self.name(tel)
         if self.on_sid:
             self.on_sid(self)
 
@@ -251,14 +260,13 @@ class Source:
         buf = io.BytesIO()
         Image.fromarray(np.ascontiguousarray(rgb)).save(buf, "JPEG", quality=self.jpeg_quality)
         self.frames += 1
-        if self.sid_override:
-            tel["sid"] = self.sid_override
         if self.on_frame:
             self.on_frame(Paired(self.sid or "?", tel, buf.getvalue(), (self.jpeg_w, self.jpeg_h), t_in, time.time()))
 
     def info(self) -> dict:
         age = max(time.time() - self.started, 1e-6)
-        return {"sid": self.sid, "key": self.key, "kind": self.kind, "wid": self.wid, "video": self.video,
+        return {"sid": self.sid, "drone": self.drone, "key": self.key, "kind": self.kind, "wid": self.wid,
+                "mission": self.joined[0] if self.joined else None, "video": self.video,
                 "size": self.size, "frames": self.frames, "fps_avg": round(self.frames / age, 1),
                 "unpaired": self.unpaired, "decode_errors": self.decode_errors,
                 "started": self.started, "last_seen": self.last_seen, "service_name": self.service_name,

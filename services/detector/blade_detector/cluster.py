@@ -52,6 +52,15 @@ class Cluster:
     def conf(self, sid: str) -> float | None:
         return (self.assign.get(sid) or {}).get("conf")
 
+    async def move(self, old: str, new: str, fields: tuple[str, ...]) -> None:
+        """The same drone under a new stream id: its settings (fields) go along, the old entry goes."""
+        a = self.assign.pop(old, None)
+        keep = {k: a[k] for k in fields if a and a.get(k) is not None}
+        if keep and not any(self.assign.get(new, {}).get(k) is not None for k in fields):  # not set for it already
+            await self.set(new, **keep)
+        if a is not None and self.kv_assign is not None:
+            await self.kv_assign.delete(old)
+
     async def set(self, sid: str, **fields) -> None:
         """Merges fields into the stream's entry as KV has it now, not as the last refresh saw it."""
         cur = (await kv_read(self.kv_assign, sid)).get(sid) if self.kv_assign is not None else None

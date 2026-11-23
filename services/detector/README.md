@@ -23,6 +23,7 @@ model was trained on, close ones stay cheap.
 |---|---|
 | subscribes | `frames.<sid>` |
 | subscribes | `truth.<sid>`, `registry.<sid>` (oracle only) |
+| subscribes | `worlds.<wid>`: a drone's new sid takes the model and threshold of its `previous` one; the streams of an `ended` world are forgotten |
 | publishes | `detections.<sid>`: boxes with `cls`, `grp`, `conf`, `tid` (track id), plus the frame's telemetry |
 
 Replica heartbeats and stream assignments are kept in the JetStream KV buckets `detectors` and `assign`.

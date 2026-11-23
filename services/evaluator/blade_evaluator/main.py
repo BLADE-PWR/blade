@@ -30,11 +30,10 @@ class Evaluator:
     def __init__(self):
         self.truth: dict[str, StreamTruth] = defaultdict(StreamTruth)
         self.sid_wid: dict[str, str] = {}
-        self.sid_map: dict[str, str] = {}  # from geo
-        self.world_map: dict[str, str] = {}  # from world.<wid>.objects; drones on another map are left out
         self.objects: dict[str, dict[str, dict]] = defaultdict(dict)
         self.evals: dict[str, WorldEval] = {}
         self.writers: dict[str, tuple] = {}
+        self.ended: set[str] = set()  # worlds ingest ended: messages still on their way for them are dropped
         self.nc = None
 
     def ev(self, wid: str) -> WorldEval:
@@ -51,8 +50,25 @@ class Evaluator:
             self.writers[wid] = (f, w)
         self.writers[wid][1].writerow(row)
 
+    async def on_world_info(self, msg) -> None:
+        env, _ = decode(msg)
+        wid = env.data["wid"]
+        if not env.data.get("ended"):
+            self.ended.discard(wid)  # a replay world comes back under its id when its session starts again
+            return
+        self.ended.add(wid)
+        self.evals.pop(wid, None)
+        self.objects.pop(wid, None)
+        if wid in self.writers:
+            self.writers.pop(wid)[0].close()
+        for sid in [s for s, w in self.sid_wid.items() if w == wid]:
+            del self.sid_wid[sid]
+            self.truth.pop(sid, None)
+
     async def on_truth(self, msg) -> None:
         env, _ = decode(msg)
+        if env.wid in self.ended:
+            return
         if env.wid:
             self.sid_wid[env.sid] = env.wid
         if msg.subject.startswith("registry."):
@@ -63,10 +79,9 @@ class Evaluator:
     async def on_geo(self, msg) -> None:
         env, _ = decode(msg)
         sid, wid = env.sid, env.wid
-        self.sid_wid[sid] = wid
-        self.sid_map[sid] = env.data["map"]
-        if self.world_map.get(wid, env.data["map"]) != env.data["map"]:
+        if wid in self.ended:
             return
+        self.sid_wid[sid] = wid
         st = self.truth[sid]
         fp = [p for p in env.data.get("footprint", []) if p]
         st.footprint = fp if len(fp) >= 3 else None
@@ -88,7 +103,8 @@ class Evaluator:
     async def on_world(self, msg) -> None:
         env, _ = decode(msg)
         wid = msg.subject.split(".")[1]
-        self.world_map[wid] = env.data["map"]
+        if wid in self.ended:
+            return
         objs = self.objects[wid]
         for o in env.data.get("objects", []):
             objs[o["oid"]] = o
@@ -108,12 +124,15 @@ class Evaluator:
                 f.flush()
 
     async def evaluate(self, wid: str, t: float) -> None:
-        sids = [s for s, w in self.sid_wid.items() if w == wid and self.sid_map.get(s) == self.world_map.get(wid)]
+        sids = [s for s, w in self.sid_wid.items() if w == wid]
         # streams of one world film one game: an object in view of two drones counts once
         seen: dict[int, tuple] = {}
+        everywhere: dict[int, tuple] = {}  # also out of view: drawn on the map, not scored
         footprints = []
         for sid in sids:
             st = self.truth[sid]
+            for tid, grp, xy in st.known():
+                everywhere[tid] = (grp, xy)
             for tid, grp, xy in st.in_view():
                 seen[tid] = ((sid, tid), grp, xy)
             if st.footprint:
@@ -143,6 +162,8 @@ class Evaluator:
             mine = [x for x in out if x["grp"] == grp]
             groups[grp] = {**summ.get(grp, {"n": 0}), "detected": sum(x["oid"] is not None for x in mine),
                            "in_view": len(mine)}
+        out += [{"truth_id": tid, "grp": grp, "xy": xy, "in_view": False}
+                for tid, (grp, xy) in everywhere.items() if tid not in seen]
         data = EvalData.model_validate({"window_s": WINDOW_S, "groups": groups, "truth": out, "false_objects": false})
         await publish(self.nc, f"eval.{wid}", Envelope(wid=wid, ts={"evaluator": [t, time.time()]},
                                                          data=data.model_dump(exclude_none=True)))
@@ -158,6 +179,7 @@ async def lifespan(app: FastAPI):
         await svc.nc.subscribe(subj, cb=svc.on_truth)
     await svc.nc.subscribe("geo.>", cb=svc.on_geo)
     await svc.nc.subscribe("world.*.objects", cb=svc.on_world)
+    await svc.nc.subscribe("worlds.*", cb=svc.on_world_info)
     task = asyncio.create_task(svc.tick())
     yield
     task.cancel()

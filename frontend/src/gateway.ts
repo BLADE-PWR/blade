@@ -14,6 +14,7 @@ export type Message = {
 export type FrameHeader = {
   type: "frame";
   sid: string;
+  drone?: string | null; // its name
   frame: number | null;
   w: number;
   h: number;
@@ -23,7 +24,9 @@ export type FrameHeader = {
 
 export type Frame = { header: FrameHeader; jpeg: Blob };
 
-export type Target = { session: string } | { wid: string }; // a world: every drone in it, also ones joining later
+// a mission: every live world of it (one per map) and every drone in them, also ones starting or joining later;
+// choose: Live or Replay switched to, nothing chosen in it yet (no connection)
+export type Target = { session: string } | { mission: string } | { choose: "live" | "replay" };
 
 export function parseFrame(buf: ArrayBuffer): Frame {
   const magic = new TextDecoder().decode(new Uint8Array(buf, 0, 4));
@@ -33,10 +36,10 @@ export function parseFrame(buf: ArrayBuffer): Frame {
   return { header, jpeg: new Blob([new Uint8Array(buf, 8 + n)], { type: "image/jpeg" }) };
 }
 
-function wsUrl(target: Target): string {
+function wsUrl(target: { session: string } | { mission: string }): string {
   const q = "session" in target
     ? new URLSearchParams({ session: target.session })
-    : new URLSearchParams({ wids: target.wid });
+    : new URLSearchParams({ mission: target.mission });
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   return `${proto}//${location.host}/ws?${q}`;
 }
@@ -44,7 +47,7 @@ function wsUrl(target: Target): string {
 export type Handlers = {
   onMessage: (m: Message) => void;
   onFrame: (f: Frame) => void;
-  onClose: (reason: string) => void;
+  onClose: (reason: string, code: number) => void;
 };
 
 export async function getJSON<T>(path: string): Promise<T> {
@@ -59,28 +62,27 @@ export async function send<T>(method: "POST" | "PUT" | "PATCH", path: string, bo
   return (await r.json()) as T;
 }
 
-/** -> the session replaying rec: the running one that already does, else a new one. */
+/** -> a new session replaying rec, started: always its own, so nobody else's replay is touched (a session is
+ * shared only by its link, #session=). */
 export async function startReplay(rec: Recording): Promise<string> {
-  const running = (await getJSON<Session[]>("/sessions")).find((s) => s.state === "running"
-    && s.streams.length === 1 && s.streams[0].recording === rec.id);
-  if (running) return running.id;
-  // a new sid each time (a live drone or another replay may use the recorded one); the UI shows the drone's
-  const sid = `rp-${Date.now().toString(36).slice(-5)}`;
+  // new ids each time, so it never mixes with the live mission or another replay; the UI shows the recorded names
+  const id = () => Math.random().toString(16).slice(2, 8);
+  const sids = Object.fromEntries(rec.drones.map((d) => [d.name, `rp-${id()}`]));
   const s = await send<Session>("POST", "/sessions", { name: `Replay ${rec.scene ?? rec.id}`,
-    streams: [{ sid, wid: sid, drone: rec.sid, mission: rec.mission, recording: rec.id, loop: true }] });
+    replays: [{ recording: rec.id, wid: `rw-${id()}`, sids, loop: true }] });
   await send("POST", `/sessions/${s.id}/start`);
   return s.id;
 }
 
 /** Opens the WebSocket; returns a function that closes it. */
-export function connect(target: Target, h: Handlers): () => void {
+export function connect(target: { session: string } | { mission: string }, h: Handlers): () => void {
   const ws = new WebSocket(wsUrl(target));
   ws.binaryType = "arraybuffer";
   ws.onmessage = (e: MessageEvent<string | ArrayBuffer>) => {
     if (typeof e.data === "string") h.onMessage(JSON.parse(e.data) as Message);
     else h.onFrame(parseFrame(e.data));
   };
-  ws.onclose = (e) => h.onClose(e.reason || `closed (${e.code})`);
+  ws.onclose = (e) => h.onClose(e.reason || `closed (${e.code})`, e.code);
   return () => {
     ws.onclose = null;
     ws.close();

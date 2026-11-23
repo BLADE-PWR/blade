@@ -4,10 +4,8 @@ Builds the map picture: it fuses the per-stream points into objects with stable 
 per object, and merges the same object seen by several drones of one world. An object is published
 after `CONFIRM_N` observations, becomes `stale` when unseen and expires after `EXPIRE_S`.
 
-A world is on one map: the first drone that reports into it sets it. A drone on another map is left out (both
-maps' coordinates start at 0, 0, so its objects would mix with real ones) and logged once. Once no drone on the
-world's map has reported for `MAP_IDLE_S` (30 s), the next drone on another map moves the world there and it starts
-afresh: its old objects are published as `forgotten`, and decision clears the world's alerts.
+A world is on one map for its whole life: ingest gives a drone on another map that map's world (ingest README),
+since maps' coordinates all start at 0, 0 and could not be fused.
 
 A moving object (speed at least 1 m/s and over twice its velocity sigma, but below `PRED_VMAX`, above which the
 filter is still catching up with a jump) also carries `pred`: straight-line positions 30 s and 60 s after `last`,
@@ -23,7 +21,9 @@ Each world runs on its own clock (`clock.py`), and `first`, `last`, event and al
   paused replay stands still (nothing goes stale, no lost contact), a replay at x2 runs twice as fast
   (speeds come out the same as at x1), a seek ahead is time passing.
 - A replay that goes back in its recording (a seek back, a loop) joins again at the world's current time, and
-  what that stream saw is dropped and published in `forgotten`.
+  what every stream of the world saw is dropped and published in `forgotten`: the drones of a replay share one
+  clock, so all of them went back, also one that sends nothing at the new time (not joined yet, or gone by then)
+  and so could not tell. The other streams join again at the world's time with their next frame.
 - A world with a live stream follows the wall clock for all its streams (ahead of it by as much as a fast
   replay had taken the world before). Replays in one world should play together: the clock is the furthest of
   them, so a stream paused on its own ages, and joins at the world's time when it plays on.
@@ -49,9 +49,9 @@ For any map client (the frontend does this, `frontend/src/MapView.tsx`):
 | | Subject |
 |---|---|
 | subscribes | `geo.<sid>` |
+| subscribes | `worlds.<wid>`: an `ended` world is dropped, and `geo` still on its way for it is ignored |
 | publishes | `world.<wid>.objects`: changed objects, expired and forgotten ids, counts per group, the world's clock `t` |
 | publishes | `world.<wid>.events`: events such as explosions |
-| publishes | `ack.<sid>`: frame done, for replays with `delivery: all` |
 
 ## REST
 
@@ -62,5 +62,5 @@ For any map client (the frontend does this, `frontend/src/MapView.tsx`):
 | GET | `/worlds/{wid}/snapshot` | All current objects and events of a world |
 | GET | `/worlds/{wid}/objects/{oid}` | One object with its position history |
 
-Config: `CONFIRM_N` (5), `STALE_S` (3), `EXPIRE_S` (600), `MAP_IDLE_S` (30), `EVENT_TTL_S` (5), `EVENT_CLASSES`
+Config: `CONFIRM_N` (5), `STALE_S` (3), `EXPIRE_S` (600), `EVENT_TTL_S` (5), `EVENT_CLASSES`
 (`explosion,tank_fire`).

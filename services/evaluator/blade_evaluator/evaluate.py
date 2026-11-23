@@ -11,7 +11,8 @@ import numpy as np
 from blade_common.util import inside
 
 GATE_M = {"soldier": 10.0, "tank": 20.0, "military_vehicle": 20.0}
-TRUTH_GROUP = {"soldier": "soldier", "tank": "tank", "wheeled_vehicle": "military_vehicle",
+# sim truth class -> detector group; the game sends tanks as tracked_vehicle
+TRUTH_GROUP = {"soldier": "soldier", "tank": "tank", "tracked_vehicle": "tank", "wheeled_vehicle": "military_vehicle",
                "military_vehicle": "military_vehicle", "apc": "military_vehicle", "truck": "military_vehicle"}
 
 
@@ -62,17 +63,15 @@ class StreamTruth:
         best = max((f for f in self.frames if f <= frame), default=None)
         return self.frames[best] if best is not None else None
 
+    def known(self, frame: int | None = None) -> list[tuple]:
+        """[(truth id, group, (x, y))] for every known object of a group the detector has, in view or not."""
+        objs = self.at(frame) or {}
+        return [(oid, grp, xy) for oid, xy in objs.items() if (grp := TRUTH_GROUP.get(self.cls.get(oid, "")))]
+
     def in_view(self, frame: int | None = None) -> list[tuple]:
-        """[(truth id, group, (x, y))] for known objects inside the latest footprint."""
-        objs = self.at(frame)
-        if not objs or not self.footprint:
-            return []
-        out = []
-        for oid, xy in objs.items():
-            grp = TRUTH_GROUP.get(self.cls.get(oid, ""))
-            if grp and inside(self.footprint, *xy):
-                out.append((oid, grp, xy))
-        return out
+        """known(frame), inside the latest footprint."""
+        fp = self.footprint
+        return [t for t in self.known(frame) if inside(fp, *t[2])] if fp else []
 
 
 class WorldEval:

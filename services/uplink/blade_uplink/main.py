@@ -25,8 +25,9 @@ TCP_MAX_QUEUE_S = 0.5  # seconds of video that may wait before skipping to the n
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--sid", required=True, help="stream id, e.g. pc1-uav1")
-    ap.add_argument("--mission", required=True, help="world the drone joins: drones of one mission share a map picture")
+    ap.add_argument("--drone", required=True, help="drone name, e.g. uav1 (the server gives it an id)")
+    ap.add_argument("--mission", required=True,
+                    help="mission name: drones of one mission on one map share a map picture")
     ap.add_argument("--server", required=True, help="ingest host")
     ap.add_argument("--transport", choices=["udp", "tcp"], default="udp",
                     help="udp: lowest latency on a good LAN; tcp: resends lost packets (internet, Wi-Fi)")
@@ -39,7 +40,7 @@ def main(argv: list[str] | None = None) -> int:
 
     fps = args.fps
     bar = frame_code.Bar(0, 0, args.bar_size, args.bar_bits)
-    tel = Telemetry(TEL_LISTEN, args.sid, args.mission, (args.server, ports.TRUTH_UDP), wrap=bar.wrap)
+    tel = Telemetry(TEL_LISTEN, args.drone, args.mission, (args.server, ports.TRUTH_UDP), wrap=bar.wrap)
     import comtypes  # Windows only, like dxcam (DXGI desktop duplication), so imported here and not at the top
     import dxcam
 
@@ -65,7 +66,7 @@ def main(argv: list[str] | None = None) -> int:
     st = dict(zero)
     t_report = time.time()
     log.info("uplink %s -> %s:%d (video, %s), :%d (truth); telemetry on %s:%d",
-             args.sid, args.server, ports.VIDEO_UDP, args.transport, ports.TRUTH_UDP, *TEL_LISTEN)
+             args.drone, args.server, ports.VIDEO_UDP, args.transport, ports.TRUTH_UDP, *TEL_LISTEN)
     try:
         while not stop:
             now = time.time()
@@ -108,8 +109,8 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             image = frame_code.strip(image, bar)
             if writer is None:
-                writer = TsWriter(sink, args.sid, image.shape[1], image.shape[0], fps, args.bitrate)
-            record = dict(record, sid=args.sid, mission=args.mission, t_capture=round(t_capture, 6))
+                writer = TsWriter(sink, args.drone, image.shape[1], image.shape[0], fps, args.bitrate)
+            record = dict(record, drone=args.drone, mission=args.mission, t_capture=round(t_capture, 6))
             t0 = time.perf_counter()
             writer.write(image, record, t_capture)
             st["enc_ms"] += (time.perf_counter() - t0) * 1000

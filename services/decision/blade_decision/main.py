@@ -40,7 +40,6 @@ class Engine:
         self.history: deque[Alert] = deque(maxlen=200)
         self.missing: dict[str, float] = {}  # alert key -> when its condition became false
         self.clock: float | None = None  # the world's time, s, from its object updates
-        self.map: str | None = None  # the world's map, from its object updates
         self.grouper = Grouper(CLUSTER_PARAMS)
         self.had_clusters = False  # the last publication had groups: an empty one must follow when they are gone
         self._ids = itertools.count(1)
@@ -125,13 +124,37 @@ class Engine:
 
 engines: dict[str, Engine] = {}
 sid_wid: dict[str, str] = {}
+missions: dict[str, str] = {}  # live wid -> its mission's name
+rules_by_mission: dict[str, dict] = {}  # rules set for a live mission: every world of it, also later ones, uses them
+ended: set[str] = set()  # worlds ingest ended: messages still on their way for them are dropped
 state: dict = {"nc": None}
 
 
 def engine(wid: str) -> Engine:
     if wid not in engines:
         engines[wid] = Engine(wid)
+        if wid in missions and missions[wid] in rules_by_mission:
+            engines[wid].rules = copy.deepcopy(rules_by_mission[missions[wid]])
     return engines[wid]
+
+
+async def on_world_info(msg) -> None:
+    """A world started (a live one belongs to a mission, whose rules it takes) or ended (dropped)."""
+    env, _ = decode(msg)
+    w = env.data
+    wid = w["wid"]
+    if not w.get("ended"):
+        ended.discard(wid)  # a replay world comes back under its id when its session starts again
+        if w["kind"] == "live":
+            missions[wid] = w["mission"]
+            if wid in engines and w["mission"] in rules_by_mission:
+                engines[wid].rules = copy.deepcopy(rules_by_mission[w["mission"]])
+        return
+    ended.add(wid)
+    engines.pop(wid, None)
+    missions.pop(wid, None)
+    for sid in [s for s, x in sid_wid.items() if x == wid]:
+        del sid_wid[sid]
 
 
 async def send_alerts(wid: str, alerts: list[Alert], t0: float) -> None:
@@ -149,18 +172,9 @@ async def send_clusters(wid: str, eng: Engine, t0: float) -> None:
 async def on_objects(msg) -> None:
     env, _ = decode(msg)
     wid = msg.subject.split(".")[1]
+    if wid in ended:
+        return
     eng = engine(wid)
-    if env.data["map"] != eng.map:  # a new map: nothing from the old one applies any more
-        if eng.map is not None:
-            cleared = eng.clear_now(list(eng.active))
-            had_groups = bool(eng.ws.groups)
-            eng.ws, eng.clock = WorldState(), None  # the world's clock restarts too
-            eng.grouper = Grouper(CLUSTER_PARAMS)
-            if had_groups:
-                await send_clusters(wid, eng, time.time())
-            if cleared:
-                await send_alerts(wid, cleared, time.time())
-        eng.map = env.data["map"]
     if env.data.get("t") is not None:
         eng.clock = max(eng.clock or 0.0, env.data["t"])
     ws = eng.ws
@@ -182,16 +196,18 @@ async def on_objects(msg) -> None:
 
 async def on_events(msg) -> None:
     env, _ = decode(msg)
-    engine(msg.subject.split(".")[1]).ws.events.extend(env.data.get("events", []))
+    wid = msg.subject.split(".")[1]
+    if wid not in ended:
+        engine(wid).ws.events.extend(env.data.get("events", []))
 
 
 async def on_geo(msg) -> None:
     env, _ = decode(msg)
     wid = env.wid
+    if wid in ended:
+        return
     sid_wid[env.sid] = wid
     eng = engine(wid)
-    if eng.map is not None and env.data["map"] != eng.map:  # a drone the world leaves out
-        return
     eng.ws.cameras[env.sid] = {"gsd_m": env.data.get("gsd_m"), "centre": env.data.get("centre"), "t": eng.now()}
 
 
@@ -214,6 +230,7 @@ async def lifespan(app: FastAPI):
     await state["nc"].subscribe("world.*.objects", cb=on_objects)
     await state["nc"].subscribe("world.*.events", cb=on_events)
     await state["nc"].subscribe("geo.>", cb=on_geo)
+    await state["nc"].subscribe("worlds.*", cb=on_world_info)
     task = asyncio.create_task(loop())
     yield
     task.cancel()
@@ -242,6 +259,12 @@ async def put_rules(wid: str, body: dict):
         if not isinstance(params, dict):
             raise HTTPException(400, f"{name}: expected an object of parameters")
         eng.rules[name] = {**eng.rules.get(name, {}), **params}
+    mission = missions.get(wid)
+    if mission is not None:  # a live world: the rules are the mission's, on every map and after it restarts
+        rules_by_mission[mission] = copy.deepcopy(eng.rules)
+        for other, m in missions.items():
+            if m == mission and other in engines:
+                engines[other].rules = copy.deepcopy(eng.rules)
     return eng.rules
 
 
