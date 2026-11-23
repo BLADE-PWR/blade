@@ -834,6 +834,33 @@ button.danger {
   align-items: flex-start;
 }
 
+.model-picker {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.model-picker span {
+  overflow-wrap: anywhere;
+}
+
+.auto-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.auto-details summary {
+  cursor: pointer;
+}
+
+.auto-details p {
+  margin: 6px 0;
+  font-size: 12px;
+}
+
 .auto-models {
   display: flex;
   flex: 1;

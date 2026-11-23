@@ -316,14 +316,14 @@ function ModelPicker({ sid }: { sid: string }) {
 
   if (model === null) return error ? <span className="error">{error}</span> : null;
   return (
-    <>
+    <div className="model-picker">
       <select value={model.model} onChange={(e) => choose(e.target.value)} aria-label="Detector model">
         <option value="auto">auto (by scale)</option>
         {models.map((m) => <option key={m}>{m}</option>)}
       </select>
       {auto && <span className="muted mono">{autoState(model)}</span>}
       {error && <span className="error">{error}</span>}
-    </>
+    </div>
   );
 }
 
@@ -337,9 +337,9 @@ type RouteRow = {
 type Route = { models: RouteRow[]; margin: number; hold_s: number };
 type Draft = { model: string; loaded: boolean; yaml?: RouteRow["yaml"]; min: string; max: string };
 
-// An empty field is the model.yaml value, so only what differs from it is an override.
+// An empty field is the model.yaml value, so only what differs from it is an override (0 is no lower limit).
 const overridden = (value: number | null | undefined, fromYaml: number | null | undefined) =>
-  value != null && value !== fromYaml ? String(value) : "";
+  value && value !== fromYaml ? String(value) : "";
 
 function toDraft(r: RouteRow): Draft {
   return { model: r.model, loaded: r.loaded, yaml: r.yaml, min: overridden(r.min_px, r.yaml?.min_px),
@@ -456,14 +456,17 @@ function Settings({ sit, drone, layer, onLayer }: SettingsProps) {
       </p>
       <div className="setting setting-top">
         <span className="muted">Auto models</span>
-        <AutoModels />
+        <details className="auto-details">
+          <summary>Model ranges</summary>
+          <p className="muted">
+            What a drone on "auto" chooses from, first match wins. Min px and max px are the smallest and largest
+            size, in pixels on the model's input, of a 1.8 m object where the camera aims: zoom and range decide it.
+            An empty field is the model's own range (grey). When no model covers the scale, nothing is detected, so
+            no flickering boxes.
+          </p>
+          <AutoModels />
+        </details>
       </div>
-      <p className="muted setting-note">
-        What a drone on "auto" chooses from, first match wins. Min px and max px are the smallest and largest size,
-        in pixels on the model's input, of a 1.8 m object where the camera aims: zoom and range decide it. An empty
-        field is the model's own range (grey). When no model covers the scale, nothing is detected, so no flickering
-        boxes.
-      </p>
       <div className="panel-head settings-head">
         <strong>Drone settings</strong>
         {drone && <span className="mono muted">{drone.sid}</span>}
