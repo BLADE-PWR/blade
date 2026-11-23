@@ -69,7 +69,6 @@ class Detector:
         return self.cluster.model(sid) or DEFAULT_MODEL
 
     def routing(self) -> Routing:
-        """The operator's auto routing (KV, refreshed by the cluster), else the one from AUTO_MODELS."""
         raw = self.cluster.routing
         if raw != self._routing[0]:
             try:
@@ -80,7 +79,6 @@ class Detector:
         return self._routing[1]
 
     def resolve(self, sid: str, env, t: float) -> str:
-        """The model that runs this frame: the stream's own, or in auto mode what the scale of the scene picks."""
         mid = self.model_for(sid)
         if mid != AUTO:
             return mid
@@ -102,11 +100,9 @@ class Detector:
             log.error("no AUTO_MODELS package found in %s: auto uses %s", MODELS_DIR, AUTO_MODELS[0])
 
     def first_model(self) -> str:
-        """The first loaded model of the auto routing: what auto starts a stream with."""
         return next((e.model for e in self.routing().models if e.model in self.packages), NO_MODEL)
 
     def active_model(self, sid: str) -> str:
-        """The model running the stream now (the one auto last picked, if the stream is in auto mode)."""
         mid = self.model_for(sid)
         if mid != AUTO:
             return mid

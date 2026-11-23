@@ -86,8 +86,7 @@ class _Stream:
 
 
 def _rows(routing: Routing, packages: dict[str, ModelPackage], tel: dict, img_w: int, img_h: int) -> list[tuple]:
-    """(model id, px, lo, hi) of the loaded models of the routing, in priority order."""
-    rows = []
+    rows = []  # (model id, px, lo, hi)
     for e in routing.models:
         pkg = packages.get(e.model)
         if pkg is not None:

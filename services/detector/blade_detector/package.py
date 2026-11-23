@@ -56,7 +56,6 @@ class ModelPackage:
 
     @property
     def imgsz_max(self) -> int:
-        """The largest model input auto_imgsz may pick."""
         return int(self.auto_imgsz.get("max", self.imgsz))
 
     @property
