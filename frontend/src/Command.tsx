@@ -394,9 +394,11 @@ function AutoModels() {
           <span className="mono">{r.model}{!r.loaded && <span className="error"> (not loaded)</span>}</span>
           <div className="auto-row">
             <label>min px <input type="number" min={0} value={r.min} placeholder={String(r.yaml?.min_px ?? "–")}
-              onChange={(e) => edit(i, { min: e.target.value })} aria-label={`${r.model} smallest object, px`} /></label>
+              onChange={(e) => edit(i, { min: e.target.value })}
+              aria-label={`${r.model} smallest object, px`} /></label>
             <label>max px <input type="number" min={0} value={r.max} placeholder={String(r.yaml?.max_px ?? "–")}
-              onChange={(e) => edit(i, { max: e.target.value })} aria-label={`${r.model} largest object, px`} /></label>
+              onChange={(e) => edit(i, { max: e.target.value })}
+              aria-label={`${r.model} largest object, px`} /></label>
           </div>
           <div className="auto-row">
             <button onClick={() => move(i, -1)} disabled={i === 0} aria-label={`${r.model} higher priority`}>Up</button>

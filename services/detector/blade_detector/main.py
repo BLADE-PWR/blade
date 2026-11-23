@@ -94,6 +94,13 @@ class Detector:
                 del self.trackers[key]  # its ids go on from top_tid; stale tracks must not match new objects
         return pick.model or NO_MODEL
 
+    def use_loaded_for_auto(self) -> None:
+        """When none of AUTO_MODELS is loaded, auto runs the first model there is: better than empty frames."""
+        if self.packages and not any(m in self.packages for m in AUTO_MODELS):
+            AUTO_MODELS[:] = list(self.packages)[:1]
+            self._routing = (None, default_routing())
+            log.error("no AUTO_MODELS package found in %s: auto uses %s", MODELS_DIR, AUTO_MODELS[0])
+
     def first_model(self) -> str:
         """The first loaded model of the auto routing: what auto starts a stream with."""
         return next((e.model for e in self.routing().models if e.model in self.packages), NO_MODEL)
@@ -247,10 +254,8 @@ svc = Detector()
 async def lifespan(app: FastAPI):
     svc.packages = find_packages(MODELS_DIR)
     log.info("model packages: %s; default %s", list(svc.packages) or "none", DEFAULT_MODEL)
-    if DEFAULT_MODEL == AUTO and svc.packages and not any(m in svc.packages for m in AUTO_MODELS):
-        AUTO_MODELS[:] = list(svc.packages)[:1]  # none of them is here: better one model than empty frames
-        svc._routing = (None, default_routing())
-        log.error("no AUTO_MODELS package found in %s: auto uses %s", MODELS_DIR, AUTO_MODELS[0])
+    if DEFAULT_MODEL == AUTO:
+        svc.use_loaded_for_auto()
     for m in AUTO_MODELS if DEFAULT_MODEL == AUTO else [DEFAULT_MODEL]:
         if m in svc.packages:
             await asyncio.to_thread(svc.packages[m].session)
