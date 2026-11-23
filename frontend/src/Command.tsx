@@ -390,16 +390,21 @@ function AutoModels() {
   return (
     <div className="auto-models">
       {rows.map((r, i) => (
-        <div className="auto-row" key={r.model}>
-          <span className="mono auto-name">{r.model}{!r.loaded && <span className="error"> (not loaded)</span>}</span>
-          <input type="number" min={0} value={r.min} placeholder={String(r.yaml?.min_px ?? "–")}
-            onChange={(e) => edit(i, { min: e.target.value })} aria-label={`${r.model} smallest object, px`} />
-          <input type="number" min={0} value={r.max} placeholder={String(r.yaml?.max_px ?? "–")}
-            onChange={(e) => edit(i, { max: e.target.value })} aria-label={`${r.model} largest object, px`} />
-          <button onClick={() => move(i, -1)} disabled={i === 0} aria-label={`${r.model} higher priority`}>Up</button>
-          <button onClick={() => move(i, 1)} disabled={i === rows.length - 1}
-            aria-label={`${r.model} lower priority`}>Down</button>
-          <button onClick={() => setRows(rows.filter((_, k) => k !== i))} aria-label={`Remove ${r.model}`}>Remove</button>
+        <div className="auto-model" key={r.model}>
+          <span className="mono">{r.model}{!r.loaded && <span className="error"> (not loaded)</span>}</span>
+          <div className="auto-row">
+            <label>min px <input type="number" min={0} value={r.min} placeholder={String(r.yaml?.min_px ?? "–")}
+              onChange={(e) => edit(i, { min: e.target.value })} aria-label={`${r.model} smallest object, px`} /></label>
+            <label>max px <input type="number" min={0} value={r.max} placeholder={String(r.yaml?.max_px ?? "–")}
+              onChange={(e) => edit(i, { max: e.target.value })} aria-label={`${r.model} largest object, px`} /></label>
+          </div>
+          <div className="auto-row">
+            <button onClick={() => move(i, -1)} disabled={i === 0} aria-label={`${r.model} higher priority`}>Up</button>
+            <button onClick={() => move(i, 1)} disabled={i === rows.length - 1}
+              aria-label={`${r.model} lower priority`}>Down</button>
+            <button onClick={() => setRows(rows.filter((_, k) => k !== i))}
+              aria-label={`Remove ${r.model}`}>Remove</button>
+          </div>
         </div>
       ))}
       <div className="auto-row">
@@ -454,9 +459,10 @@ function Settings({ sit, drone, layer, onLayer }: SettingsProps) {
         <AutoModels />
       </div>
       <p className="muted setting-note">
-        What a drone on "auto" chooses from, first match wins. The columns are the smallest and largest size, in
-        pixels on the model's input, of a 1.8 m object where the camera aims: zoom and range decide it. Empty is the
-        model's own range (grey). When no model covers the scale, nothing is detected, so no flickering boxes.
+        What a drone on "auto" chooses from, first match wins. Min px and max px are the smallest and largest size,
+        in pixels on the model's input, of a 1.8 m object where the camera aims: zoom and range decide it. An empty
+        field is the model's own range (grey). When no model covers the scale, nothing is detected, so no flickering
+        boxes.
       </p>
       <div className="panel-head settings-head">
         <strong>Drone settings</strong>
