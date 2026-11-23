@@ -79,7 +79,7 @@ def describe(cid: str, members: list[dict]) -> dict:
     comp: dict[str, int] = {}
     for o in members:
         comp[o["grp"]] = comp.get(o["grp"], 0) + 1
-    vel = mean_vel([o["vel"] for o in members if o.get("vel")])
+    vel = mean_vel([o["vel"] for o in members if o.get("vel") and o["state"] == "active"])  # a stale one is frozen
     return {"cid": cid, "objects": sorted(o["oid"] for o in members), "composition": comp,
             "centre": (round(sum(x for x, _ in xys) / len(xys), 1), round(sum(y for _, y in xys) / len(xys), 1)),
             "hull": [(round(x, 1), round(y, 1)) for x, y in hull], "area_m2": round(area(hull)),

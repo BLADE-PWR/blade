@@ -65,7 +65,8 @@ class Engine:
         motion = {}
         for g in self.ws.groups:
             hist = self.ws.motion.get(g["cid"], deque())
-            vels = {oid: o["vel"] for oid in g["objects"] if (o := self.ws.objects.get(oid)) and o.get("vel")}
+            members = [self.ws.objects[oid] for oid in g["objects"] if oid in self.ws.objects]
+            vels = {o["oid"]: o["vel"] for o in members if o.get("vel") and o["state"] == "active"}
             if vels and (not hist or t > hist[-1][0]):  # a paused world clock adds nothing
                 hist.append((t, vels))
             while hist and t - hist[0][0] > keep:
@@ -77,7 +78,10 @@ class Engine:
         """Run every enabled rule; -> alerts raised or cleared now."""
         self.ws.events = [e for e in self.ws.events if t - e["t"] < 30]
         self.ws.gone = {k: v for k, v in self.ws.gone.items() if t - v["last"] < GONE_KEEP_S}
-        self.track_groups(t)
+        try:
+            self.track_groups(t)
+        except Exception:
+            log.exception("force groups")
         cues = {}
         for name, fn in RULES.items():
             p = self.rules.get(name, {})

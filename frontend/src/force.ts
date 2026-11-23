@@ -11,7 +11,9 @@ const KEY = "blade.weights";
 export function loadWeights(): Weights {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY) ?? "null") as Weights | null;
-    if (saved && Object.values(saved).every((w) => typeof w === "number")) return { ...DEFAULT_WEIGHTS, ...saved };
+    if (saved && Object.values(saved).every((w) => Number.isFinite(w) && w >= 0 && w <= MAX_WEIGHT)) {
+      return { ...DEFAULT_WEIGHTS, ...saved };
+    }
   } catch {
     // no storage, or not ours: the defaults do
   }

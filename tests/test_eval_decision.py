@@ -85,6 +85,13 @@ def test_clusters_group_every_class_and_describe_them():
     assert c["area_m2"] > area(outline([(0.0, 0.0)]))  # more than one object's outline
 
 
+def test_a_stale_member_does_not_move_the_group():
+    g = Grouper(Params(radius_m=100.0, min_count=2))
+    objs = {"a": obj("a", "tank", 0, 0, vel=(4.0, 0.0)), "b": obj("b", "tank", 50, 0, vel=(8.0, 0.0), state="stale")}
+    (c,) = g.update(objs, 100.0)
+    assert c["vel"] == (4.0, 0.0)  # the stale one is left out
+
+
 def test_clusters_keep_stale_objects_for_a_while_and_one_object_has_an_outline():
     g = Grouper(Params(radius_m=100.0, min_count=2, max_age_s=30.0))
     objs = {"a": obj("a", "tank", 0, 0, last=100.0), "b": obj("b", "tank", 50, 0, state="stale", last=90.0)}

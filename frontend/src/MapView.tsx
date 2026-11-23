@@ -482,13 +482,14 @@ export function MapView(props: Props) {
     if (map && centred && centre) map.panTo(ll(centre.xy));
   }, [map, centred, centre]);
 
+  const objects = [...sit.objects.values()].filter((o) => visible(o, filter));
+  const shown = new Set(objects.map((o) => o.oid)); // a group of classes the filter hides is hidden too
+  const clusters = [...sit.clusters].filter(([wid]) => sit.maps.get(wid) === mapId).flatMap(([, list]) => list)
+    .filter((c) => c.objects.some((oid) => shown.has(oid)));
+
   useEffect(() => {
     if (!map || !centred) return;
-    const objects = [...sit.objects.values()].filter((o) => visible(o, filter));
     vectors.clearLayers();
-    const shown = new Set(objects.map((o) => o.oid)); // a group of classes the filter hides is hidden too
-    const clusters = [...sit.clusters].filter(([wid]) => sit.maps.get(wid) === mapId).flatMap(([, list]) => list)
-      .filter((c) => c.objects.some((oid) => shown.has(oid)));
     if (layers.density) {
       heat.addTo(map);
       heat.set(objects.map((o) => ({ xy: o.xy, w: weightOf(weights, o.grp) })));
@@ -505,7 +506,7 @@ export function MapView(props: Props) {
     syncMarkers(map, markers.current, objects, selected, onSelect);
   });
 
-  const group = [...sit.clusters.values()].flat().find((c) => c.cid === pickedGroup);
+  const group = clusters.find((c) => c.cid === pickedGroup);
   const away = map && centred && !overview && focusGeo && layers.drones &&
     !map.getBounds().contains(ll(focusGeo.camera)) ? map.getCenter() : null;
 
