@@ -14,6 +14,8 @@ import time
 
 from blade_common.bus import kv_bucket, kv_read
 
+from .routing import Routing
+
 log = logging.getLogger("detector.cluster")
 HEARTBEAT_S = 2.0
 ROUTING_KEY = "auto"
@@ -27,11 +29,12 @@ class Cluster:
     def __init__(self, instance: str | None = None):
         self.me = instance or os.environ.get("INSTANCE") or f"{socket.gethostname()}-{os.getpid()}"
         self.live: list[str] = [self.me]
+        self.peers: dict[str, dict] = {}  # instance -> its last heartbeat (models, streams, auto)
         self.assign: dict[str, dict] = {}
         self.kv_det = None
         self.kv_assign = None
         self.kv_routing = None
-        self.routing: dict | None = None  # the auto routing as the operator set it, None: the default
+        self.routing: Routing | None = None  # the auto routing as the operator set it, None: AUTO_MODELS
 
     async def connect(self, nc) -> None:
         try:
@@ -73,7 +76,11 @@ class Cluster:
         if self.kv_assign is not None:
             await self.kv_assign.put(sid, json.dumps(a).encode())
 
-    async def set_routing(self, routing: dict | None) -> None:
+    def lacking(self, model: str) -> list[str]:
+        """The other live replicas whose last heartbeat does not list the model as loaded."""
+        return [i for i in self.live if i != self.me and model not in self.peers.get(i, {}).get("models", [])]
+
+    async def set_routing(self, routing: Routing | None) -> None:
         self.routing = routing
         if self.kv_routing is None:  # no JetStream: the routing of this replica only
             return
@@ -81,7 +88,20 @@ class Cluster:
             with contextlib.suppress(Exception):  # nothing to delete when it was never set
                 await self.kv_routing.delete(ROUTING_KEY)
         else:
-            await self.kv_routing.put(ROUTING_KEY, json.dumps(routing).encode())
+            await self.kv_routing.put(ROUTING_KEY, routing.model_dump_json(exclude_none=True).encode())
+
+    def _take_routing(self, raw: dict | None) -> None:
+        """The routing KV holds, parsed once per refresh; a change is logged, so a routing set in the UI that
+        outlives a restart shows in the log."""
+        try:
+            new = Routing.model_validate(raw) if raw else None
+        except ValueError:
+            log.exception("bad auto routing in KV: keeping the previous one")
+            return
+        if new != self.routing:
+            log.info("auto routing: %s", f"set in the UI, replaces AUTO_MODELS until DELETE /routing: "
+                     f"{new.model_dump(exclude_none=True)}" if new else "AUTO_MODELS")
+            self.routing = new
 
     async def run(self, status) -> None:
         """Heartbeat and refresh; status() -> dict with this replica's models and streams."""
@@ -92,10 +112,11 @@ class Cluster:
                                                                **status()}).encode())
                     t = time.time()
                     dets = await kv_read(self.kv_det)
-                    self.live = sorted(k for k, v in dets.items() if t - v.get("t", 0) < 3 * HEARTBEAT_S) or [self.me]
+                    self.peers = {k: v for k, v in dets.items() if t - v.get("t", 0) < 3 * HEARTBEAT_S}
+                    self.live = sorted(self.peers) or [self.me]
                     self.assign = await kv_read(self.kv_assign)
                     if self.kv_routing is not None:  # else what PUT /routing set stays
-                        self.routing = (await kv_read(self.kv_routing)).get(ROUTING_KEY)
+                        self._take_routing((await kv_read(self.kv_routing)).get(ROUTING_KEY))
                 except Exception:
                     log.exception("cluster refresh")
             await asyncio.sleep(HEARTBEAT_S)

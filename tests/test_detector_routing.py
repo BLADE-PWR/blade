@@ -4,7 +4,7 @@ import types
 import pytest
 from conftest import look_at_tel
 
-from blade_detector.routing import Router, Routing, describe, scale_range
+from blade_detector.routing import Entry, Router, Routing, describe, scale_range
 
 FLAT = types.SimpleNamespace(height=lambda x, y: 0.0)
 TEL = look_at_tel(FLAT, (0.0, 0.0), 0, w=1280, h=720, hfov=34.0, dist_m=300.0, alt_m=120.0)
@@ -29,7 +29,7 @@ def choose(router, routing, packages, px, t, sid="s"):
 
 def test_first_model_whose_range_holds_the_frame_runs_it():
     packages = {"near@1": pkg(min_px=14), "far@1": pkg(min_px=6, max_px=14)}
-    routing = Routing.from_dict({"models": [{"model": "near@1"}, {"model": "far@1"}]})
+    routing = Routing.model_validate({"models": [{"model": "near@1"}, {"model": "far@1"}]})
     assert choose(Router(), routing, packages, 30, 0).model == "near@1"
     assert choose(Router(), routing, packages, 9, 0).model == "far@1"
     assert choose(Router(), routing, packages, 3, 0).model is None
@@ -37,7 +37,7 @@ def test_first_model_whose_range_holds_the_frame_runs_it():
 
 def test_the_running_model_keeps_the_stream_at_the_edge_of_its_range():
     packages = {"near@1": pkg(min_px=14)}
-    routing = Routing.from_dict({"models": [{"model": "near@1"}]})
+    routing = Routing.model_validate({"models": [{"model": "near@1"}]})
     router = Router()
     assert choose(router, routing, packages, 20, 0).model == "near@1"
     assert choose(router, routing, packages, 13, 1).model == "near@1"  # inside the 15 % margin: 11.9
@@ -47,7 +47,7 @@ def test_the_running_model_keeps_the_stream_at_the_edge_of_its_range():
 
 def test_a_model_changes_only_after_the_frame_stays_outside_for_hold_s():
     packages = {"near@1": pkg(min_px=14), "far@1": pkg(min_px=6, max_px=14)}
-    routing = Routing.from_dict({"models": [{"model": "near@1"}, {"model": "far@1"}], "hold_s": 1.0})
+    routing = Routing.model_validate({"models": [{"model": "near@1"}, {"model": "far@1"}], "hold_s": 1.0})
     router = Router()
     assert choose(router, routing, packages, 30, 0).model == "near@1"
     assert choose(router, routing, packages, 8, 1).model == "near@1"  # out of range, waiting
@@ -62,7 +62,7 @@ def test_a_model_changes_only_after_the_frame_stays_outside_for_hold_s():
 
 def test_a_flicker_across_the_edge_does_not_switch():
     packages = {"near@1": pkg(min_px=14), "far@1": pkg(min_px=6, max_px=14)}
-    routing = Routing.from_dict({"models": [{"model": "near@1"}, {"model": "far@1"}], "hold_s": 1.0})
+    routing = Routing.model_validate({"models": [{"model": "near@1"}, {"model": "far@1"}], "hold_s": 1.0})
     router = Router()
     choose(router, routing, packages, 30, 0)
     assert choose(router, routing, packages, 8, 1).model == "near@1"
@@ -73,7 +73,7 @@ def test_a_flicker_across_the_edge_does_not_switch():
 
 def test_without_a_range_the_last_choice_stays():
     packages = {"near@1": pkg(min_px=14), "far@1": pkg(min_px=6, max_px=14)}
-    routing = Routing.from_dict({"models": [{"model": "near@1"}, {"model": "far@1"}]})
+    routing = Routing.model_validate({"models": [{"model": "near@1"}, {"model": "far@1"}]})
     router, blind = Router(), dict(TEL, range_m=None)
     assert router.choose(routing, packages, "s", blind, 1280, 720, 0).model == "near@1"  # start: the first model
     choose(router, routing, packages, 9, 1)
@@ -83,7 +83,7 @@ def test_without_a_range_the_last_choice_stays():
 
 def test_streams_are_chosen_apart_and_forgotten():
     packages = {"near@1": pkg(min_px=14)}
-    routing = Routing.from_dict({"models": [{"model": "near@1"}]})
+    routing = Routing.model_validate({"models": [{"model": "near@1"}]})
     router = Router()
     assert choose(router, routing, packages, 30, 0, "a").model == "near@1"
     assert choose(router, routing, packages, 3, 0, "b").model is None
@@ -93,7 +93,7 @@ def test_streams_are_chosen_apart_and_forgotten():
 
 def test_an_override_replaces_model_yaml_and_a_model_not_loaded_is_skipped():
     packages = {"near@1": pkg(min_px=14)}
-    routing = Routing.from_dict({"models": [{"model": "gone@1"}, {"model": "near@1", "min_px": 4}]})
+    routing = Routing.model_validate({"models": [{"model": "gone@1"}, {"model": "near@1", "min_px": 4}]})
     assert choose(Router(), routing, packages, 5, 0).model == "near@1"
     assert scale_range(packages["near@1"], routing.models[1]) == (1.8, 4.0, float("inf"))
     d = describe(routing, packages)["models"]
@@ -103,28 +103,28 @@ def test_an_override_replaces_model_yaml_and_a_model_not_loaded_is_skipped():
 
 def test_a_model_without_scale_covers_every_scale():
     packages = {"any@1": pkg(scale=False)}
-    routing = Routing.from_dict({"models": [{"model": "any@1"}]})
+    routing = Routing.model_validate({"models": [{"model": "any@1"}]})
     assert choose(Router(), routing, packages, 0.5, 0).model == "any@1"
 
 
 def test_the_px_of_a_model_follows_its_input_size():
     packages = {"big@1": pkg(min_px=20, imgsz=1920)}
-    routing = Routing.from_dict({"models": [{"model": "big@1"}]})
+    routing = Routing.model_validate({"models": [{"model": "big@1"}]})
     c = choose(Router(), routing, packages, 14, 0)  # 14 px at 1280 is 21 px at 1920
     assert c.model == "big@1" and c.px == pytest.approx(21)
 
 
-@pytest.mark.parametrize("bad", [{"models": [{"model": "a", "min_px": 9, "max_px": 5}]},
+@pytest.mark.parametrize("bad", [{"models": [{"model": "a", "min_px": -1}]},
                                  {"models": [{"model": "a"}, {"model": "a"}]},
                                  {"models": [], "margin": 1.0}, {"models": [], "hold_s": -1}])
 def test_a_bad_routing_is_refused(bad):
     with pytest.raises(ValueError):
-        Routing.from_dict(bad)
+        Routing.model_validate(bad)
 
 
 def test_routing_round_trips_without_empty_overrides():
     d = {"models": [{"model": "a@1"}, {"model": "b@1", "min_px": 6}], "margin": 0.2, "hold_s": 2.0}
-    assert Routing.from_dict(d).to_dict() == d
+    assert Routing.model_validate(d).model_dump(exclude_none=True) == d
 
 
 def _stream(monkeypatch, packages, routing=None):
@@ -132,12 +132,11 @@ def _stream(monkeypatch, packages, routing=None):
     from blade_detector.cluster import Cluster
 
     cluster = Cluster("one")
-    cluster.routing = routing
+    cluster.routing = Routing.model_validate(routing) if routing else None
     monkeypatch.setattr(det.svc, "cluster", cluster)
     monkeypatch.setattr(det.svc, "packages", packages)
     monkeypatch.setattr(det.svc, "router", Router())
     monkeypatch.setattr(det.svc, "trackers", {})
-    monkeypatch.setattr(det.svc, "_routing", (None, det.svc._routing[1]))
     return det
 
 
@@ -174,22 +173,59 @@ async def test_routing_is_set_read_and_reset_through_rest(monkeypatch):
     from fastapi import HTTPException
 
     det = _stream(monkeypatch, {"near@1": pkg(min_px=14), "far@1": pkg(min_px=6, max_px=14)})
-    body = det.RoutingBody(models=[det.RoutingEntry(model="near@1"), det.RoutingEntry(model="far@1", min_px=4)])
+    body = Routing(models=[Entry(model="near@1"), Entry(model="far@1", min_px=4)])
     got = await det.set_routing(body)
     assert [m["model"] for m in got["models"]] == ["near@1", "far@1"]
     far = got["models"][1]
-    assert far["min_px"] == 4 and far["yaml"]["min_px"] == 6 and far["overridden"]
+    assert far["min_px"] == 4 and far["yaml"]["min_px"] == 6 and far["overridden"] and got["custom"]
     assert (await det.get_routing()) == got
     with pytest.raises(HTTPException) as e:
-        await det.set_routing(det.RoutingBody(models=[det.RoutingEntry(model="gone@1")]))
+        await det.set_routing(Routing(models=[Entry(model="gone@1")]))
     assert e.value.status_code == 404
     with pytest.raises(HTTPException) as e:
-        await det.set_routing(det.RoutingBody(models=[det.RoutingEntry(model="far@1", min_px=9, max_px=5)]))
+        await det.set_routing(Routing(models=[Entry(model="far@1", min_px=9, max_px=5)]))
     assert e.value.status_code == 400
     with pytest.raises(HTTPException) as e:  # max below the min_px of model.yaml (14) leaves no scale to cover
-        await det.set_routing(det.RoutingBody(models=[det.RoutingEntry(model="near@1", max_px=10)]))
+        await det.set_routing(Routing(models=[Entry(model="near@1", max_px=10)]))
     assert e.value.status_code == 400
-    assert (await det.reset_routing())["models"][0]["model"] == det.AUTO_MODELS[0]
+    reset = await det.reset_routing()
+    assert reset["models"][0]["model"] == det.AUTO_MODELS[0] and not reset["custom"]
+
+
+async def test_routing_needs_the_model_on_every_live_replica(monkeypatch):
+    from fastapi import HTTPException
+
+    det = _stream(monkeypatch, {"near@1": pkg(min_px=14)})
+    det.svc.cluster.live = ["one", "two"]
+    det.svc.cluster.peers = {"one": {"models": ["near@1"]}, "two": {"models": []}}
+    with pytest.raises(HTTPException) as e:
+        await det.set_routing(Routing(models=[Entry(model="near@1")]))
+    assert e.value.status_code == 409 and "two" in e.value.detail
+    det.svc.cluster.peers["two"]["models"] = ["near@1"]
+    assert (await det.set_routing(Routing(models=[Entry(model="near@1")])))["custom"]
+
+
+async def test_any_replica_tells_what_auto_runs_for_a_stream(monkeypatch):
+    det = _stream(monkeypatch, {"near@1": pkg(min_px=14)}, {"models": [{"model": "near@1"}]})
+    det.svc.resolve("s1", _env(30), 0.0)  # this replica ("one") runs s1
+    mine = await det.get_model("s1")
+    assert mine["active"] == "near@1" and mine["px"] == pytest.approx(30, abs=0.1)
+    monkeypatch.setattr(det.svc, "last_frame", {"s1": det.now()})
+    assert det.svc.status()["auto"] == {"s1": {"active": "near@1", "px": mine["px"]}}  # what its heartbeat says
+    det.svc.cluster.kv_det = object()  # with JetStream: s2 belongs to replica "two"
+    det.svc.cluster.live = ["one", "two"]
+    det.svc.cluster.assign = {"s2": {"instance": "two"}}
+    det.svc.cluster.peers = {"two": {"auto": {"s2": {"active": None, "px": 3.0}}}}
+    assert await det.get_model("s2") == {"sid": "s2", "model": "auto", "active": None, "px": 3.0}
+
+
+@pytest.mark.parametrize("given", ["oracle", "oracle@1"])
+async def test_the_oracle_has_one_id(monkeypatch, given):
+    det = _stream(monkeypatch, {})
+    assert (await det.set_model("s1", det.StreamModel(model=given)))["model"] == "oracle@1"
+    assert (await det.get_model("s1"))["model"] == "oracle@1"
+    monkeypatch.setattr(det, "DEFAULT_MODEL", given)
+    assert det.svc.model_for("s2") == "oracle@1"
 
 
 async def test_routing_set_without_its_kv_bucket_survives_the_refresh(monkeypatch):
@@ -204,12 +240,12 @@ async def test_routing_set_without_its_kv_bucket_survives_the_refresh(monkeypatc
 
     cl = Cluster("me")
     cl.kv_det = cl.kv_assign = Kv()
-    cl.routing = {"models": [{"model": "far@1"}]}
+    cl.routing = Routing(models=[Entry(model="far@1")])
     monkeypatch.setattr("blade_detector.cluster.kv_read", lambda kv: _empty())
     monkeypatch.setattr("blade_detector.cluster.asyncio.sleep", stop)
     with pytest.raises(asyncio.CancelledError):
         await cl.run(dict)
-    assert cl.routing == {"models": [{"model": "far@1"}]}
+    assert cl.routing == Routing(models=[Entry(model="far@1")])
 
 
 async def _empty():

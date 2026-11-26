@@ -5,7 +5,9 @@ operator sets; the first model whose range holds the frame runs it, and none run
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+
+from pydantic import BaseModel, Field, field_validator
 
 from .ground import px_on_target
 from .package import ModelPackage
@@ -15,36 +17,27 @@ MARGIN = 0.15
 HOLD_S = 1.0
 
 
-@dataclass
-class Entry:
+class Entry(BaseModel):
     model: str
-    min_px: float | None = None
-    max_px: float | None = None
+    min_px: float | None = Field(None, ge=0, description="overrides scale.min_px of model.yaml")
+    max_px: float | None = Field(None, ge=0, description="overrides scale.max_px of model.yaml")
 
 
-@dataclass
-class Routing:
-    models: list[Entry] = field(default_factory=list)
-    margin: float = MARGIN  # the running model keeps the stream while its range, widened by this fraction, holds it
-    hold_s: float = HOLD_S  # a model (or none) takes over only after the frame stays outside the running one this long
+class Routing(BaseModel):
+    """The body of PUT /routing and what KV "routing" holds. Whether a range is empty depends on model.yaml, so
+    PUT /routing checks that against the packages."""
+    models: list[Entry] = []
+    # the running model keeps the stream while its range, widened by this fraction, holds it
+    margin: float = Field(MARGIN, ge=0, lt=1)
+    # a model (or none) takes over only after the frame stays outside the running one this long
+    hold_s: float = Field(HOLD_S, ge=0)
 
+    @field_validator("models")
     @classmethod
-    def from_dict(cls, d: dict) -> Routing:
-        r = cls(models=[Entry(e["model"], e.get("min_px"), e.get("max_px")) for e in d.get("models", [])],
-                margin=float(d.get("margin", MARGIN)), hold_s=float(d.get("hold_s", HOLD_S)))
-        if not 0 <= r.margin < 1 or r.hold_s < 0:
-            raise ValueError("margin must be in [0, 1) and hold_s >= 0")
-        if len({e.model for e in r.models}) != len(r.models):
+    def _once(cls, models: list[Entry]) -> list[Entry]:
+        if len({e.model for e in models}) != len(models):
             raise ValueError("a model is listed twice")
-        for e in r.models:
-            if e.min_px is not None and e.max_px is not None and not e.min_px < e.max_px:
-                raise ValueError(f"{e.model}: min_px must be below max_px")
-        return r
-
-    def to_dict(self) -> dict:
-        return {"models": [{k: v for k, v in (("model", e.model), ("min_px", e.min_px), ("max_px", e.max_px))
-                            if v is not None} for e in self.models],
-                "margin": self.margin, "hold_s": self.hold_s}
+        return models
 
 
 def scale_range(pkg: ModelPackage, entry: Entry) -> tuple[float, float, float]:

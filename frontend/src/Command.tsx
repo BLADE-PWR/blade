@@ -334,7 +334,7 @@ type RouteRow = {
   max_px?: number | null;
   yaml?: { min_px: number | null; max_px: number | null };
 };
-type Route = { models: RouteRow[]; margin: number; hold_s: number };
+type Route = { models: RouteRow[]; margin: number; hold_s: number; custom: boolean };
 type Draft = { model: string; loaded: boolean; yaml?: RouteRow["yaml"]; min: string; max: string };
 
 // An empty field is the model.yaml value, so only what differs from it is an override (0 is no lower limit).
@@ -353,6 +353,7 @@ function AutoModels() {
   const [rows, setRows] = useState<Draft[] | null>(null);
   const [margin, setMargin] = useState("");
   const [holdS, setHoldS] = useState("");
+  const [useDefault, setUseDefault] = useState(true); // on: AUTO_MODELS runs and the fields are locked
   const [available, setAvailable] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -360,6 +361,7 @@ function AutoModels() {
     setRows(r.models.map(toDraft));
     setMargin(String(r.margin));
     setHoldS(String(r.hold_s));
+    setUseDefault(!r.custom);
     setError(null);
   };
   useEffect(() => {
@@ -383,47 +385,54 @@ function AutoModels() {
       models: rows.map((r) => ({ model: r.model, min_px: orNull(r.min), max_px: orNull(r.max) })),
       margin: Number(margin), hold_s: Number(holdS),
     }).then(show).catch((e: Error) => setError(`Not saved: ${e.message}`));
-  const reset = () =>
-    send<Route>("DELETE", "/api/routing").then(show).catch((e: Error) => setError(`Not reset: ${e.message}`));
+  // Turning it on drops the saved routing at once; turning it off only unlocks the fields, Apply saves them.
+  const toggleDefault = (on: boolean) =>
+    on ? send<Route>("DELETE", "/api/routing").then(show).catch((e: Error) => setError(`Not reset: ${e.message}`))
+      : setUseDefault(false);
   const addable = available.filter((id) => !rows.some((r) => r.model === id));
 
   return (
     <div className="auto-models">
-      {rows.map((r, i) => (
-        <div className="auto-model" key={r.model}>
-          <span className="mono">{r.model}{!r.loaded && <span className="error"> (not loaded)</span>}</span>
-          <div className="auto-row">
-            {(["min", "max"] as const).map((k) => (
-              <label key={k}>{k} px <input type="number" min={0} value={r[k]}
-                placeholder={String(r.yaml?.[`${k}_px`] ?? "–")} onChange={(e) => edit(i, { [k]: e.target.value })}
-                aria-label={`${r.model} ${k === "min" ? "smallest" : "largest"} object, px`} /></label>
-            ))}
+      <label>
+        <input type="checkbox" checked={useDefault} onChange={(e) => toggleDefault(e.target.checked)} />
+        {" "}Use default configuration
+      </label>
+      <fieldset className="auto-fields" disabled={useDefault}>
+        {rows.map((r, i) => (
+          <div className="auto-model" key={r.model}>
+            <span className="mono">{r.model}{!r.loaded && <span className="error"> (not loaded)</span>}</span>
+            <div className="auto-row">
+              {(["min", "max"] as const).map((k) => (
+                <label key={k}>{k} px <input type="number" min={0} value={r[k]}
+                  placeholder={String(r.yaml?.[`${k}_px`] ?? "–")} onChange={(e) => edit(i, { [k]: e.target.value })}
+                  aria-label={`${r.model} ${k === "min" ? "smallest" : "largest"} object, px`} /></label>
+              ))}
+            </div>
+            <div className="auto-row">
+              <button onClick={() => move(i, -1)} disabled={i === 0} aria-label={`${r.model} higher priority`}>Up</button>
+              <button onClick={() => move(i, 1)} disabled={i === rows.length - 1}
+                aria-label={`${r.model} lower priority`}>Down</button>
+              <button onClick={() => setRows(rows.filter((_, k) => k !== i))}
+                aria-label={`Remove ${r.model}`}>Remove</button>
+            </div>
           </div>
-          <div className="auto-row">
-            <button onClick={() => move(i, -1)} disabled={i === 0} aria-label={`${r.model} higher priority`}>Up</button>
-            <button onClick={() => move(i, 1)} disabled={i === rows.length - 1}
-              aria-label={`${r.model} lower priority`}>Down</button>
-            <button onClick={() => setRows(rows.filter((_, k) => k !== i))}
-              aria-label={`Remove ${r.model}`}>Remove</button>
-          </div>
+        ))}
+        <div className="auto-row">
+          <select value="" onChange={(e) => e.target.value && setRows([...rows, { model: e.target.value, loaded: true,
+            min: "", max: "" }])} aria-label="Add a model" disabled={addable.length === 0}>
+            <option value="">Add a model</option>
+            {addable.map((id) => <option key={id}>{id}</option>)}
+          </select>
+          <label>margin <input type="number" min={0} max={0.99} step={0.05} value={margin}
+            onChange={(e) => setMargin(e.target.value)} /></label>
+          <label>hold s <input type="number" min={0} step={0.5} value={holdS}
+            onChange={(e) => setHoldS(e.target.value)} /></label>
         </div>
-      ))}
-      <div className="auto-row">
-        <select value="" onChange={(e) => e.target.value && setRows([...rows, { model: e.target.value, loaded: true,
-          min: "", max: "" }])} aria-label="Add a model" disabled={addable.length === 0}>
-          <option value="">Add a model</option>
-          {addable.map((id) => <option key={id}>{id}</option>)}
-        </select>
-        <label>margin <input type="number" min={0} max={0.99} step={0.05} value={margin}
-          onChange={(e) => setMargin(e.target.value)} /></label>
-        <label>hold s <input type="number" min={0} step={0.5} value={holdS}
-          onChange={(e) => setHoldS(e.target.value)} /></label>
-      </div>
-      <div className="auto-row">
-        <button onClick={apply}>Apply</button>
-        <button onClick={reset}>Default</button>
-        {error && <span className="error">{error}</span>}
-      </div>
+        <div className="auto-row">
+          <button onClick={apply}>Apply</button>
+        </div>
+      </fieldset>
+      {error && <span className="error">{error}</span>}
     </div>
   );
 }

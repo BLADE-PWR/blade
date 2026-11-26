@@ -869,6 +869,24 @@ button.danger {
   min-width: 0;
 }
 
+.auto-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.auto-fields:disabled {
+  opacity: 0.5;
+}
+
+.auto-fields:disabled button {
+  opacity: 1; /* the fieldset already greys it; button:disabled would grey it twice */
+}
+
 .auto-row {
   display: flex;
   flex-wrap: wrap;

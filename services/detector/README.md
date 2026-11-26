@@ -38,7 +38,9 @@ to the routing, ahead of or behind the others).
 
 The routing is the ordered list of models with optional overrides of `min_px` / `max_px`, `margin` and `hold_s`. It is
 the same for every drone and replica (JetStream KV `routing`; without JetStream, per replica), set from the frontend
-(Settings, "Auto models") or by `PUT /routing`; until then it is `AUTO_MODELS`. The running model keeps a stream while
+(Settings, "Auto models") or by `PUT /routing`; until then it is `AUTO_MODELS`. A routing set this way is kept in KV
+over restarts and replaces `AUTO_MODELS` until `DELETE /routing` (Default in the panel): `GET /routing` says so with
+`custom`, and the detector logs it when it takes effect. The running model keeps a stream while
 its range, widened by `margin` (0.15), holds it, and another model (or none) takes over only after the frame has been
 outside the running one for `hold_s` (1 s): no flicker at the edge. Choosing a model for a stream by hand
 (`PUT /streams/{sid}/model`) takes it out of auto mode.
@@ -62,12 +64,12 @@ Replica heartbeats and stream assignments are kept in the JetStream KV buckets `
 | GET | `/models` | List model packages |
 | GET | `/models/{id}` | One package: classes, image size, thresholds |
 | POST | `/models` | Upload a model package as a zip (must contain `model.yaml`) |
-| GET | `/streams/{sid}/model` | The stream's model (default: `MODEL`); in `auto` also `active` (the model running it, null if none) and `px` |
-| PUT | `/streams/{sid}/model` | Body `{"model"}` (a package id, `auto` or `oracle`): choose the model for a stream, also mid-flight: it starts a new tracker whose track ids continue after the old one's, so the world does not take a new track for an old object |
+| GET | `/streams/{sid}/model` | The stream's model (default: `MODEL`); in `auto` also `active` (the model running it, null if none) and `px`, from any replica (the one running the stream puts them in its heartbeat) |
+| PUT | `/streams/{sid}/model` | Body `{"model"}` (a package id, `auto` or `oracle`, stored as `oracle@1`): choose the model for a stream, also mid-flight: it starts a new tracker whose track ids continue after the old one's, so the world does not take a new track for an old object |
 | GET | `/streams/{sid}/conf` | The stream's box confidence threshold (default: the model's `conf.track`) |
 | PUT | `/streams/{sid}/conf` | Body `{"conf"}` (0-1): boxes below it are not published. Untracked boxes also need `conf.detect`; below `conf.track` it changes nothing. Choosing a model resets it |
-| GET | `/routing` | The auto routing: per model the range in force (`min_px`, `max_px`), the one of `model.yaml` (`yaml`), whether it is overridden, whether the package is loaded |
-| PUT | `/routing` | Body `{"models": [{"model", "min_px"?, "max_px"?}], "margin"?, "hold_s"?}`: the models auto chooses from, in priority order. 404 for a model not loaded, 400 for `min_px >= max_px` |
+| GET | `/routing` | The auto routing: per model the range in force (`min_px`, `max_px`), the one of `model.yaml` (`yaml`), whether it is overridden, whether the package is loaded; `custom`: set by `PUT /routing` rather than `AUTO_MODELS` |
+| PUT | `/routing` | Body `{"models": [{"model", "min_px"?, "max_px"?}], "margin"?, "hold_s"?}`: the models auto chooses from, in priority order. 404 for a model not loaded, 409 for one another live replica has not loaded, 400 for `min_px >= max_px`, 422 for a negative px, a model listed twice or `margin` outside [0, 1) |
 | DELETE | `/routing` | Back to `AUTO_MODELS` and the ranges of `model.yaml` |
 | GET | `/cluster` | Live replicas and which one owns each stream |
 | POST | `/detect?model=&conf=` | Run the model on one uploaded image, without tracking |

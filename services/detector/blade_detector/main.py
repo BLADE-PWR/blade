@@ -46,7 +46,7 @@ NO_MODEL = "none"  # what an auto stream runs while no model covers its scale
 
 
 def default_routing() -> Routing:
-    return Routing([Entry(m) for m in AUTO_MODELS])
+    return Routing(models=[Entry(model=m) for m in AUTO_MODELS])
 
 
 class Detector:
@@ -61,22 +61,27 @@ class Detector:
         self.nc = None
         self.cluster = Cluster()
         self.router = Router()
-        self._routing: tuple[dict | None, Routing] = (None, default_routing())
         self.last_frame: dict[str, float] = {}
         self.accepted: dict[str, float] = {}  # sid -> when the last live frame was taken
 
     def model_for(self, sid: str) -> str:
-        return self.cluster.model(sid) or DEFAULT_MODEL
+        mid = self.cluster.model(sid) or DEFAULT_MODEL
+        return Oracle.id if mid in ORACLE_IDS else mid  # one id for the oracle, the one /models lists
 
     def routing(self) -> Routing:
-        raw = self.cluster.routing
-        if raw != self._routing[0]:
-            try:
-                self._routing = (raw, Routing.from_dict(raw) if raw else default_routing())
-            except (KeyError, TypeError, ValueError):
-                log.exception("bad routing in KV: keeping the previous one")
-                self._routing = (raw, self._routing[1])
-        return self._routing[1]
+        return self.cluster.routing or default_routing()
+
+    def routing_view(self, routing: Routing | None = None) -> dict:
+        """GET /routing: the routing in force, and whether it is one set in the UI rather than AUTO_MODELS."""
+        return describe(routing or self.routing(), self.packages) | {"custom": self.cluster.routing is not None}
+
+    def auto_state(self, sid: str) -> dict | None:
+        """What auto runs for a stream ({active, px}). Only the replica that runs the stream routes it; the others
+        read it from that replica's heartbeat, so any replica answers for any stream."""
+        if not self.cluster.mine(sid):
+            return self.cluster.peers.get(self.cluster.owner(sid) or "", {}).get("auto", {}).get(sid)
+        c = self.router.current(sid)
+        return None if c is None else {"active": c.model, "px": None if c.px is None else round(c.px, 1)}
 
     def resolve(self, sid: str, env, t: float) -> str:
         mid = self.model_for(sid)
@@ -96,7 +101,6 @@ class Detector:
         """When none of AUTO_MODELS is loaded, auto runs the first model there is: better than empty frames."""
         if self.packages and not any(m in self.packages for m in AUTO_MODELS):
             AUTO_MODELS[:] = list(self.packages)[:1]
-            self._routing = (None, default_routing())
             log.error("no AUTO_MODELS package found in %s: auto uses %s", MODELS_DIR, AUTO_MODELS[0])
 
     def first_model(self) -> str:
@@ -116,7 +120,8 @@ class Detector:
     def status(self) -> dict:
         t = now()
         streams = sorted(s for s, ts in self.last_frame.items() if t - ts < 5)
-        return {"models": list(self.packages) + [Oracle.id], "streams": streams}
+        auto = {sid: s for sid in streams if self.cluster.mine(sid) and (s := self.auto_state(sid))}
+        return {"models": list(self.packages) + [Oracle.id], "streams": streams, "auto": auto}
 
     def tracker(self, sid: str, pkg: ModelPackage) -> StreamTracker:
         key = (sid, pkg.id)
@@ -318,61 +323,48 @@ class StreamModel(BaseModel):
 @app.get("/streams/{sid}/model")
 async def get_model(sid: str):
     out = {"sid": sid, "model": svc.model_for(sid)}
-    c = svc.router.current(sid) if out["model"] == AUTO else None  # only the replica that runs the stream knows
-    if c is not None:
-        out |= {"active": c.model, "px": None if c.px is None else round(c.px, 1)}
+    if out["model"] == AUTO and (state := svc.auto_state(sid)):
+        out |= state
     return out
 
 
 @app.put("/streams/{sid}/model")
 async def set_model(sid: str, body: StreamModel):
-    if body.model not in svc.packages and body.model not in (*ORACLE_IDS, AUTO):
-        _404(body.model)
-    await svc.cluster.set(sid, model=body.model, conf=None)  # a threshold belongs to its model
+    mid = Oracle.id if body.model in ORACLE_IDS else body.model
+    if mid not in svc.packages and mid not in (Oracle.id, AUTO):
+        _404(mid)
+    await svc.cluster.set(sid, model=mid, conf=None)  # a threshold belongs to its model
     svc.router.forget(sid)
     for key in [k for k in svc.trackers if k[0] == sid]:
         del svc.trackers[key]
-    return {"sid": sid, "model": body.model}
-
-
-class RoutingEntry(BaseModel):
-    model: str
-    min_px: float | None = Field(None, ge=0, description="overrides scale.min_px of model.yaml")
-    max_px: float | None = Field(None, ge=0, description="overrides scale.max_px of model.yaml")
-
-
-class RoutingBody(BaseModel):
-    models: list[RoutingEntry]
-    margin: float = Field(0.15, ge=0.0, lt=1.0)
-    hold_s: float = Field(1.0, ge=0.0)
+    return {"sid": sid, "model": mid}
 
 
 @app.get("/routing")
 async def get_routing():
-    return describe(svc.routing(), svc.packages)
+    return svc.routing_view()
 
 
 @app.put("/routing")
-async def set_routing(body: RoutingBody):
-    """The models the auto mode chooses from, in priority order, with the ranges (min_px, max_px) it uses."""
-    try:
-        routing = Routing.from_dict(body.model_dump())
-    except ValueError as e:
-        raise HTTPException(400, str(e)) from e
+async def set_routing(routing: Routing):
+    """The models the auto mode chooses from, in priority order, with the ranges (min_px, max_px) it uses.
+    Each model must be loaded on every live replica, or the streams of the others would skip it."""
     for e in routing.models:
         if e.model not in svc.packages:
             _404(e.model)
+        if lacking := svc.cluster.lacking(e.model):
+            raise HTTPException(409, f"{e.model} is not loaded on {', '.join(lacking)} (restart them to load it)")
         _, lo, hi = scale_range(svc.packages[e.model], e)  # one limit alone can cross the other from model.yaml
         if lo >= hi:
             raise HTTPException(400, f"{e.model}: min_px {lo:g} must be below max_px {hi:g} (empty = model.yaml)")
-    await svc.cluster.set_routing(routing.to_dict())
-    return describe(routing, svc.packages)
+    await svc.cluster.set_routing(routing)
+    return svc.routing_view(routing)
 
 
 @app.delete("/routing")
 async def reset_routing():
     await svc.cluster.set_routing(None)
-    return describe(svc.routing(), svc.packages)
+    return svc.routing_view()
 
 
 class StreamConf(BaseModel):
