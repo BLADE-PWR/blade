@@ -63,7 +63,7 @@ Replica heartbeats and stream assignments are kept in the JetStream KV buckets `
 | GET | `/health` | Default model, loaded models, model per stream |
 | GET | `/models` | List model packages |
 | GET | `/models/{id}` | One package: classes, image size, thresholds |
-| POST | `/models` | Upload a model package as a zip (must contain `model.yaml`) |
+| POST | `/models` | Upload a model package as a zip (must contain `model.yaml`). It is unpacked into `MODELS_DIR`; the other replicas, which share that folder, load it within 5 s |
 | GET | `/streams/{sid}/model` | The stream's model (default: `MODEL`); in `auto` also `active` (the model running it, null if none) and `px`, from any replica (the one running the stream puts them in its heartbeat) |
 | PUT | `/streams/{sid}/model` | Body `{"model"}` (a package id, `auto` or `oracle`, stored as `oracle@1`): choose the model for a stream, also mid-flight: it starts a new tracker whose track ids continue after the old one's, so the world does not take a new track for an old object |
 | GET | `/streams/{sid}/conf` | The stream's box confidence threshold (default: the model's `conf.track`) |

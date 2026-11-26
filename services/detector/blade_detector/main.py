@@ -24,7 +24,7 @@ from blade_common.contracts import DetectionsData
 from blade_common.service import Diag, env_float, env_int, env_str, run_app
 from blade_common.util import extract, zip_root
 
-from .cluster import Cluster
+from .cluster import HEARTBEAT_S, Cluster
 from .ground import auto_imgsz, too_big
 from .oracle import Oracle
 from .package import ModelPackage, detect_batch, find_packages
@@ -40,6 +40,7 @@ AUTO_MODELS = [m for m in env_str("AUTO_MODELS", "arma_detector_v2_auto@2").spli
 MAX_BATCH = env_int("MAX_BATCH", 8)
 SUBJECTS = env_str("STREAMS", "frames.>")
 MAX_FPS = env_float("MAX_FPS", 0.0)  # live streams: at most this many frames/s per stream (0 = all)
+SCAN_S = 5.0  # how often a replica looks in MODELS_DIR for packages another replica received by POST /models
 ORACLE_IDS = ("oracle", Oracle.id)
 AUTO = "auto"
 NO_MODEL = "none"  # what an auto stream runs while no model covers its scale
@@ -52,6 +53,7 @@ def default_routing() -> Routing:
 class Detector:
     def __init__(self):
         self.packages: dict[str, ModelPackage] = {}
+        self.tried: set[Path] = set()  # package folders of MODELS_DIR already loaded (or found bad)
         self.trackers: dict[tuple[str, str], StreamTracker] = {}
         self.top_tid: dict[str, int] = {}  # sid -> highest track id sent, where its next tracker continues
         self.slots: dict[str, tuple] = {}  # sid -> (env, jpeg, t_in), newest wins
@@ -96,6 +98,23 @@ class Detector:
             for key in [k for k in self.trackers if k[0] == sid]:
                 del self.trackers[key]  # its ids go on from top_tid; stale tracks must not match new objects
         return pick.model or NO_MODEL
+
+    def load_new_packages(self) -> list[str]:
+        """Packages that appeared in MODELS_DIR since the last look. POST /models unpacks a zip on the one replica
+        the gateway reaches; the folder is shared, so the other replicas load it from here."""
+        new = [p for p in find_packages(MODELS_DIR, self.tried).values() if p.id not in self.packages]
+        for p in new:
+            self.packages[p.id] = p
+            log.info("new model package %s", p.id)
+        return [p.id for p in new]
+
+    async def watch_models(self) -> None:
+        while True:
+            await asyncio.sleep(SCAN_S)
+            try:
+                await asyncio.to_thread(self.load_new_packages)
+            except Exception:
+                log.exception("model scan")
 
     def use_loaded_for_auto(self) -> None:
         """When none of AUTO_MODELS is loaded, auto runs the first model there is: better than empty frames."""
@@ -251,7 +270,7 @@ svc = Detector()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    svc.packages = find_packages(MODELS_DIR)
+    svc.packages = find_packages(MODELS_DIR, svc.tried)
     log.info("model packages: %s; default %s", list(svc.packages) or "none", DEFAULT_MODEL)
     if DEFAULT_MODEL == AUTO:
         svc.use_loaded_for_auto()
@@ -267,7 +286,7 @@ async def lifespan(app: FastAPI):
     await svc.nc.subscribe("registry.>", cb=svc.on_truth)
     await svc.nc.subscribe("worlds.*", cb=svc.on_world_info)
     tasks = [asyncio.create_task(svc.run()), asyncio.create_task(svc.diag.run(svc.nc)),
-             asyncio.create_task(svc.cluster.run(svc.status))]
+             asyncio.create_task(svc.cluster.run(svc.status)), asyncio.create_task(svc.watch_models())]
     yield
     for t in tasks:
         t.cancel()
@@ -353,7 +372,8 @@ async def set_routing(routing: Routing):
         if e.model not in svc.packages:
             _404(e.model)
         if lacking := svc.cluster.lacking(e.model):
-            raise HTTPException(409, f"{e.model} is not loaded on {', '.join(lacking)} (restart them to load it)")
+            raise HTTPException(409, f"{e.model} is not loaded on {', '.join(lacking)} yet: a new package reaches "
+                                     f"every replica within {SCAN_S + HEARTBEAT_S:g} s, try again then")
         _, lo, hi = scale_range(svc.packages[e.model], e)  # one limit alone can cross the other from model.yaml
         if lo >= hi:
             raise HTTPException(400, f"{e.model}: min_px {lo:g} must be below max_px {hi:g} (empty = model.yaml)")

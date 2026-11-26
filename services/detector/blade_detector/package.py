@@ -86,10 +86,16 @@ class ModelPackage:
                 "loaded": self._session is not None}
 
 
-def find_packages(models_dir: Path) -> dict[str, ModelPackage]:
+def find_packages(models_dir: Path, tried: set[Path] | None = None) -> dict[str, ModelPackage]:
+    """The packages in models_dir. With `tried`, folders in it are passed over and every folder tried (loaded or
+    bad) is added to it: a rescan loads only new folders and logs a bad one once."""
     out = {}
     for d in sorted(models_dir.iterdir() if models_dir.exists() else []):
+        if d.name.startswith(".") or (tried is not None and d in tried):  # .upload-*: a zip still being unpacked
+            continue
         if (d / "model.yaml").exists() and (d / "model.onnx").exists():
+            if tried is not None:
+                tried.add(d)
             try:
                 p = ModelPackage.load(d)
                 out[p.id] = p

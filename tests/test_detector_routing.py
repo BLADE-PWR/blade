@@ -250,3 +250,25 @@ async def test_routing_set_without_its_kv_bucket_survives_the_refresh(monkeypatc
 
 async def _empty():
     return {}
+
+
+def _package(root, name, yaml_text=None):
+    root.mkdir(parents=True)
+    (root / "model.yaml").write_text(yaml_text or f"name: {name}\nversion: 1\nclasses: [soldier]\n")
+    (root / "model.onnx").write_bytes(b"")  # not opened until the model runs
+
+
+def test_a_replica_loads_a_package_another_one_received(monkeypatch, tmp_path, caplog):
+    det = _stream(monkeypatch, {})
+    monkeypatch.setattr(det, "MODELS_DIR", tmp_path)
+    monkeypatch.setattr(det.svc, "tried", set())
+    _package(tmp_path / "old_v1", "old")
+    assert det.svc.load_new_packages() == ["old@1"]
+    _package(tmp_path / ".upload-1", "half")  # a zip still being unpacked by POST /models
+    _package(tmp_path / "bad_v1", "bad", yaml_text="name: bad\n")  # no classes
+    assert det.svc.load_new_packages() == []
+    _package(tmp_path / "new_v1", "new")
+    assert det.svc.load_new_packages() == ["new@1"]
+    assert set(det.svc.packages) == {"old@1", "new@1"}
+    caplog.clear()
+    assert det.svc.load_new_packages() == [] and "bad" not in caplog.text  # a bad package is reported once
