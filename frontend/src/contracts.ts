@@ -99,6 +99,7 @@ export type RecordedDrone = { name: string; start_s: number }; // start_s: where
 export type Replay = {
   wid: string;
   recording: string;
+  started?: number | null; // epoch s when the recording started: the real time of position 0
   drones: (RecordedDrone & { sid: string; segments: [number, number][] })[]; // segments: [from, to] on the timeline
   generation: number; // goes up with every jump (a seek, from any tab, or a loop)
   position_s: number;

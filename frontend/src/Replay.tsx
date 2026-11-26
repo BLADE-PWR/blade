@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { Recording, Replay, Session } from "./contracts";
-import { recordingName } from "./format";
+import { clock, day, recordingName } from "./format";
 import { getJSON, send, startReplay } from "./gateway";
 
 const POLL_MS = 1000;
@@ -164,6 +164,12 @@ export function ReplayBar({ session, onSwitch, onSeek, onState, onGone }: Props)
         <button onClick={() => jump(JUMP_S)} title={`Forward ${JUMP_S} s (right arrow)`}>{JUMP_S} s »</button>
       </div>
       <span className="mono nowrap">{mmss(position)} of {mmss(first.duration_s)}</span>
+      {first.started != null && (
+        <span className="topbar-clock mono" title="Real time of this moment of the recording">
+          <span className="muted">{day(first.started + position)}</span>
+          <span>{clock(first.started + position)}</span>
+        </span>
+      )}
       <input className="timeline" type="range" min="0" max={first.duration_s} step="any" value={position}
         aria-label="Position in the recording" onChange={(e) => setDraft(Number(e.target.value))}
         ref={(el) => { // the native change event comes once, when the value is let go (React's onChange is "input")

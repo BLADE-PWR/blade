@@ -1,7 +1,8 @@
 // Times and recordings as text.
 import type { Recording } from "./contracts";
 
-export const clock = (t: number) => new Date(t * 1000).toLocaleTimeString("en-GB");
+export const clock = (t: number) => new Date(t * 1000).toLocaleTimeString();
+export const day = (t: number) => new Date(t * 1000).toLocaleDateString();
 
 export function ago(t: number, now: number): string {
   const s = Math.max(0, now - t);
@@ -11,7 +12,8 @@ export function ago(t: number, now: number): string {
 }
 
 export const recordingName = (r: Recording) =>
-  `${r.scene ?? r.id}, ${new Date(r.started * 1000).toLocaleDateString("en-CA")} ${clock(r.started).slice(0, 5)}, ` +
+  `${r.scene ?? r.id}, ${day(r.started)} ` +
+  `${new Date(r.started * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}, ` +
   (r.duration_s == null ? "still recording" : `${r.duration_s.toFixed(0)} s`) +
   (r.mission ? `, mission ${r.mission}` : "") + (r.map ? ` on ${r.map}` : "") +
   (r.drones.length === 1 ? `, drone ${r.drones[0].name}` : `, drones ${r.drones.map((d) => d.name).join(", ")}`);

@@ -164,7 +164,7 @@ async def start_replay(req: ReplayReq):
     except (FileNotFoundError, ValueError) as e:
         raise HTTPException(400, f"{req.recording}: {e}") from e
     r = Replay(recording=req.recording, wid=req.wid, tracks=tracks, ingest_url=INGEST_URL, truth_addr=INGEST_TRUTH,
-               speed=req.speed, loop=req.loop, offset_s=req.offset_s)
+               speed=req.speed, loop=req.loop, offset_s=req.offset_s, started=manifest.get("started"))
     replays[req.wid] = r
     r.start()
     return r.info()

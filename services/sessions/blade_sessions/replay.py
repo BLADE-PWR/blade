@@ -145,6 +145,7 @@ class Replay:
     speed: float = 1.0
     loop: bool = False
     offset_s: float = 0.0
+    started: float | None = None  # epoch s when the recording started: the real time of position 0
     state: str = "playing"  # or stopped, failed; playing covers paused (info tells them apart)
     loops: int = 0
     error: str | None = None
@@ -187,7 +188,7 @@ class Replay:
     def info(self) -> dict:
         c = self.clock
         state = self.state if self.state in ("stopped", "failed") else "paused" if c.paused else "playing"
-        return {"wid": self.wid, "recording": self.recording, "state": state,
+        return {"wid": self.wid, "recording": self.recording, "started": self.started, "state": state,
                 "position_s": round(c.position(), 3), "duration_s": round(self.duration_s, 2), "speed": c.speed,
                 "paused": c.paused, "loop": c.loop, "loops": self.loops, "generation": c.generation,
                 "error": self.error,

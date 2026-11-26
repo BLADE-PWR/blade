@@ -224,7 +224,10 @@ function Live({ target, onPick, view, onView: setView, main, onMain: setMain }: 
               latency <span className="mono value">{(latency * 1000).toFixed(0)} ms</span>
             </span>
           )}
-          <span className="mono">{new Date().toLocaleTimeString("en-GB")}</span>
+          <span className="topbar-clock mono">
+            <span className="muted">{new Date().toLocaleDateString()}</span>
+            <span>{new Date().toLocaleTimeString()}</span>
+          </span>
         </div>
       </header>
       {closed && <p className="error banner">WebSocket closed: {closed}</p>}

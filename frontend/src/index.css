@@ -114,6 +114,17 @@ button:disabled {
   gap: 8px 16px;
 }
 
+.topbar-clock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.2;
+}
+
+.topbar-clock .muted {
+  font-size: 11px;
+}
+
 .chip {
   display: flex;
   align-items: center;

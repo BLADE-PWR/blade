@@ -12,7 +12,7 @@ import re
 import shutil
 import time
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 
 from blade_common.bus import decode, kv_read
@@ -114,7 +114,7 @@ class Recorder:
         return self.wanted.get(sid, self.record_all)
 
     def _open_mission(self, wid: str, mission: str, map_name: str, t: float) -> Mission:
-        stamp = datetime.fromtimestamp(t, UTC).strftime("%Y-%m-%d_%H%M%S")
+        stamp = datetime.fromtimestamp(t).strftime("%Y-%m-%d_%H%M%S")
         rid = _names(stamp, mission, map_name)
         if (self.root / rid).exists():
             rid = _names(rid, wid)

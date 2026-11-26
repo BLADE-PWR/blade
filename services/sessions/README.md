@@ -8,7 +8,8 @@ does not age the world and other speeds keep the objects' speeds right (world RE
 All drones of a replay play on one clock (`clock.py`): a drone that joined the mission later, or came back after a
 gap, does so on the timeline as it did live, and pause, speed, seek, step and loop move them together.
 
-A live world is recorded as one mission recording, `recordings/<time>_<mission>_<map>/`:
+A live world is recorded as one mission recording, `recordings/<time>_<mission>_<map>/` (`<time>` in the
+server's local time):
 
 ```
 manifest.json          mission, map, wid, start, end, and drones: [{name, start_s, segments: [{dir, start_s, ...}]}]
@@ -43,7 +44,7 @@ one segment (an import, or one recorded before mission recordings) is one drone 
 | GET | `/recording/active` | What is being recorded now |
 | PUT | `/recording/{sid}` | Body `{"on": bool}`: turn recording of a stream on or off |
 | POST | `/replays` | Start a replay (body below); 409 for a recording that is still being written |
-| GET | `/replays` | List replays with state, position on the timeline, `generation` (goes up with every jump: seek or loop) and drones (`name`, `sid`, `start_s`, and `segments`: [from, to] on the timeline) |
+| GET | `/replays` | List replays with state, position on the timeline, `started` (epoch s of the recording's start: the real time of position 0), `generation` (goes up with every jump: seek or loop) and drones (`name`, `sid`, `start_s`, and `segments`: [from, to] on the timeline) |
 | PATCH | `/replays/{wid}` | Body `{"paused", "speed", "seek_s", "step", "loop"}`, any subset. `step` pauses and sends the next N frames of every drone that has joined by then |
 | DELETE | `/replays/{wid}` | Stop a replay |
 
