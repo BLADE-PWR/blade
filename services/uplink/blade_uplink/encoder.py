@@ -1,4 +1,5 @@
-"""H.264 + one KLV telemetry packet per frame (same PTS) in one MPEG-TS stream. No B-frames, an IDR every second."""
+"""H.264 + one KLV telemetry packet per frame (same PTS) in one MPEG-TS stream. No B-frames, an IDR every second.
+The packet holds our JSON tel item and the same telemetry as a MISB ST 0601 UAS Datalink LS (blade_common.misb)."""
 from __future__ import annotations
 
 import fractions
@@ -7,7 +8,7 @@ import logging
 import av
 import numpy as np
 
-from blade_common import klv
+from blade_common import klv, misb
 
 log = logging.getLogger("uplink.encoder")
 TB = fractions.Fraction(1, 90000)
@@ -62,7 +63,8 @@ class TsWriter:
         # FFmpeg's interleaver releases a packet only while every stream has one queued. Writing
         # tel (DTS N-1), video (DTS N), then a tiny pad (PTS N+1) makes all of frame N leave in this
         # call; otherwise tel or video waits for the next frame.
-        self._data(klv.encode_tel(tel), pts, dts=pts - 1)
+        # one data packet, two KLV items: ours (the server reads it) and MISB ST 0601 (for standard tools)
+        self._data(klv.encode_tel(tel) + (misb.encode_0601(tel) or b""), pts, dts=pts - 1)
         frame = av.VideoFrame.from_ndarray(image_bgr, format="bgr24")
         frame.pts, frame.time_base = pts, TB
         keyframe = False
