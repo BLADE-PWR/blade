@@ -10,5 +10,4 @@ conf: {detect: 0.25, track: 0.1}
 nms_iou: 0.7
 preprocess: {enhance: false}     # v1 was trained on uncorrected screenshots
 license: AGPL-3.0
-# model.onnx: best.onnx from arma_detector_v1 (not in git; copy it here)
 # tracker.yaml: botsort_gmc_nt04.yaml

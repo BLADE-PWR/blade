@@ -14,5 +14,4 @@ scale: {object_m: 1.8, min_px: 15}   # auto model choice: a 1.8 m soldier at the
 max_size_m: {soldier: 3, tank: 25, military_vehicle: 25}   # longer box side on the ground; dropped before tracking
 preprocess: {enhance: false}
 license: AGPL-3.0
-# model.onnx: best.onnx from arma_detector_v2.zip (committed, so a clone runs as is)
 # tracker.yaml: botsort_gmc_nt04.yaml
