@@ -23,7 +23,8 @@ def now() -> float:
 
 async def connect(name: str, url: str | None = None) -> NATS:
     url = url or os.environ.get("NATS_URL", "nats://127.0.0.1:4222")
-    return await nats.connect(url, name=name, max_reconnect_attempts=-1, reconnect_time_wait=1.0)
+    # connect_timeout: at startup every service connects at once and NATS can take a few seconds to answer
+    return await nats.connect(url, name=name, connect_timeout=10, max_reconnect_attempts=-1, reconnect_time_wait=1.0)
 
 
 async def close(nc: NATS) -> None:
