@@ -7,7 +7,7 @@ Two views, in English, switched in the top bar. The layout follows the accepted 
 "Blade: widoki UI" canvas.
 
 - Operator: one drone. Video with the detector's boxes, the map, the chosen object's details, the alert,
-  object and event tabs, class filters and the time of each pipeline stage.
+  object and event tabs, a summary tab (largest group, main movement, changes in the last 5 minutes), class filters and the time of each pipeline stage.
 - Command: every drone in the world, also ones that join later. Either the map on the main panel (drone list, alerts, state) or the
   video (previews of all drones, the chosen drone, a small map, state per service, settings: the world's map, map background and alert rules, then the chosen drone's detector model).
 

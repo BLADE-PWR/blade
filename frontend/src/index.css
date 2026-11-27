@@ -342,6 +342,19 @@ button.danger {
   margin: 0;
 }
 
+.summary {
+  margin: 0;
+  padding: 12px;
+}
+
+.summary dt {
+  color: #a3aeba;
+}
+
+.summary dd {
+  margin: 2px 0 12px;
+}
+
 .details-body {
   display: flex;
   flex-wrap: wrap;

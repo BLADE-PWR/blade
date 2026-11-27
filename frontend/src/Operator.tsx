@@ -24,13 +24,15 @@ import {
   type WorldView,
   worldNow,
 } from "./situation";
+import { Summary } from "./Summary";
 import { Video } from "./Video";
 
-type Tab = "alerts" | "objects" | "events";
-const TABS: [Tab, string, (s: Situation, w: WorldView) => number][] = [
+type Tab = "alerts" | "objects" | "events" | "summary";
+const TABS: [Tab, string, (s: Situation, w: WorldView) => number | null][] = [
   ["alerts", "Alerts", (s) => allAlerts(s).length], // every world's: an alert on another map matters too
   ["objects", "Objects", (_, w) => w.objects.size],
   ["events", "Events", (_, w) => w.events.size],
+  ["summary", "Summary", () => null],
 ];
 
 const SLOW_STAGE_S = 0.1;
@@ -130,6 +132,7 @@ export function Operator({ sit, sid, main, onMain, onDrone, filter, onFilter }: 
                 name={(s) => droneName(sit, s)}
                 onPick={(e) => setCentre({ xy: e.xy, at: Date.now() })} />
             )}
+            {tab === "summary" && <Summary world={world} now={now} />}
           </section>
         </aside>
       </div>
