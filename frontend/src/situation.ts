@@ -26,6 +26,7 @@ const PREVIEWS_KEPT = 30; // per drone, ~2 s at the gateway's 15 fps
 const ROUTE_STEP_M = 5;
 const ROUTE_POINTS = 500;
 const EVENTS_KEPT = 50;
+const ALERT_LOG_KEPT = 100;
 const DETS_FRESH_S = 1; // s
 const MATCH_FRAMES = 2;
 const SILENT_S = 3; // s
@@ -58,6 +59,7 @@ export type WorldView = {
   events: Map<string, WorldEvent>;
   truth: TruthMatch[];
   alerts: Map<string, Alert>; // aid -> active alert
+  alertLog: Alert[]; // each alert when raised (active) and when cleared, oldest first: the timeline
   clusters: Cluster[];
   info: WorldInfo | null;
 };
@@ -83,7 +85,7 @@ export function emptySituation(): Situation {
 }
 
 const emptyWorld = (wid: string): WorldView => ({ wid, map: null, clock: null, objects: new Map(), events: new Map(),
-  truth: [], alerts: new Map(), clusters: [], info: null });
+  truth: [], alerts: new Map(), alertLog: [], clusters: [], info: null });
 
 function world(s: Situation, wid: string): WorldView {
   let w = s.worlds.get(wid);
@@ -185,9 +187,12 @@ export function apply(s: Situation, m: Message): void {
     case "alerts": {
       const w = world(s, m.wid ?? "");
       for (const a of (m.data as { alerts: Alert[] }).alerts) {
+        const isNew = !w.alerts.has(a.aid); // an alert already active (sent again on reconnect) is logged once
         if (a.state === "active") w.alerts.set(a.aid, a);
         else w.alerts.delete(a.aid);
+        if (a.state !== "active" || isNew) w.alertLog.push(a);
       }
+      w.alertLog.splice(0, w.alertLog.length - ALERT_LOG_KEPT);
       break;
     }
     case "clusters":

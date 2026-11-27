@@ -6,7 +6,7 @@ import { colorOf, EVENT_KINDS, GROUPS, nameOf } from "./classes";
 import type { Vec2, WorldObject } from "./contracts";
 import { ago, clock } from "./format";
 import { getJSON, send } from "./gateway";
-import { AlertList, EventList, ObjectList } from "./Lists";
+import { AlertList, ObjectList, Timeline } from "./Lists";
 import { MapView, symbolUrl } from "./MapView";
 import {
   allAlerts,
@@ -27,11 +27,11 @@ import {
 import { Summary } from "./Summary";
 import { Video } from "./Video";
 
-type Tab = "alerts" | "objects" | "events" | "summary";
+type Tab = "alerts" | "objects" | "timeline" | "summary";
 const TABS: [Tab, string, (s: Situation, w: WorldView) => number | null][] = [
   ["alerts", "Alerts", (s) => allAlerts(s).length], // every world's: an alert on another map matters too
   ["objects", "Objects", (_, w) => w.objects.size],
-  ["events", "Events", (_, w) => w.events.size],
+  ["timeline", "Timeline", (_, w) => w.events.size + w.alertLog.length],
   ["summary", "Summary", () => null],
 ];
 
@@ -127,10 +127,10 @@ export function Operator({ sit, sid, main, onMain, onDrone, filter, onFilter }: 
               <ObjectList objects={[...world.objects.values()].filter((o) => visible(o, filter))} selected={selected}
                 onSelect={setSelected} now={now} />
             )}
-            {tab === "events" && (
-              <EventList events={[...world.events.values()].filter((e) => !filter.hidden.has(e.kind))} now={now}
-                name={(s) => droneName(sit, s)}
-                onPick={(e) => setCentre({ xy: e.xy, at: Date.now() })} />
+            {tab === "timeline" && (
+              <Timeline events={[...world.events.values()].filter((e) => !filter.hidden.has(e.kind))}
+                alerts={world.alertLog} now={now} name={(s) => droneName(sit, s)}
+                onPick={(xy) => setCentre({ xy, at: Date.now() })} />
             )}
             {tab === "summary" && <Summary world={world} now={now} />}
           </section>
