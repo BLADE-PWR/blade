@@ -39,8 +39,8 @@ to `127.0.0.1:5005`.
 
 Each frame's telemetry is also sent as a MISB ST 0601.8 UAS Datalink Local Set (`libs/common/blade_common/misb.py`),
 so standard drone video tools can place the drone and its view on a map. Positions become WGS84 latitude / longitude
-around a fixed anchor per map (`ANCHORS`: the south-west corner; approximate, from the real islands the maps are
-modelled on). A map without an anchor gets only blade's record.
+by fitting each map to the real island it is modelled on with two reference points (`ANCHORS` in
+`libs/common/blade_common/geo.py`). A map without an anchor gets only blade's record.
 
 | Tag | Item | From the tel record |
 |---|---|---|

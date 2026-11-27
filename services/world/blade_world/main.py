@@ -6,18 +6,23 @@ world (worlds.<wid> with ended), it is dropped."""
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime
+from typing import Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 
 from blade_common import ports
 from blade_common.bus import close, connect, decode, forward, now, publish
 from blade_common.contracts import Envelope, WorldEventsData, WorldObjectsData
+from blade_common.geo import ANCHORS
 from blade_common.service import Diag, env_float, env_int, env_str, run_app
 
 from .clock import WorldClock
+from .export import geojson, kml, points
 from .fusion import World
 
 log = logging.getLogger("world")
@@ -136,6 +141,23 @@ async def snapshot(wid: str):
     events = [{k: v for k, v in e.items() if k != "seen"} for e in w.events.values()] if w else []
     return {"wid": wid, "t": clocks[wid].t if w else time.time(), "map": maps.get(wid), "objects": objs,
             "events": events}
+
+
+@app.get("/worlds/{wid}/export")
+async def export(wid: str, format: Literal["geojson", "kml"] = "geojson"):
+    """The world's objects and events now, as a GeoJSON or KML file."""
+    if wid not in worlds:
+        raise HTTPException(404, f"{wid} not found")
+    snap = await snapshot(wid)
+    if snap["map"] not in ANCHORS:
+        raise HTTPException(404, f"map {snap['map']} has no latitude / longitude anchor")
+    pts = points(snap["map"], snap["objects"], snap["events"])
+    name = f"situation_{snap['map']}_{datetime.fromtimestamp(snap['t']).strftime('%Y-%m-%d_%H%M%S')}"
+    if format == "kml":
+        body, media = kml(pts, name), "application/vnd.google-earth.kml+xml"
+    else:
+        body, media = json.dumps(geojson(pts)), "application/geo+json"
+    return Response(body, media_type=media, headers={"Content-Disposition": f'attachment; filename="{name}.{format}"'})
 
 
 @app.get("/worlds/{wid}/objects/{oid}")

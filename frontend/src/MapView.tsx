@@ -397,20 +397,21 @@ export function MapView(props: Props) {
     setWeights(w);
     saveWeights(w);
   };
-  const [showLayers, setShowLayers] = useState(false);
-  const layersBox = useRef<HTMLDivElement>(null);
+  const [menu, setMenu] = useState<"layers" | "export" | null>(null); // the open list of the buttons on the map
+  const toolsBox = useRef<HTMLDivElement>(null);
+  const toggle = (m: "layers" | "export") => setMenu(menu === m ? null : m);
   const [error, setError] = useState<string | null>(null);
   const [centredOn, setCentredOn] = useState<string | undefined>(); // the map the view was last centred on
   const [, setMoved] = useState(0);
 
-  useEffect(() => { // the layer list closes on a click anywhere else (the map too)
-    if (!showLayers) return;
+  useEffect(() => { // the open list closes on a click anywhere else (the map too)
+    if (!menu) return;
     const away = (e: PointerEvent) => {
-      if (!layersBox.current?.contains(e.target as Node)) setShowLayers(false);
+      if (!toolsBox.current?.contains(e.target as Node)) setMenu(null);
     };
     addEventListener("pointerdown", away);
     return () => removeEventListener("pointerdown", away);
-  }, [showLayers]);
+  }, [menu]);
   const world = shownWorld(sit, focus); // the focused drone's: one map, and only its objects
   const mapId = world.map ?? undefined; // none until a world has reported
 
@@ -536,17 +537,32 @@ export function MapView(props: Props) {
           from the centre
         </span>
       )}
-      <div className="map-layers" ref={layersBox}>
-        <button aria-expanded={showLayers} onClick={() => setShowLayers(!showLayers)}>Layers</button>
-        {showLayers && (
-          <div className="map-layer-list">
-            {LAYER_NAMES.map(([k, name]) => (
-              <label key={k}>
-                <input type="checkbox" checked={layers[k]} onChange={() => setLayers({ ...layers, [k]: !layers[k] })} />
-                {name}
-              </label>
-            ))}
-            {layers.density && <WeightPicker weights={weights} onWeights={changeWeights} />}
+      <div className="map-tools" ref={toolsBox}>
+        <div>
+          <button aria-expanded={menu === "layers"} onClick={() => toggle("layers")}>Layers</button>
+          {menu === "layers" && (
+            <div className="map-layer-list">
+              {LAYER_NAMES.map(([k, name]) => (
+                <label key={k}>
+                  <input type="checkbox" checked={layers[k]}
+                    onChange={() => setLayers({ ...layers, [k]: !layers[k] })} />
+                  {name}
+                </label>
+              ))}
+              {layers.density && <WeightPicker weights={weights} onWeights={changeWeights} />}
+            </div>
+          )}
+        </div>
+        {world.wid && world.map && (
+          <div>
+            <button aria-expanded={menu === "export"} onClick={() => toggle("export")}>Export</button>
+            {menu === "export" && (
+              <div className="map-layer-list">
+                {/* the server names the file: situation_<map>_<time>.<format> */}
+                <a href={`/api/worlds/${world.wid}/export?format=geojson`} download>GeoJSON</a>
+                <a href={`/api/worlds/${world.wid}/export?format=kml`} download>KML</a>
+              </div>
+            )}
           </div>
         )}
       </div>

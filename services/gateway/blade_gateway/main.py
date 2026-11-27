@@ -151,7 +151,8 @@ async def proxy(area: str, request: Request, rest: str = ""):
     headers = {k: v for k, v in request.headers.items() if k.lower() in ("content-type", "accept")}
     r = await state["http"].request(request.method, url, params=request.query_params, content=await request.body(),
                                     headers=headers)
-    keep = {k: v for k, v in r.headers.items() if k.lower() in ("content-type", "x-layer", "x-extent")}
+    passed = ("content-type", "content-disposition", "x-layer", "x-extent")  # content-disposition: a download's name
+    keep = {k: v for k, v in r.headers.items() if k.lower() in passed}
     return Response(r.content, r.status_code, headers=keep)
 
 

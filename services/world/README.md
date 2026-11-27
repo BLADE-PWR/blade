@@ -60,6 +60,7 @@ For any map client (the frontend does this, `frontend/src/MapView.tsx`):
 | GET | `/health` | Object count per world |
 | GET | `/worlds` | List worlds |
 | GET | `/worlds/{wid}/snapshot` | All current objects and events of a world |
+| GET | `/worlds/{wid}/export?format=geojson\|kml` | The world's objects and events now as a file: GeoJSON (RFC 7946) or KML, one point per object and event at its latitude / longitude (`blade_common.geo`), with its class, state, uncertainty, speed and heading when moving, and first / last seen. Named `situation_<map>_<time>.<format>` |
 | GET | `/worlds/{wid}/objects/{oid}` | One object with its position history |
 
 Config: `CONFIRM_N` (5), `STALE_S` (3), `EXPIRE_S` (600), `EVENT_TTL_S` (5), `EVENT_CLASSES`

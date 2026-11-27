@@ -5,30 +5,14 @@ import logging
 import math
 import struct
 
+from .geo import ANCHORS, to_latlon
 from .klv import ber_length
 
 log = logging.getLogger("misb")
 
 UAS_LS_KEY = bytes.fromhex("060e2b34020b01010e01030101000000")
 VERSION = 8  # ST 0601.8, the revision this follows (Tag 65)
-
-# (latitude, longitude) of each map's south-west corner, deg. Approximate: the real islands the maps are modelled on
-# (Altis: Lemnos, Stratis: Agios Efstratios). Any fixed value keeps the positions of one map consistent.
-ANCHORS = {"altis": (39.78, 25.07), "stratis": (39.49, 24.93)}
-
-_A = 6378137.0  # WGS84 semi-major axis, m
-_E2 = (1 / 298.257223563) * (2 - 1 / 298.257223563)  # WGS84 first eccentricity squared
 _warned: set[str] = set()
-
-
-def to_latlon(map_name: str, x: float, y: float) -> tuple[float, float]:
-    """Map metres east / north of the south-west corner -> (lat, lon) deg, on the plane tangent at the anchor."""
-    lat0, lon0 = ANCHORS[map_name]
-    s = math.sin(math.radians(lat0))
-    w = 1 - _E2 * s * s
-    meridian = _A * (1 - _E2) / w ** 1.5  # radius of curvature north-south
-    normal = _A / math.sqrt(w)  # east-west, before the cos(lat) of the parallel
-    return lat0 + math.degrees(y / meridian), lon0 + math.degrees(x / (normal * math.cos(math.radians(lat0))))
 
 
 def camera_angles(cam: dict) -> tuple[float, float, float]:

@@ -511,7 +511,7 @@ button.danger {
   background: #1a1f17;
 }
 
-.map-layers,
+.map-tools,
 .map-actions,
 .map-away,
 .map-error {
@@ -519,9 +519,16 @@ button.danger {
   z-index: 1000;
 }
 
-.map-layers {
+.map-tools {
   left: 8px;
   top: 8px;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.map-tools > div > button {
+  min-width: 80px; /* Layers and Export alike */
 }
 
 .map-layer-list {
@@ -535,11 +542,16 @@ button.danger {
   background: rgba(13, 16, 21, 0.92);
 }
 
-.map-layer-list label {
+.map-layer-list label,
+.map-layer-list a {
   display: flex;
   align-items: center;
   gap: 8px;
   min-height: 26px;
+}
+
+.map-layer-list a {
+  color: inherit;
 }
 
 .map-actions {

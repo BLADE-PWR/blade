@@ -4,7 +4,7 @@ import struct
 
 import pytest
 
-from blade_common import klv, misb
+from blade_common import geo, klv, misb
 from blade_common.klv import read_ber
 
 
@@ -69,7 +69,7 @@ def test_a_packet_has_the_mandatory_items_in_place():
     v = dict(items)
     assert struct.unpack(">Q", v[2])[0] == 1764100000123456
     assert v[3] == b"arma-live1" and v[10] == b"uav1"
-    hlat, _ = misb.to_latlon("altis", 1000.0, 2000.0 + 400.0)  # the laser point: 500 m along (0, 0.8, -0.6)
+    hlat, _ = geo.to_latlon("altis", 1000.0, 2000.0 + 400.0)  # the laser point: 500 m along (0, 0.8, -0.6)
     assert v[23] == misb.signed(hlat, 90, 4) and v[25] == misb.unsigned(0.0, -900, 19000, 2)
 
 
